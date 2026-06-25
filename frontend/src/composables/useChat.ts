@@ -1,27 +1,51 @@
 import { ref } from 'vue'
+import { sendQuickMessage, type ChatHistoryItem } from '@/api/ai'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  sources?: any[]
 }
 
 export function useChat() {
   const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
+  const streamingContent = ref('')
 
-  async function sendMessage(content: string, mode: 'quick' | 'deep') {
+  async function sendMessage(content: string) {
     messages.value.push({ role: 'user', content })
+
+    const history: ChatHistoryItem[] = messages.value
+      .slice(0, -1)
+      .map((m) => ({ role: m.role, content: m.content }))
+
     loading.value = true
-    try {
-      // TODO: 调用 AI 网关 API
-      const endpoint = mode === 'quick' ? '/ai/chat/quick' : '/ai/chat/deep'
-      // const response = await request.post(endpoint, { message: content })
-      // messages.value.push({ role: 'assistant', content: response.answer, sources: response.sources })
-    } finally {
-      loading.value = false
-    }
+    streamingContent.value = ''
+
+    const assistantIdx = messages.value.length
+    messages.value.push({ role: 'assistant', content: '' })
+
+    await sendQuickMessage(
+      content,
+      history,
+      (chunk) => {
+        streamingContent.value += chunk
+        messages.value[assistantIdx].content = streamingContent.value
+      },
+      () => {
+        loading.value = false
+        streamingContent.value = ''
+      },
+      (err) => {
+        messages.value[assistantIdx].content = `⚠️ 出错了：${err.message}`
+        loading.value = false
+        streamingContent.value = ''
+      },
+    )
   }
 
-  return { messages, loading, sendMessage }
+  function clearMessages() {
+    messages.value = []
+  }
+
+  return { messages, loading, sendMessage, clearMessages }
 }

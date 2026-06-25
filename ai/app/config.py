@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     REMOTE_MODEL_BASE_URL: str = ""  # 讯飞星火或其他
     REMOTE_MODEL_NAME: str = ""
 
+    # 快速回答模型（内网部署的 Qwen3.5-9B）
+    QUICK_MODEL_URL: str = "http://10.16.75.254:8002/v1"
+    QUICK_MODEL_NAME: str = "/home/ll_yqs2/models/Qwen3.5-9B"
+
     # ChromaDB（Docker 内部通信使用服务名 "chromadb"，本地开发改为 "localhost:8020"）
     CHROMADB_HOST: str = "chromadb"
     CHROMADB_PORT: int = 8000

@@ -44,3 +44,13 @@ def remote_profile() -> ModelProfile:
         api_key=settings.REMOTE_MODEL_API_KEY,
         timeout=120.0,
     )
+
+
+def quick_profile() -> ModelProfile:
+    """快速回答模型 profile（内网 Qwen3.5-9B）"""
+    from app.config import settings
+    return ModelProfile(
+        base_url=settings.QUICK_MODEL_URL,
+        model_name=settings.QUICK_MODEL_NAME,
+        timeout=60.0,
+    )

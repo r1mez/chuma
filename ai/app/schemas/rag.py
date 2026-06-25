@@ -3,6 +3,12 @@
 from pydantic import BaseModel
 
 
+class QuickChatRequest(BaseModel):
+    """快速回答请求"""
+    message: str
+    history: list[dict] = []  # 多轮对话历史
+
+
 class RAGQueryRequest(BaseModel):
     question: str
     mode: str = "deep"  # "quick" | "deep"

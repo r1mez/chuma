@@ -1,7 +1,8 @@
 """AI 网关 — 代理转发到 ai/ 服务"""
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 
@@ -14,11 +15,29 @@ def _ai_headers() -> dict[str, str]:
 
 
 @router.post("/chat/quick")
-async def quick_chat():
-    """快速问答 — 转发到 ai/ 服务，使用微调小模型"""
-    # TODO: async with httpx.AsyncClient() as client:
-    #     resp = await client.post(f"{settings.AI_SERVICE_URL}/rag/query", json={...}, headers=_ai_headers())
-    pass
+async def chat_quick(request: Request):
+    """快速回答 — SSE 透传到 AI 引擎"""
+    body = await request.json()
+
+    async def proxy_stream():
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.AI_SERVICE_URL}/rag/query/stream",
+                    headers=_ai_headers(),
+                    json=body,
+                ) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        except httpx.RemoteProtocolError:
+            pass
+
+    return StreamingResponse(
+        proxy_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/chat/deep")

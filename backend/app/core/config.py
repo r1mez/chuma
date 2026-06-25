@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 小时
 
     # AI 服务
-    AI_SERVICE_URL: str = "http://ai:8001"
+    AI_SERVICE_URL: str = "http://localhost:8001"
     AI_SERVICE_TOKEN: str = "change-me-in-production"  # 必须与 ai/app/config.py 中的 SERVICE_TOKEN 一致
 
     # CORS

@@ -6,6 +6,7 @@ import App from './App.vue'
 import router from './router'
 import 'element-plus/dist/index.css'
 import 'highlight.js/styles/vs2015.css'
+import 'katex/dist/katex.min.css'
 
 const app = createApp(App)
 app.use(createPinia())

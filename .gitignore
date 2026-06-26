@@ -1,4 +1,4 @@
-
+.ai
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -32,4 +32,4 @@ Thumbs.db
 .claude
 .agents
 
-skills-lock.json
+skills-lock.json.ai/

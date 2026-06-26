@@ -18,6 +18,7 @@ import { computed } from 'vue'
 import { User, Monitor } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import katex from 'katex'
 import type { ChatMessage } from '@/composables/useChat'
 
 // 配置 marked 使用 highlight.js
@@ -32,6 +33,27 @@ marked.setOptions({
   gfm: true,
 })
 
+// 渲染 LaTeX 公式
+function renderMath(text: string): string {
+  // 处理 $$...$$ 块级公式
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
+    try {
+      return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false })
+    } catch {
+      return `$$${math}$$`
+    }
+  })
+  // 处理 $...$ 行内公式
+  text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
+    try {
+      return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false })
+    } catch {
+      return `$${math}$`
+    }
+  })
+  return text
+}
+
 const props = defineProps<{
   message: ChatMessage
   loading?: boolean
@@ -39,7 +61,9 @@ const props = defineProps<{
 
 const renderedContent = computed(() => {
   if (!props.message.content) return ''
-  return marked.parse(props.message.content)
+  // 先渲染 Markdown，再渲染 LaTeX 公式
+  const html = marked.parse(props.message.content)
+  return renderMath(html)
 })
 </script>
 
@@ -194,5 +218,14 @@ const renderedContent = computed(() => {
   border: none;
   border-top: 1px solid #e4e7ed;
   margin: 12px 0;
+}
+
+/* KaTeX 公式样式 */
+.markdown-body :deep(.katex) {
+  font-size: 1em;
+}
+.markdown-body :deep(.katex-display) {
+  margin: 8px 0;
+  overflow-x: auto;
 }
 </style>

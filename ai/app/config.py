@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # 知识图谱
     KG_DATA_DIR: str = "data/kg"
 
+    # OCR 文档解析
+    OCR_VLM_URL: str = "http://10.16.75.254:8004"  # vLLM OCR 服务地址
+    OCR_OUTPUT_DIR: str = "data/ocr_output"          # 解析结果输出目录
+    OCR_TASK_RETENTION_SECONDS: int = 86400           # 任务结果保留时间 (24h)
+    OCR_MAX_CONCURRENT: int = 2                       # 最大并发解析数
+
     class Config:
         env_file = ".env"
 

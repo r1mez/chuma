@@ -8,3 +8,4 @@ chromadb==0.6.*
 openai==1.60.*
 torch>=2.0.*
 torch-geometric>=2.5.*
+mineru>=3.4.0

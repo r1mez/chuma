@@ -184,7 +184,7 @@ def create_result_zip(
     output_dir: str,
     file_names: list[str],
 ) -> str:
-    """将解析结果打包为 ZIP 文件"""
+    """将解析结果打包为 ZIP 文件，ZIP 内部扁平化（只保留文件名，去掉 vlm/ 层级）"""
     zip_fd, zip_path = tempfile.mkstemp(suffix=".zip", prefix="ocr_result_")
     os.close(zip_fd)
 
@@ -198,22 +198,27 @@ def create_result_zip(
             # 添加 .md 文件
             md_path = os.path.join(parse_dir, f"{pdf_name}.md")
             if os.path.exists(md_path):
-                zf.write(md_path, arcname=f"{pdf_name}/{pdf_name}.md")
+                zf.write(md_path, arcname=f"{pdf_name}.md")
 
             # 添加 _middle.json
             middle_path = os.path.join(parse_dir, f"{pdf_name}_middle.json")
             if os.path.exists(middle_path):
-                zf.write(middle_path, arcname=f"{pdf_name}/{pdf_name}_middle.json")
+                zf.write(middle_path, arcname=f"{pdf_name}_middle.json")
 
             # 添加 _content_list.json
             content_path = os.path.join(parse_dir, f"{pdf_name}_content_list.json")
             if os.path.exists(content_path):
-                zf.write(content_path, arcname=f"{pdf_name}/{pdf_name}_content_list.json")
+                zf.write(content_path, arcname=f"{pdf_name}_content_list.json")
+
+            # 添加 _content_list_v2.json
+            content_v2_path = os.path.join(parse_dir, f"{pdf_name}_content_list_v2.json")
+            if os.path.exists(content_v2_path):
+                zf.write(content_v2_path, arcname=f"{pdf_name}_content_list_v2.json")
 
             # 添加 _model.json
             model_path = os.path.join(parse_dir, f"{pdf_name}_model.json")
             if os.path.exists(model_path):
-                zf.write(model_path, arcname=f"{pdf_name}/{pdf_name}_model.json")
+                zf.write(model_path, arcname=f"{pdf_name}_model.json")
 
             # 添加 images 目录
             images_dir = os.path.join(parse_dir, "images")
@@ -222,13 +227,13 @@ def create_result_zip(
                     if img_file.is_file():
                         zf.write(
                             str(img_file),
-                            arcname=f"{pdf_name}/images/{img_file.name}",
+                            arcname=f"images/{img_file.name}",
                         )
 
             # 添加原始文件
             for path in sorted(Path(parse_dir).iterdir()):
                 if path.is_file() and path.name.startswith(f"{pdf_name}_origin."):
-                    zf.write(str(path), arcname=f"{pdf_name}/{path.name}")
+                    zf.write(str(path), arcname=path.name)
 
     return zip_path
 

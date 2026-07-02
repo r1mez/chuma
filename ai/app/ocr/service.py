@@ -165,8 +165,19 @@ def get_infer_result(
 
 
 def get_output_parse_dir(output_dir: str, pdf_name: str) -> str:
-    """获取解析结果目录路径"""
-    return os.path.join(output_dir, pdf_name, "vlm-http-client", "auto")
+    """获取解析结果目录路径，自动探测 mineru 实际输出目录"""
+    # mineru 不同 backend 的输出目录结构可能不同，自动探测
+    candidates = [
+        os.path.join(output_dir, pdf_name, "vlm-http-client", "auto"),
+        os.path.join(output_dir, pdf_name, "vlm-http-client"),
+        os.path.join(output_dir, pdf_name, "vlm"),
+        os.path.join(output_dir, pdf_name, "pipeline"),
+    ]
+    for path in candidates:
+        if os.path.isdir(path):
+            return path
+    # fallback
+    return os.path.join(output_dir, pdf_name)
 
 
 def create_result_zip(

@@ -9,6 +9,7 @@
         <el-menu-item index="/student/wrong-book">错题本</el-menu-item>
         <el-menu-item index="/student/chat">AI 助教</el-menu-item>
         <el-menu-item index="/student/plan">学习计划</el-menu-item>
+        <el-menu-item index="/student/ocr">📄 文档解析</el-menu-item>
       </el-menu>
     </el-aside>
     <el-main>

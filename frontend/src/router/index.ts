@@ -21,6 +21,7 @@ const router = createRouter({
         { path: 'wrong-book', component: () => import('@/pages/student/WrongBook.vue') },
         { path: 'chat', component: () => import('@/pages/student/Chat.vue') },
         { path: 'plan', component: () => import('@/pages/student/LearningPlan.vue') },
+        { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },
       ],
     },
     {

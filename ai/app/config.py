@@ -1,6 +1,11 @@
 """AI 引擎配置"""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+# 项目根目录（本文件位于 ai/app/，向上两级到根目录）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -23,6 +28,11 @@ class Settings(BaseSettings):
     QUICK_MODEL_URL: str = "http://10.16.75.254:8002/v1"
     QUICK_MODEL_NAME: str = "/home/ll_yqs2/models/Qwen3.5-9B"
 
+    # DeepSeek 深度解答模型（从项目根目录 .env 读取）
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = ""
+    DEEPSEEK_MODEL_NAME: str = ""
+
     # ChromaDB（Docker 内部通信使用服务名 "chromadb"，本地开发改为 "localhost:8020"）
     CHROMADB_HOST: str = "chromadb"
     CHROMADB_PORT: int = 8000
@@ -40,7 +50,7 @@ class Settings(BaseSettings):
     OCR_MAX_CONCURRENT: int = 2                       # 最大并发解析数
 
     class Config:
-        env_file = ".env"
+        env_file = PROJECT_ROOT / ".env"
 
 
 settings = Settings()

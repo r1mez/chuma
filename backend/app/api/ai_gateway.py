@@ -41,9 +41,29 @@ async def chat_quick(request: Request):
 
 
 @router.post("/chat/deep")
-async def deep_chat():
-    """深度解答 — 转发到 ai/ 服务，使用 GraphRAG + 远程大模型"""
-    pass
+async def deep_chat(request: Request):
+    """深度解答 — SSE 透传到 AI 引擎（调用 DeepSeek）"""
+    body = await request.json()
+
+    async def proxy_stream():
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.AI_SERVICE_URL}/rag/chat/deep/stream",
+                    headers=_ai_headers(),
+                    json=body,
+                ) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        except httpx.RemoteProtocolError:
+            pass
+
+    return StreamingResponse(
+        proxy_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/recommend")

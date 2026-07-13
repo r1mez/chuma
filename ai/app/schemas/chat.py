@@ -1,4 +1,4 @@
-"""GraphRAG 请求/响应模型"""
+"""AI 对话请求/响应模型"""
 
 from pydantic import BaseModel
 
@@ -6,6 +6,12 @@ from pydantic import BaseModel
 class QuickChatRequest(BaseModel):
     """快速回答请求"""
     message: str
+    history: list[dict] = []  # 多轮对话历史
+
+
+class DeepChatRequest(BaseModel):
+    """深度解答请求"""
+    question: str
     history: list[dict] = []  # 多轮对话历史
 
 

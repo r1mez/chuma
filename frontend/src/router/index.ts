@@ -22,6 +22,7 @@ const router = createRouter({
         { path: 'chat', component: () => import('@/pages/student/Chat.vue') },
         { path: 'plan', component: () => import('@/pages/student/LearningPlan.vue') },
         { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },
+        { path: 'kg-pipeline', component: () => import('@/pages/student/KgPipeline.vue') },
       ],
     },
     {

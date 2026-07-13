@@ -25,7 +25,7 @@
         <template #image>
           <div class="empty-graph-icon">🔍</div>
         </template>
-        <el-button type="primary" @click="$router.push('/student/ocr')">
+        <el-button type="primary" @click="$router.push('/student/kg-pipeline')">
           上传文档构建知识图谱
         </el-button>
       </el-empty>

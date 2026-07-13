@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     OCR_MAX_CONCURRENT: int = 2                       # 最大并发解析数
 
     # Apache AGE
-    AGE_HOST: str = "10.16.75.254"
+    AGE_HOST: str = "43.139.215.55"
     AGE_PORT: int = 5432
     AGE_DB: str = "chuma"
     AGE_USER: str = "chuma"

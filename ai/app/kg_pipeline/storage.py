@@ -82,6 +82,7 @@ class AgeStorage:
 
         try:
             with conn.cursor() as cur:
+                cur.execute("LOAD 'age';")
                 cur.execute("SET search_path TO ag_catalog, public;")
 
                 for node_id, attrs in graph.nodes(data=True):
@@ -129,6 +130,7 @@ class AgeStorage:
         conn = self._get_conn()
         try:
             with conn.cursor() as cur:
+                cur.execute("LOAD 'age';")
                 cur.execute("SET search_path TO ag_catalog, public;")
                 cypher = (
                     f"SELECT * FROM cypher('{self._graph_name}', $$ "

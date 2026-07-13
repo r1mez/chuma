@@ -1,8 +1,11 @@
 """Redis 队列消费者 — 从 registry 获取任务处理器"""
 
 import json
+import logging
 
 import redis.asyncio as aioredis
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 from app.config import settings
 from app.tasks.registry import registry

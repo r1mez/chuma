@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     # Redis（任务队列 + 缓存）
-    REDIS_URL: str = "redis://redis:6379/1"
+    REDIS_URL: str = "redis://localhost:6379/1"
 
     # 后端服务地址
     BACKEND_URL: str = "http://backend:8000"
@@ -42,6 +42,9 @@ class Settings(BaseSettings):
 
     # 知识图谱
     KG_DATA_DIR: str = "data/kg"
+    KG_MODEL_API_KEY: str = ""
+    KG_MODEL_BASE_URL: str = "https://api.deepseek.com"
+    KG_MODEL_NAME: str = "deepseek-v4-flash"
 
     # OCR 文档解析
     OCR_VLM_URL: str = "http://10.16.75.254:8004"  # vLLM OCR 服务地址

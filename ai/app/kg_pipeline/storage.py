@@ -63,8 +63,10 @@ class AgeStorage:
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT * FROM ag_catalog.create_graph(%s)", (self._graph_name,))
-        except psycopg2.errors.DuplicateObject:
+        except (psycopg2.errors.DuplicateObject, psycopg2.errors.InvalidSchemaName):
             logger.info(f"Graph '{self._graph_name}' already exists, skipping")
+        except Exception as e:
+            logger.warning(f"Graph initialization warning: {e}")
         finally:
             conn.close()
 
@@ -96,7 +98,7 @@ class AgeStorage:
                         f"SET n.name = '{_escape(name)}', "
                         f"n.type = '{_escape(ntype)}', "
                         f"n.description = '{_escape(desc)}' "
-                        f"$$) AS (n ag_catalog.vertex);"
+                        f"$$) AS (n agtype);"
                     )
                     cur.execute(cypher)
 
@@ -112,7 +114,7 @@ class AgeStorage:
                         f"relationship_name: '{_escape(rel_name)}', "
                         f"description: '{_escape(desc)}'"
                         f"}}]->(b) "
-                        f"$$) AS (r ag_catalog.edge);"
+                        f"$$) AS (r agtype);"
                     )
                     cur.execute(cypher)
                     edge_count += 1
@@ -135,7 +137,7 @@ class AgeStorage:
                 cypher = (
                     f"SELECT * FROM cypher('{self._graph_name}', $$ "
                     f"MATCH (n) DETACH DELETE n "
-                    f"$$) AS (n ag_catalog.vertex);"
+                    f"$$) AS (n agtype);"
                 )
                 cur.execute(cypher)
         except psycopg2.Error as e:

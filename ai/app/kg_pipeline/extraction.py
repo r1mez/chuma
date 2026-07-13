@@ -8,7 +8,18 @@ from typing import Optional
 
 from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph, KGNode, KGEdge
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import ModelProfile, quick_profile
+from app.engines.llm.profiles import ModelProfile, remote_profile
+from app.config import settings
+
+
+def _kg_extraction_profile() -> ModelProfile:
+    """KG 抽取专用 profile：使用 deepseek-v4-flash"""
+    return ModelProfile(
+        base_url=settings.KG_MODEL_BASE_URL,
+        model_name=settings.KG_MODEL_NAME,
+        api_key=settings.KG_MODEL_API_KEY,
+        timeout=120.0,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +67,7 @@ class KGExtractor:
         custom_prompt: Optional[str] = None,
     ):
         self.llm = llm_client or LLMClient()
-        self.profile = profile or quick_profile()
+        self.profile = profile or _kg_extraction_profile()
         self.system_prompt = custom_prompt or _load_prompt()
 
     async def extract_from_chunk(self, chunk: DocumentChunk) -> KnowledgeGraph:

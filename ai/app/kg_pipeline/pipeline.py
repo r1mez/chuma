@@ -140,4 +140,8 @@ class KGPipeline:
                 logger.error(f"[KG] OCR failed: {e}")
                 return PipelineResult(status="failed", error=str(e))
 
-            return await self.run_from_markdown(md_content)
+            try:
+                return await self.run_from_markdown(md_content)
+            except Exception as e:
+                logger.error(f"[KG] Pipeline failed after OCR: {e}", exc_info=True)
+                return PipelineResult(status="failed", error=str(e))

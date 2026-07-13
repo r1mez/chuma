@@ -7,6 +7,7 @@ import redis.asyncio as aioredis
 
 from app.config import settings
 from app.kg_pipeline.pipeline import KGPipeline
+from app.kg_pipeline.models import PipelineResult
 from app.tasks.registry import task_handler
 
 
@@ -30,8 +31,12 @@ async def run_kg_build(task_data: dict):
 
     logger.info(f"[KGBuild] Task {task_id}: building KG from {file_path}")
 
-    pipeline = KGPipeline()
-    result = await pipeline.run_from_file(file_path)
+    try:
+        pipeline = KGPipeline()
+        result = await pipeline.run_from_file(file_path)
+    except Exception as e:
+        logger.error(f"[KGBuild] Task {task_id} crashed: {e}", exc_info=True)
+        result = PipelineResult(status="failed", error=str(e))
 
     r = aioredis.from_url(settings.REDIS_URL)
     await r.set(output_key, result.model_dump_json(), ex=86400)

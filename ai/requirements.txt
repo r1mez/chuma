@@ -9,3 +9,7 @@ openai==1.60.*
 torch>=2.0.*
 torch-geometric>=2.5.*
 mineru>=3.4.0
+
+# === 知识图谱构建 Pipeline ===
+networkx>=3.0
+psycopg2-binary>=2.9

@@ -49,8 +49,17 @@ class Settings(BaseSettings):
     OCR_TASK_RETENTION_SECONDS: int = 86400           # 任务结果保留时间 (24h)
     OCR_MAX_CONCURRENT: int = 2                       # 最大并发解析数
 
+    # Apache AGE
+    AGE_HOST: str = "10.16.75.254"
+    AGE_PORT: int = 5432
+    AGE_DB: str = "chuma"
+    AGE_USER: str = "chuma"
+    AGE_PASSWORD: str = ""
+    AGE_GRAPH_NAME: str = "chuma_kg"
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
+        extra = "ignore"
 
 
 settings = Settings()

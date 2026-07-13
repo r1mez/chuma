@@ -5,37 +5,99 @@
       <el-icon v-else :size="20"><Monitor /></el-icon>
     </div>
     <div class="bubble">
-      <div v-if="loading && message.role === 'assistant' && !message.content" class="typing">
+      <div v-if="loading && message.role === 'assistant' && !message.content && !message.reasoning" class="typing">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
       </div>
-      <div v-else class="markdown-body" v-html="renderedContent"></div>
+      <div v-else>
+        <!-- 思考过程（可折叠，仅深度思考模式有） -->
+        <div v-if="message.reasoning" class="reasoning-section">
+          <div class="reasoning-header" @click="toggleReasoning">
+            <el-icon :size="14">
+              <ArrowRight v-if="!showReasoning" />
+              <ArrowDown v-else />
+            </el-icon>
+            <span>思考过程</span>
+            <span v-if="isThinking" class="thinking-indicator">思考中...</span>
+          </div>
+          <div v-show="showReasoning" class="reasoning-content">
+            <pre>{{ message.reasoning }}</pre>
+          </div>
+        </div>
+        <!-- 正式回答 -->
+        <div class="markdown-body" v-html="renderedContent"></div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { User, Monitor } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { User, Monitor, ArrowRight, ArrowDown } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import katex from 'katex'
 import type { ChatMessage } from '@/composables/useChat'
 
-// 配置 marked 使用 highlight.js
-marked.setOptions({
-  highlight(code: string, lang: string) {
-    if (lang && hljs.getLanguage(lang)) {
-      return hljs.highlight(code, { language: lang }).value
-    }
-    return hljs.highlightAuto(code).value
-  },
-  breaks: true,
-  gfm: true,
+// 思考中自动展开，思考完毕自动收起；用户手动点击可覆盖
+const showReasoning = ref(true)
+const userToggled = ref(false)
+
+const props = defineProps<{
+  message: ChatMessage
+  loading?: boolean
+}>()
+
+// 思考中 = loading 且有 reasoning 但还没有正式 content
+const isThinking = computed(() =>
+  props.loading && !!props.message.reasoning && !props.message.content
+)
+
+// 思考完毕 = 有 reasoning 且有 content（loading 可能还在）
+const thinkingDone = computed(() =>
+  !!props.message.reasoning && !!props.message.content
+)
+
+// 自动展开/收起逻辑
+watch(isThinking, (val) => {
+  if (val && !userToggled.value) {
+    showReasoning.value = true
+  }
 })
+
+watch(thinkingDone, (val) => {
+  if (val && !userToggled.value) {
+    showReasoning.value = false
+  }
+})
+
+function toggleReasoning() {
+  userToggled.value = true
+  showReasoning.value = !showReasoning.value
+}
+
+// 创建带自定义渲染器的 marked 实例
+const markedRenderer = new marked.Renderer()
+
+// 配置 marked 使用 highlight.js（v14 使用扩展方式）
+const markedWithHighlight = {
+  ...marked,
+  renderer: markedRenderer,
+}
+
+// 渲染 Markdown 内容
+function renderMarkdown(content: string): string {
+  const result = marked.parse(content, {
+    breaks: true,
+    gfm: true,
+  })
+  if (typeof result === 'string') {
+    return result
+  }
+  return ''
+}
 
 // 渲染 LaTeX 公式
 function renderMath(text: string): string {
-  // 处理 $$...$$ 块级公式
   text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
     try {
       return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false })
@@ -43,7 +105,6 @@ function renderMath(text: string): string {
       return `$$${math}$$`
     }
   })
-  // 处理 $...$ 行内公式
   text = text.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
     try {
       return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false })
@@ -54,15 +115,9 @@ function renderMath(text: string): string {
   return text
 }
 
-const props = defineProps<{
-  message: ChatMessage
-  loading?: boolean
-}>()
-
 const renderedContent = computed(() => {
   if (!props.message.content) return ''
-  // 先渲染 Markdown，再渲染 LaTeX 公式
-  const html = marked.parse(props.message.content)
+  const html = renderMarkdown(props.message.content)
   return renderMath(html)
 })
 </script>
@@ -128,6 +183,53 @@ const renderedContent = computed(() => {
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
+}
+
+/* 思考过程区域 */
+.reasoning-section {
+  margin-bottom: 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.reasoning-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #909399;
+  font-weight: 500;
+}
+.reasoning-header:hover {
+  background: #f5f7fa;
+  border-radius: 8px 8px 0 0;
+}
+.thinking-indicator {
+  font-size: 12px;
+  color: #c0c4cc;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.reasoning-content {
+  padding: 0 12px 12px;
+}
+.reasoning-content pre {
+  margin: 0;
+  padding: 10px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #606266;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 /* Markdown 样式 */

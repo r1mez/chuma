@@ -5,13 +5,18 @@ export interface ChatHistoryItem {
   content: string
 }
 
+export interface ChatChunk {
+  content: string
+  reasoning: string
+}
+
 /**
  * 快速回答 — 流式调用
  */
 export async function sendQuickMessage(
   message: string,
   history: ChatHistoryItem[],
-  onChunk: (content: string) => void,
+  onChunk: (chunk: ChatChunk) => void,
   onDone: () => void,
   onError: (err: Error) => void,
 ): Promise<void> {
@@ -53,9 +58,9 @@ export async function sendQuickMessage(
         }
 
         try {
-          const parsed = JSON.parse(data)
-          if (parsed.content) {
-            onChunk(parsed.content)
+          const parsed = JSON.parse(data) as ChatChunk
+          if (parsed.content || parsed.reasoning) {
+            onChunk(parsed)
           }
         } catch {
           // 忽略解析错误
@@ -75,7 +80,7 @@ export async function sendQuickMessage(
 export async function sendDeepMessage(
   question: string,
   history: ChatHistoryItem[],
-  onChunk: (content: string) => void,
+  onChunk: (chunk: ChatChunk) => void,
   onDone: () => void,
   onError: (err: Error) => void,
 ): Promise<void> {
@@ -117,9 +122,9 @@ export async function sendDeepMessage(
         }
 
         try {
-          const parsed = JSON.parse(data)
-          if (parsed.content) {
-            onChunk(parsed.content)
+          const parsed = JSON.parse(data) as ChatChunk
+          if (parsed.content || parsed.reasoning) {
+            onChunk(parsed)
           }
         } catch {
           // 忽略解析错误

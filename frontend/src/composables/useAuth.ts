@@ -6,7 +6,8 @@ export function useAuth() {
 
   async function login(username: string, password: string) {
     const data = await request.post('/auth/login', { username, password })
-    authStore.setToken(data.token)
+    // request interceptor unwraps response.data, so data is the response body
+    authStore.setToken((data as any).token)
     return data
   }
 

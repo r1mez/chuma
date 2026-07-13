@@ -76,8 +76,13 @@ class LLMClient:
         messages: list[dict],
         temperature: float = 0.7,
         profile: ModelProfile | None = None,
-    ) -> AsyncIterator[str]:
-        """流式输出 — 逐 chunk 返回文本"""
+    ) -> AsyncIterator[dict]:
+        """流式输出 — 逐 chunk 返回文本和 reasoning
+
+        Yields dict with keys:
+            - content: str  — 正式回答内容
+            - reasoning: str — 思考过程（可能为空）
+        """
         p = self._get_profile(profile)
         async with httpx.AsyncClient() as client:
             async with client.stream(
@@ -103,7 +108,8 @@ class LLMClient:
                         chunk = json.loads(data)
                         delta = chunk["choices"][0].get("delta", {})
                         content = delta.get("content", "")
-                        if content:
-                            yield content
+                        reasoning = delta.get("reasoning_content", "")
+                        if content or reasoning:
+                            yield {"content": content, "reasoning": reasoning}
                     except (json.JSONDecodeError, KeyError, IndexError):
                         continue

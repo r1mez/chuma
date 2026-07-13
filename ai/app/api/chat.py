@@ -31,7 +31,7 @@ async def quick_chat_stream(req: QuickChatRequest):
 
     async def event_stream():
         async for chunk in llm.stream(messages):
-            yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -43,7 +43,7 @@ async def quick_chat_stream(req: QuickChatRequest):
 
 @router.post("/chat/deep/stream")
 async def deep_chat_stream(req: DeepChatRequest):
-    """深度解答 — 流式输出（调用 DeepSeek API）"""
+    """深度解答 — 流式输出（调用 DeepSeek）"""
     llm = LLMClient(default_profile=deepseek_profile())
 
     messages = [
@@ -54,7 +54,7 @@ async def deep_chat_stream(req: DeepChatRequest):
 
     async def event_stream():
         async for chunk in llm.stream(messages):
-            yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(

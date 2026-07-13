@@ -4,8 +4,22 @@
     <div class="chat-header">
       <h3>AI 助教</h3>
       <div class="header-actions">
-        <el-tag type="success" effect="plain">快速回答</el-tag>
-        <el-tag type="info" effect="plain" disabled>深度思考（开发中）</el-tag>
+        <el-tag
+          :type="chatMode === 'quick' ? 'success' : 'info'"
+          effect="plain"
+          style="cursor: pointer"
+          @click="chatMode = 'quick'"
+        >
+          快速回答
+        </el-tag>
+        <el-tag
+          :type="chatMode === 'deep' ? 'success' : 'info'"
+          effect="plain"
+          style="cursor: pointer"
+          @click="chatMode = 'deep'"
+        >
+          深度思考
+        </el-tag>
         <el-tag type="info" effect="plain" disabled>规划模式（开发中）</el-tag>
         <el-button text @click="clearMessages" :disabled="messages.length === 0">
           清空对话
@@ -40,7 +54,7 @@ import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 
-const { messages, loading, sendMessage, clearMessages } = useChat()
+const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
 const messagesRef = ref<HTMLElement>()
 
 // 自动滚动到底部

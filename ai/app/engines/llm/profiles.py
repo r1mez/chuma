@@ -57,11 +57,11 @@ def quick_profile() -> ModelProfile:
 
 
 def deepseek_profile() -> ModelProfile:
-    """DeepSeek 深度解答模型 profile"""
+    """DeepSeek 深度解答模型 profile（复用远程大模型配置）"""
     from app.config import settings
     return ModelProfile(
-        base_url=settings.DEEPSEEK_BASE_URL,
-        model_name=settings.DEEPSEEK_MODEL_NAME,
-        api_key=settings.DEEPSEEK_API_KEY,
+        base_url=settings.REMOTE_MODEL_BASE_URL,
+        model_name=settings.REMOTE_MODEL_NAME,
+        api_key=settings.REMOTE_MODEL_API_KEY,
         timeout=120.0,
     )

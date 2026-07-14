@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/1"
 
     # 后端服务地址
-    BACKEND_URL: str = "http://backend:8000"
+    BACKEND_URL: str = "http://localhost:8006"
 
     # 本地微调模型
     LOCAL_MODEL_URL: str = "http://localhost:8002/v1"  # vLLM/Ollama 服务地址
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL_NAME: str = ""
 
     # ChromaDB（Docker 内部通信使用服务名 "chromadb"，本地开发改为 "localhost:8020"）
-    CHROMADB_HOST: str = "chromadb"
+    CHROMADB_HOST: str = "localhost"
     CHROMADB_PORT: int = 8000
 
     # 服务间认证（backend → ai）

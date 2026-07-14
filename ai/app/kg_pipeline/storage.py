@@ -62,11 +62,15 @@ class AgeStorage:
         conn = self._get_conn()
         try:
             with conn.cursor() as cur:
+                cur.execute("LOAD 'age';")
+                cur.execute("SET search_path TO ag_catalog, public;")
                 cur.execute("SELECT * FROM ag_catalog.create_graph(%s)", (self._graph_name,))
         except (psycopg2.errors.DuplicateObject, psycopg2.errors.InvalidSchemaName):
             logger.info(f"Graph '{self._graph_name}' already exists, skipping")
         except Exception as e:
-            logger.warning(f"Graph initialization warning: {e}")
+            raise AgeConnectionError(
+                f"Graph initialization failed for '{self._graph_name}': {e}"
+            ) from e
         finally:
             conn.close()
 

@@ -1,7 +1,7 @@
 """AGE 图数据只读查询封装"""
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from app.kg_pipeline.storage import AgeStorage, AgeConnectionError
 
@@ -12,9 +12,9 @@ class GraphQueryError(Exception):
     pass
 
 
-def get_full_graph(dataset_id: str = "main") -> dict[str, Any]:
+def get_full_graph(graph_name: Optional[str] = None) -> dict[str, Any]:
     """获取完整图数据（节点 + 边 + 统计），自动去重"""
-    storage = AgeStorage()
+    storage = AgeStorage(graph_name=graph_name)
     try:
         conn = storage._get_conn()
     except AgeConnectionError as e:
@@ -91,9 +91,9 @@ def get_full_graph(dataset_id: str = "main") -> dict[str, Any]:
                       "node_types": type_counter}}
 
 
-def search_nodes(query: str, dataset_id: str = "main") -> list[dict]:
+def search_nodes(query: str, graph_name: Optional[str] = None) -> list[dict]:
     """按名称搜索实体，自动去重"""
-    storage = AgeStorage()
+    storage = AgeStorage(graph_name=graph_name)
     try:
         conn = storage._get_conn()
     except AgeConnectionError as e:

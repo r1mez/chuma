@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # 数据库
-    DATABASE_URL: str = "postgresql+asyncpg://chuma:chuma@postgres:5432/chuma"
+    DATABASE_URL: str = "postgresql+asyncpg://chuma:chuma@localhost:5432/chuma"
 
     # Redis
-    REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # JWT
     JWT_SECRET_KEY: str = "change-me-in-production"

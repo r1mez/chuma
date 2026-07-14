@@ -21,8 +21,6 @@ from app.ocr.schemas import OcrParseParams, StoredUpload
 
 logger = logging.getLogger(__name__)
 
-_age_initialized = False
-
 
 class OcrServiceError(Exception):
     """OCR 服务故障"""
@@ -38,11 +36,12 @@ class KGPipeline:
         extractor: Optional[KGExtractor] = None,
         graph_builder: Optional[GraphBuilder] = None,
         storage: Optional[AgeStorage] = None,
+        graph_name: Optional[str] = None,
     ):
         self.chunker = chunker or MarkdownChunker()
         self.extractor = extractor or KGExtractor()
         self.graph_builder = graph_builder or GraphBuilder()
-        self.storage = storage or AgeStorage()
+        self.storage = storage or AgeStorage(graph_name=graph_name)
 
     async def _parse_document(self, file_path: str, output_dir: str) -> str:
         """调用 OCR 服务解析文档为 Markdown"""
@@ -112,10 +111,7 @@ class KGPipeline:
         logger.info(f"[KG] Merged graph: {graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges")
 
         logger.info("[KG] Phase: AGE Storage")
-        global _age_initialized
-        if not _age_initialized:
-            self.storage.initialize_graph()
-            _age_initialized = True
+        self.storage.initialize_graph()
 
         edge_count = self.storage.write_graph(graph)
         logger.info(f"[KG] Written {edge_count} edges to AGE")

@@ -36,10 +36,33 @@ export interface SearchResult {
   }>
 }
 
-export async function fetchGraphData(datasetId = 'main'): Promise<GraphData> {
-  return request.get('/kg/graph/data', { params: { dataset_id: datasetId } })
+export interface KgGraphInfo {
+  id: number
+  graph_name: string
+  original_filename: string
+  node_count: number
+  edge_count: number
+  chunk_count: number
+  status: 'pending' | 'completed' | 'failed'
+  created_at: string
 }
 
-export async function searchNodes(query: string, datasetId = 'main'): Promise<SearchResult> {
-  return request.get('/kg/graph/search', { params: { q: query, dataset_id: datasetId } })
+export async function fetchGraphList(): Promise<KgGraphInfo[]> {
+  return request.get('/knowledge/graphs')
+}
+
+export async function fetchGraphData(graphName?: string): Promise<GraphData> {
+  const params: Record<string, string> = {}
+  if (graphName) params.graph_name = graphName
+  return request.get('/kg/graph/data', { params })
+}
+
+export async function searchNodes(query: string, graphName?: string): Promise<SearchResult> {
+  const params: Record<string, string> = { q: query }
+  if (graphName) params.graph_name = graphName
+  return request.get('/kg/graph/search', { params })
+}
+
+export async function deleteGraph(graphId: number): Promise<{ status: string; graph_id: number }> {
+  return request.delete(`/knowledge/graphs/${graphId}`)
 }

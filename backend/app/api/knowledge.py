@@ -1,8 +1,63 @@
 """知识图谱路由"""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.database import async_session
+from app.core.deps import get_current_user_optional
+from app.schemas.kg_graph import KgGraphResponse
+from app.services.kg_graph_service import KgGraphService
 
 router = APIRouter()
+
+
+@router.get("/graphs", response_model=list[KgGraphResponse])
+async def list_user_graphs(current_user: dict = Depends(get_current_user_optional)):
+    """获取当前用户的所有知识图谱列表"""
+    user_id = current_user.get("id")
+    kg_service = KgGraphService()
+    async with async_session() as db:
+        graphs = await kg_service.list_user_graphs(user_id, db)
+    return graphs
+
+
+@router.delete("/graphs/{graph_id}")
+async def delete_graph(
+    graph_id: int,
+    current_user: dict = Depends(get_current_user_optional),
+):
+    """删除知识图谱（同时清理 AGE 图和本地文件）"""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    user_id = current_user.get("id")
+    kg_service = KgGraphService()
+
+    # Step 1: Verify ownership and get graph_name (without deleting yet)
+    async with async_session() as db:
+        kg_record = await kg_service.get_graph_by_id(user_id, graph_id, db)
+        if kg_record is None:
+            raise HTTPException(status_code=404, detail="图谱不存在或无权限")
+        graph_name = kg_record.graph_name
+
+    # Step 2: Call AI engine to clear AGE graph (before deleting DB record)
+    try:
+        import httpx
+        from app.core.config import settings
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await client.post(
+                f"{settings.AI_SERVICE_URL}/kg/graph/delete",
+                headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                params={"graph_name": graph_name},
+            )
+    except Exception as e:
+        logger.warning(f"Failed to clear AGE graph {graph_name}: {e}")
+
+    # Step 3: Delete PostgreSQL record and local file
+    async with async_session() as db:
+        await kg_service.delete_graph(user_id, graph_id, db)
+
+    return {"status": "ok", "graph_id": graph_id}
 
 
 @router.get("/graph")

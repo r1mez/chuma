@@ -22,17 +22,19 @@ async def run_kg_build(task_data: dict):
     {
         "task_id": "uuid",
         "file_path": "/path/to/document.pdf",
-        "output_key": "kg:result:{task_id}"
+        "output_key": "kg:result:{task_id}",
+        "graph_name": "kg_xxx"  # 可选
     }
     """
     task_id = task_data.get("task_id", "unknown")
     file_path = task_data["file_path"]
     output_key = task_data.get("output_key", f"kg:result:{task_id}")
+    graph_name = task_data.get("graph_name")  # 可选，为空则使用 settings.AGE_GRAPH_NAME
 
     logger.info(f"[KGBuild] Task {task_id}: building KG from {file_path}")
 
     try:
-        pipeline = KGPipeline()
+        pipeline = KGPipeline(graph_name=graph_name)
         result = await pipeline.run_from_file(file_path)
     except Exception as e:
         logger.error(f"[KGBuild] Task {task_id} crashed: {e}", exc_info=True)

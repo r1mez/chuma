@@ -17,7 +17,10 @@ router = APIRouter()
 
 
 @router.post("/build", response_model=TaskSubmitResponse)
-async def start_kg_build(file_path: str = Body(..., embed=True)):
+async def start_kg_build(
+    file_path: str = Body(..., embed=True),
+    graph_name: str | None = Body(default=None, embed=True),
+):
     """提交知识图谱构建任务（异步）"""
     task_id = str(uuid.uuid4())
 
@@ -27,6 +30,7 @@ async def start_kg_build(file_path: str = Body(..., embed=True)):
         "task_id": task_id,
         "file_path": file_path,
         "output_key": f"kg:result:{task_id}",
+        "graph_name": graph_name,  # pass through to task worker
     }))
 
     return TaskSubmitResponse(
@@ -58,11 +62,11 @@ async def get_build_result(task_id: str):
 
 
 @router.get("/graph/data")
-async def get_graph_data(dataset_id: str = "main"):
+async def get_graph_data(graph_name: str | None = None):
     """获取知识图谱全量数据（节点 + 边 + 统计）"""
     try:
         data = await asyncio.get_event_loop().run_in_executor(
-            None, get_full_graph, dataset_id
+            None, get_full_graph, graph_name
         )
         return data
     except GraphQueryError as e:
@@ -70,12 +74,24 @@ async def get_graph_data(dataset_id: str = "main"):
 
 
 @router.get("/graph/search")
-async def search_graph_nodes(q: str, dataset_id: str = "main"):
+async def search_graph_nodes(q: str, graph_name: str | None = None):
     """按名称搜索实体节点"""
     try:
         results = await asyncio.get_event_loop().run_in_executor(
-            None, search_nodes, q, dataset_id
+            None, search_nodes, q, graph_name
         )
         return {"results": results}
     except GraphQueryError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/graph/delete")
+async def delete_graph_data(graph_name: str):
+    """清空指定 AGE 图的所有数据"""
+    from app.kg_pipeline.storage import AgeStorage
+    try:
+        storage = AgeStorage(graph_name=graph_name)
+        storage.clear_graph()
+        return {"status": "ok", "graph_name": graph_name}
+    except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))

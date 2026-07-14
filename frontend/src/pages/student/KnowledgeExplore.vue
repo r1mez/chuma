@@ -14,7 +14,7 @@
         :sub-title="store.error.message"
       >
         <template #extra>
-          <el-button type="primary" @click="store.loadGraphData()">重试</el-button>
+          <el-button type="primary" @click="store.loadGraphData(store.currentGraphName || undefined)">重试</el-button>
         </template>
       </el-result>
     </div>
@@ -94,13 +94,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { Search, ZoomIn, ZoomOut, Refresh } from '@element-plus/icons-vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import KnowledgeGraph from '@/components/KnowledgeGraph.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
 
+const route = useRoute()
 const store = useKnowledgeStore()
 const graphRef = ref<InstanceType<typeof KnowledgeGraph>>()
 const { showLabels, handleSearch, focusNode, resetView } = useGraph()
@@ -125,8 +127,47 @@ function querySearch(query: string, cb: (results: any[]) => void) {
 function zoomIn() { /* ECharts zoom */ }
 function zoomOut() { /* ECharts zoom */ }
 
-onMounted(() => {
-  store.loadGraphData()
+async function loadGraphByRoute() {
+  const graphId = route.query.graphId ? Number(route.query.graphId) : null
+  if (graphId) {
+    store.currentGraphId = graphId
+    const graph = store.graphList.find(g => g.id === graphId)
+    if (graph && graph.status === 'completed') {
+      await store.loadGraphData(graph.graph_name)
+    } else if (graph && graph.status === 'failed') {
+      store.error = { type: 'not_found', message: '该图谱构建失败，请重新上传文档' }
+    } else {
+      store.error = { type: 'not_found', message: '该图谱还没有构建完成' }
+    }
+  } else {
+    // 无参数时自动使用最近完成的图谱
+    const recentCompleted = store.graphList.find(g => g.status === 'completed')
+    if (recentCompleted) {
+      store.currentGraphId = recentCompleted.id
+      await store.loadGraphData(recentCompleted.graph_name)
+    } else {
+      // 没有完成的图谱，使用最近的一个
+      const recent = store.graphList[0]
+      if (recent) {
+        store.currentGraphId = recent.id
+        if (recent.status === 'completed') {
+          await store.loadGraphData(recent.graph_name)
+        } else if (recent.status === 'failed') {
+          store.error = { type: 'not_found', message: '该图谱构建失败，请重新上传文档' }
+        }
+      }
+    }
+  }
+}
+
+// 监听路由变化，切换图谱时自动刷新
+watch(() => route.query.graphId, () => {
+  loadGraphByRoute()
+})
+
+onMounted(async () => {
+  await store.loadGraphList()
+  await loadGraphByRoute()
 })
 </script>
 

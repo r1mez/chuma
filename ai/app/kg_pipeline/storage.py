@@ -149,3 +149,22 @@ class AgeStorage:
             raise AgeConnectionError(f"AGE clear failed: {e}") from e
         finally:
             conn.close()
+
+    def drop_graph(self) -> None:
+        """删除当前 AGE 图（包括所有节点、边和图结构）"""
+        conn = self._get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("LOAD 'age';")
+                cur.execute("SET search_path TO ag_catalog, public;")
+                cur.execute(
+                    "SELECT * FROM ag_catalog.drop_graph(%s, true)",
+                    (self._graph_name,),
+                )
+        except psycopg2.errors.UndefinedTable:
+            logger.info(f"Graph '{self._graph_name}' does not exist, nothing to drop")
+        except psycopg2.Error as e:
+            logger.error(f"AGE drop failed: {e}")
+            raise AgeConnectionError(f"AGE drop failed: {e}") from e
+        finally:
+            conn.close()

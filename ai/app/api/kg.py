@@ -87,11 +87,11 @@ async def search_graph_nodes(q: str, graph_name: str | None = None):
 
 @router.post("/graph/delete")
 async def delete_graph_data(graph_name: str):
-    """清空指定 AGE 图的所有数据"""
+    """清空并删除指定 AGE 图"""
     from app.kg_pipeline.storage import AgeStorage
     try:
         storage = AgeStorage(graph_name=graph_name)
-        storage.clear_graph()
+        storage.drop_graph()
         return {"status": "ok", "graph_name": graph_name}
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))

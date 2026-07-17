@@ -20,7 +20,14 @@
         >
           深度思考
         </el-tag>
-        <el-tag type="info" effect="plain" disabled>规划模式（开发中）</el-tag>
+        <el-tag
+          :type="chatMode === 'agent' ? 'success' : 'info'"
+          effect="plain"
+          style="cursor: pointer"
+          @click="chatMode = 'agent'"
+        >
+          🤖 智能管家
+        </el-tag>
         <el-button text @click="clearMessages" :disabled="messages.length === 0">
           清空对话
         </el-button>

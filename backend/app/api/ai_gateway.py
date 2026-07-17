@@ -66,6 +66,36 @@ async def deep_chat(request: Request):
     )
 
 
+@router.post("/agent/chat")
+async def agent_chat(request: Request):
+    """智能管家对话 — SSE 透传到 AI 引擎 Agent 路由"""
+    body = await request.json()
+    # Inject current user ID from auth context
+    user = getattr(request.state, "user", None)
+    if user and "user_id" not in body:
+        body["user_id"] = user.get("id", 1)
+
+    async def proxy_stream():
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.AI_SERVICE_URL}/agent/chat/stream",
+                    headers=_ai_headers(),
+                    json=body,
+                ) as resp:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        except httpx.RemoteProtocolError:
+            pass
+
+    return StreamingResponse(
+        proxy_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/recommend")
 async def recommend_questions():
     """GNN 题目推荐 — 转发到 ai/ 服务"""

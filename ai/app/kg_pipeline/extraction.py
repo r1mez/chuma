@@ -88,13 +88,15 @@ class KGExtractor:
         ]
 
         try:
-            raw = await self.llm.chat(
+            resp = await self.llm.chat(
                 messages,
                 temperature=0.1,
                 profile=self.profile,
             )
         except Exception as e:
             raise LlmExtractionError(f"LLM call failed: {e}") from e
+
+        raw = resp.content or ""
 
         try:
             data = _parse_llm_json_response(raw)

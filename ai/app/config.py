@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     AGE_PASSWORD: str = ""
     AGE_GRAPH_NAME: str = "chuma_kg"
 
+    # MCP 联网搜索
+    MCP_SEARCH_URL: str = ""        # MCP SSE 端点 URL
+    MCP_SEARCH_TOKEN: str = ""      # MCP Server 认证令牌
+
     class Config:
         env_file = PROJECT_ROOT / ".env"
         extra = "ignore"

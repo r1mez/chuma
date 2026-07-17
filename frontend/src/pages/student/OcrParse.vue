@@ -119,6 +119,17 @@
               </div>
             </div>
             <el-alert title="处理完成" type="success" :closable="false" show-icon />
+
+            <!-- 下载按钮 -->
+            <div class="download-area">
+              <el-button
+                type="primary"
+                :icon="Download"
+                @click="downloadResult(task)"
+              >
+                下载解析结果
+              </el-button>
+            </div>
           </div>
 
           <!-- 失败状态 -->
@@ -151,7 +162,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Download } from '@element-plus/icons-vue'
+import { getOcrTaskResultDownloadUrl } from '@/api/ocr'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useOcr, type OcrTask } from '@/composables/useOcr'
@@ -224,6 +236,16 @@ function handleRetry(task: OcrTask): void {
   // 重新上传逻辑：移除旧任务，重新提交
   removeTask(task.taskId)
   ElMessage.info('请重新选择文件并提交')
+}
+
+function downloadResult(task: OcrTask): void {
+  const url = getOcrTaskResultDownloadUrl(task.taskId)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${task.fileNames[0] || task.taskId}.zip`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 function getStatusType(status: string): string {
@@ -398,5 +420,10 @@ function getProcessingTime(task: OcrTask): string {
 
 .task-error {
   margin-top: 10px;
+}
+
+.download-area {
+  margin-top: 12px;
+  text-align: center;
 }
 </style>

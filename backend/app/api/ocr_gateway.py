@@ -2,7 +2,7 @@
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.config import settings
 
@@ -58,3 +58,21 @@ async def get_ocr_task_status(task_id: str):
         )
         response.raise_for_status()
         return response.json()
+
+
+@router.get("/tasks/{task_id}/result")
+async def get_ocr_task_result(task_id: str):
+    """获取 OCR 解析结果 ZIP — 转发到 AI 引擎"""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.get(
+            f"{settings.AI_SERVICE_URL}/ocr/tasks/{task_id}/result",
+            headers=_ai_headers(),
+        )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{task_id}.zip"'
+            },
+        )

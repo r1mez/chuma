@@ -59,3 +59,10 @@ export async function getOcrTaskStatus(taskId: string): Promise<TaskStatusRespon
   const response = await request.get(`/ocr/tasks/${taskId}`)
   return response as unknown as TaskStatusResponse
 }
+
+/**
+ * 获取 OCR 任务结果下载 URL
+ */
+export function getOcrTaskResultDownloadUrl(taskId: string): string {
+  return `/api/ocr/tasks/${taskId}/result`
+}

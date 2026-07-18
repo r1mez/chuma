@@ -6,9 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from app.api import chat, gnn, kg
+from app.agent.router import router as agent_router
 from app.dependencies import verify_service_token
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 from app.tasks.worker import start_worker
+from app.agent.mcp_client import mcp_client
+from app.config import settings
 from app.ocr.router import router as ocr_router, set_task_manager
 from app.ocr.task_manager import AsyncTaskManager
 
@@ -23,8 +26,12 @@ async def lifespan(app: FastAPI):
 
     worker_task = asyncio.create_task(start_worker())
 
+    # Connect MCP client (gracefully skip if not configured)
+    await mcp_client.connect(settings.MCP_SEARCH_URL, settings.MCP_SEARCH_TOKEN)
+
     yield
 
+    await mcp_client.close()
     worker_task.cancel()
     try:
         await worker_task
@@ -42,6 +49,7 @@ auth_dep = [Depends(verify_service_token)]
 app.include_router(chat.router, prefix="/rag", tags=["AI Chat"], dependencies=auth_dep)
 app.include_router(gnn.router, prefix="/gnn", tags=["GNN"], dependencies=auth_dep)
 app.include_router(kg.router, prefix="/kg", tags=["Knowledge Graph"], dependencies=auth_dep)
+app.include_router(agent_router, prefix="/agent", tags=["Agent"], dependencies=auth_dep)
 app.include_router(ocr_router, prefix="/ocr", tags=["OCR"])
 
 

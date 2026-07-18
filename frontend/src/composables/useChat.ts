@@ -1,13 +1,21 @@
 import { ref } from 'vue'
-import { sendQuickMessage, sendDeepMessage, type ChatHistoryItem, type ChatChunk } from '@/api/ai'
+import { sendQuickMessage, sendDeepMessage, sendAgentMessage, type ChatHistoryItem, type ChatChunk, type AgentSSEEvent } from '@/api/ai'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  reasoning?: string  // 思考过程（仅深度思考模式的 assistant 消息有）
+  reasoning?: string
+  toolCalls?: ToolCallStatus[]
 }
 
-export type ChatMode = 'quick' | 'deep'
+export interface ToolCallStatus {
+  tool: string
+  query: string
+  status: 'running' | 'done'
+  preview?: string
+}
+
+export type ChatMode = 'quick' | 'deep' | 'agent'
 
 export function useChat() {
   const messages = ref<ChatMessage[]>([])
@@ -28,7 +36,47 @@ export function useChat() {
     streamingReasoning.value = ''
 
     const assistantIdx = messages.value.length
-    messages.value.push({ role: 'assistant', content: '', reasoning: '' })
+    messages.value.push({ role: 'assistant', content: '', reasoning: '', toolCalls: [] })
+
+    if (chatMode.value === 'agent') {
+      await sendAgentMessage(
+        content,
+        history,
+        (event: AgentSSEEvent) => {
+          if (event.type === 'tool_used') {
+            messages.value[assistantIdx].toolCalls!.push({
+              tool: event.tool!,
+              query: event.query || '',
+              status: 'running',
+            })
+          } else if (event.type === 'tool_result') {
+            const tcs = messages.value[assistantIdx].toolCalls!
+            const last = tcs.find(tc => tc.status === 'running')
+            if (last) {
+              last.status = 'done'
+              last.preview = event.preview
+            }
+          } else if (event.type === 'content') {
+            streamingContent.value += event.content!
+            messages.value[assistantIdx].content = streamingContent.value
+          } else if (event.type === 'error') {
+            messages.value[assistantIdx].content = `⚠️ 出错了：${event.content}`
+          }
+        },
+        () => {
+          loading.value = false
+          streamingContent.value = ''
+          streamingReasoning.value = ''
+        },
+        (err) => {
+          messages.value[assistantIdx].content = `⚠️ 出错了：${err.message}`
+          loading.value = false
+          streamingContent.value = ''
+          streamingReasoning.value = ''
+        },
+      )
+      return
+    }
 
     const sendFn = chatMode.value === 'deep' ? sendDeepMessage : sendQuickMessage
 

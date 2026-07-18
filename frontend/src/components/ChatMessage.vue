@@ -23,6 +23,19 @@
             <pre>{{ message.reasoning }}</pre>
           </div>
         </div>
+        <!-- 工具调用指示器（仅 Agent 模式） -->
+        <div v-if="message.toolCalls && message.toolCalls.length > 0" class="tool-calls">
+          <div
+            v-for="(tc, i) in message.toolCalls"
+            :key="i"
+            class="tool-call-item"
+            :class="{ completed: tc.status === 'done' }"
+          >
+            <span class="tool-icon">{{ tc.status === 'done' ? '✅' : '🔍' }}</span>
+            <span class="tool-label">{{ tc.status === 'done' ? '已查询' : '正在查询' }} {{ toolLabel(tc.tool) }}</span>
+            <span v-if="tc.query" class="tool-query">"{{ tc.query }}"</span>
+          </div>
+        </div>
         <!-- 正式回答 -->
         <div class="markdown-body" v-html="renderedContent"></div>
       </div>
@@ -120,6 +133,15 @@ const renderedContent = computed(() => {
   const html = renderMarkdown(props.message.content)
   return renderMath(html)
 })
+
+function toolLabel(tool: string): string {
+  const labels: Record<string, string> = {
+    search_kg: '知识图谱',
+    read_document: '文档资料',
+    search_web: '网络搜索',
+  }
+  return labels[tool] || tool
+}
 </script>
 
 <style scoped>
@@ -329,5 +351,44 @@ const renderedContent = computed(() => {
 .markdown-body :deep(.katex-display) {
   margin: 8px 0;
   overflow-x: auto;
+}
+
+/* 工具调用指示器 */
+.tool-calls {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f0f9eb;
+  border-radius: 8px;
+  border: 1px solid #e1f3d8;
+}
+
+.tool-call-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #67c23a;
+}
+
+.tool-call-item.completed {
+  color: #909399;
+}
+
+.tool-icon {
+  font-size: 12px;
+}
+
+.tool-label {
+  font-weight: 500;
+}
+
+.tool-query {
+  color: #c0c4cc;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
 }
 </style>

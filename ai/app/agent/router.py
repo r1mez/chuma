@@ -9,7 +9,7 @@ from app.agent.orchestrator import AgentOrchestrator
 from app.agent.schemas import AgentChatRequest
 from app.dependencies import verify_service_token
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import quick_profile
+from app.engines.llm.profiles import deepseek_profile
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ async def agent_chat_stream(req: AgentChatRequest):
     支持多步推理和工具调用。Agent 会在必要时自动查询知识图谱、
     检索文档或联网搜索，然后整合信息给出回答。
     """
-    llm = LLMClient(default_profile=quick_profile())
+    llm = LLMClient(default_profile=deepseek_profile())
     agent = AgentOrchestrator(user_id=req.user_id, llm_client=llm)
 
     async def event_stream():

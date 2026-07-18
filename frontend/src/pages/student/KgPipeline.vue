@@ -1,5 +1,5 @@
 <template>
-  <div class="kgp-page">
+  <BorderGlow class="kgp-page" background-color="transparent">
     <h1 class="page-title">知识图谱自动构建</h1>
 
     <el-card class="upload-card">
@@ -69,7 +69,7 @@
         </div>
       </div>
     </el-card>
-  </div>
+  </BorderGlow>
 </template>
 
 <script setup lang="ts">
@@ -80,6 +80,7 @@ import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useKgPipeline, type KgTask } from '@/composables/useKgPipeline'
 import StarBorder from '@/components/StarBorder.vue'
+import BorderGlow from '@/components/BorderGlow.vue'
 
 const router = useRouter()
 const { tasks, isSubmitting, submitTask, removeTask } = useKgPipeline()
@@ -151,26 +152,30 @@ function elapsed(task: KgTask): string {
 </script>
 
 <style scoped>
-.kgp-page { padding: 20px; max-width: 800px; margin: 0 auto; }
+.kgp-page { padding: 20px; max-width: 800px; margin: 20px auto; color: #eceef0; min-height: calc(100vh - 40px); }
 .page-title { font-size: 24px; margin-bottom: 20px; text-align: center; }
+:deep(.el-card) { background: rgba(255, 255, 255, 0.4); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; backdrop-filter: blur(10px); }
+:deep(.el-card__header) { border-bottom-color: rgba(0, 0, 0, 0.05); }
+:deep(.el-upload-dragger) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); }
+:deep(.el-upload-dragger:hover) { border-color: #409eff; }
 .upload-card, .tasks-card { margin-bottom: 20px; }
 .upload-area { width: 100%; }
-.upload-icon { font-size: 48px; color: #909399; margin-bottom: 10px; }
-.upload-text { color: #606266; }
+.upload-icon { font-size: 48px; color: #9ca3af; margin-bottom: 10px; }
+.upload-text { color: #4b5563; }
 .upload-text em { color: #409eff; font-style: normal; }
-.upload-tip { font-size: 12px; color: #909399; margin-top: 10px; }
+.upload-tip { font-size: 12px; color: #6b7280; margin-top: 10px; }
 .submit-area { text-align: center; margin-bottom: 20px; }
 .task-list { display: flex; flex-direction: column; gap: 12px; }
-.task-item { border: 1px solid #ebeef5; border-radius: 4px; padding: 12px; }
+.task-item { border: 1px solid rgba(0, 0, 0, 0.05); border-radius: 4px; padding: 12px; background: rgba(255, 255, 255, 0.3); }
 .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.task-file { font-weight: bold; color: #303133; word-break: break-all; }
+.task-file { font-weight: bold; color: #1f2937; word-break: break-all; }
 .task-progress { margin-top: 8px; }
-.task-phase { display: block; font-size: 12px; color: #909399; margin: 4px 0; }
-.task-time { font-size: 12px; color: #909399; }
+.task-phase { display: block; font-size: 12px; color: #6b7280; margin: 4px 0; }
+.task-time { font-size: 12px; color: #6b7280; }
 .task-result { margin-top: 10px; }
 .result-stats { display: flex; gap: 16px; margin-bottom: 12px; }
 .result-item { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; background: rgba(0, 0, 0, 0.02); border-radius: 4px; }
-.result-item .label { font-size: 12px; color: #909399; }
-.result-item .value { font-size: 20px; font-weight: bold; color: #303133; }
+.result-item .label { font-size: 12px; color: #6b7280; }
+.result-item .value { font-size: 20px; font-weight: bold; color: #1f2937; }
 .task-error { margin-top: 10px; }
 </style>

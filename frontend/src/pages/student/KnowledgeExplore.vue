@@ -1,5 +1,5 @@
 <template>
-  <div class="kg-page">
+  <BorderGlow class="kg-page" background-color="transparent">
     <!-- 图谱选择器 - 在黑色大框上方 -->
     <div class="kg-header">
       <el-select
@@ -131,7 +131,7 @@
         </div>
       </template>
     </div>
-  </div>
+  </BorderGlow>
 </template>
 
 <script setup lang="ts">
@@ -144,6 +144,7 @@ import KnowledgeGraph from '@/components/KnowledgeGraph.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
 import StarBorder from '@/components/StarBorder.vue'
+import BorderGlow from '@/components/BorderGlow.vue'
 
 const route = useRoute()
 const $router = useRouter()
@@ -242,17 +243,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+:deep(.el-empty__description p) { color: #6b7280; }
+:deep(.el-result__title p) { color: #1f2937; }
+:deep(.el-result__subtitle p) { color: #6b7280; }
+:deep(.el-select__wrapper) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; }
+:deep(.el-input__inner) { color: #1f2937; }
 .kg-page {
-  display: flex;
-  flex-direction: column;
   height: calc(100vh - 32px);
-  gap: 12px;
+  margin: 16px;
 }
 .kg-header {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 4px;
+  margin-bottom: 12px;
 }
 .graph-status-tag {
   color: #f56c6c;
@@ -266,8 +271,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  background: rgba(15, 15, 15, 0.4);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(10px);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -280,7 +285,7 @@ onMounted(async () => {
   padding: 48px;
 }
 .state-text {
-  color: #94A3B8;
+  color: #4b5563;
   margin-top: 16px;
   font-size: 14px;
 }
@@ -289,19 +294,19 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding: 12px 20px;
-  background: rgba(26, 26, 46, 0.4);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(42, 42, 62, 0.5);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 .kg-stats {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #94A3B8;
+  color: #4b5563;
   font-variant-numeric: tabular-nums;
 }
-.stat-divider { width: 1px; height: 16px; background: #333; }
+.stat-divider { width: 1px; height: 16px; background: #d1d5db; }
 .kg-search-wrapper { flex: 1; max-width: 320px; }
 .kg-controls { display: flex; align-items: center; gap: 12px; }
 .kg-legend {
@@ -309,9 +314,9 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px 20px;
-  background: rgba(26, 26, 46, 0.4);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(42, 42, 62, 0.5);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 .legend-item {
   display: flex;
@@ -321,10 +326,10 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
-  color: #94A3B8;
+  color: #4b5563;
   transition: all 0.2s;
 }
-.legend-item:hover { background: rgba(255,255,255,0.05); }
+.legend-item:hover { background: rgba(0,0,0,0.05); }
 .legend-item.inactive { opacity: 0.4; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 .kg-chart-wrapper {

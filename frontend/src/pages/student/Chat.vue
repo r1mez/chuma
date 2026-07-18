@@ -51,7 +51,7 @@ const messagesRef = ref<HTMLElement>()
 const navItems = [
   { label: '快速回答', value: 'quick' },
   { label: '深度思考', value: 'deep' },
-  { label: '🤖 智能管家', value: 'agent' },
+  { label: '智能管家', value: 'agent' },
   { label: '规划模式 (开发中)', value: 'plan', disabled: true }
 ]
 
@@ -79,8 +79,6 @@ watch(
 
 <style scoped>
 .chat-page {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   background: transparent;
 }
@@ -92,7 +90,7 @@ watch(
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(10px);
-  color: #303133;
+  color: #1f2937;
 }
 .chat-header h3 {
   margin: 0;
@@ -109,7 +107,7 @@ watch(
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 300px;
 }
 .empty-state {
   display: flex;
@@ -117,14 +115,15 @@ watch(
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #909399;
+  color: #6b7280;
 }
 .empty-state p {
   margin: 8px 0 0;
   font-size: 14px;
+  color: #4b5563;
 }
 .hint {
   font-size: 12px !important;
-  color: #c0c4cc;
+  color: #9ca3af;
 }
 </style>

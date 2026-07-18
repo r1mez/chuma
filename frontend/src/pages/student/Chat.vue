@@ -7,6 +7,12 @@
         <GooeyNav 
           :items="navItems"
           v-model="chatMode"
+          :particle-count="15"
+          :particle-distances="[90, 10]"
+          :particle-r="100"
+          :animation-time="600"
+          :time-variance="300"
+          :colors="[1, 2, 3, 1, 2, 3, 1, 4]"
         />
         <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
           <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
@@ -79,6 +85,10 @@ watch(
 
 <style scoped>
 .chat-page {
+  --color-1: #ff6b6b;
+  --color-2: #4ecdc4;
+  --color-3: #45b7d1;
+  --color-4: #f9ca24;
   height: 100%;
   background: transparent;
 }
@@ -107,7 +117,7 @@ watch(
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 300px;
+  padding: 280px;
 }
 .empty-state {
   display: flex;

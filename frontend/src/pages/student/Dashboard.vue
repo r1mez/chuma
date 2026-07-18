@@ -11,7 +11,7 @@ import BorderGlow from '@/components/BorderGlow.vue'
 <style scoped>
 .dashboard-page {
   color: #eceef0;
-  min-height: calc(100vh - 40px);
+  min-height: calc(100vh - 170px);
   margin: 20px;
 }
 .content {

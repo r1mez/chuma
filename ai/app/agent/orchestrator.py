@@ -9,7 +9,7 @@ from app.engines.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-AGENT_SYSTEM_PROMPT = """你是础码（ChuMa），一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。
+AGENT_SYSTEM_PROMPT = """你是智教慧学，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。
 
 你可以调用工具来获取信息。使用工具前先思考是否真的需要——对于已知的基础概念，直接回答即可。如果用户的问题涉及特定知识点、需要查资料或核实信息，主动调用工具。
 

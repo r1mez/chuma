@@ -1,15 +1,16 @@
 """Agent 模块数据结构"""
-from dataclasses import dataclass, field
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class AgentChatRequest:
+
+class AgentChatRequest(BaseModel):
     """Agent 对话请求"""
-    user_id: int
+    user_id: int = 1  # TODO 暂时默认 1，登录实现后改为必填
     message: str
-    history: list[dict] = field(default_factory=list)
+    history: list[dict] = Field(default_factory=list)
 
 
 @dataclass

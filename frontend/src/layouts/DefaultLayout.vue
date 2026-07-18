@@ -1,6 +1,6 @@
 <template>
   <el-container class="student-layout">
-    <FloatingLines class="layout-background" />
+    <FloatingLines class="layout-background" mixBlendMode="normal" />
     <el-aside width="200px" class="student-aside">
       <el-menu router class="student-menu">
         <el-menu-item index="/student/dashboard">学习仪表盘</el-menu-item>
@@ -9,8 +9,8 @@
         <el-menu-item index="/student/wrong-book">错题本</el-menu-item>
         <el-menu-item index="/student/chat">AI 助教</el-menu-item>
         <el-menu-item index="/student/plan">学习计划</el-menu-item>
-        <el-menu-item index="/student/ocr">📄 文档解析</el-menu-item>
-        <el-menu-item index="/student/kg-pipeline">🧠 图谱构建</el-menu-item>
+        <el-menu-item index="/student/ocr">文档解析</el-menu-item>
+        <el-menu-item index="/student/kg-pipeline">图谱构建</el-menu-item>
       </el-menu>
     </el-aside>
     <el-main class="student-main">
@@ -32,7 +32,13 @@ import FloatingLines from '@/components/FloatingLines.vue'
   width: 100vw;
   height: 100vh;
   z-index: 0;
-  pointer-events: auto; /* Hyperspeed 包含交互动画（点击加速等），需要开启鼠标事件 */
+  pointer-events: auto;
+}
+
+.layout-background :deep(.floating-lines-container) {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .student-layout {

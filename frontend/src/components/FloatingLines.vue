@@ -65,7 +65,14 @@ mat2 rotate(float r) {
 }
 
 vec3 background_color(vec2 uv) {
-  return vec3(1.0, 1.0, 1.0); // 纯白背景
+  vec3 col = vec3(0.0);
+
+  float y = sin(uv.x - 0.2) * 0.3 - 0.1;
+  float m = uv.y - y;
+
+  col += mix(BLUE, BLACK, smoothstep(0.0, 1.0, abs(m)));
+  col += mix(PINK, BLACK, smoothstep(0.0, 1.0, abs(m - 0.8)));
+  return col * 0.5;
 }
 
 vec3 getLineColor(float t, vec3 baseColor) {
@@ -234,7 +241,7 @@ const props = withDefaults(defineProps<FloatingLinesProps>(), {
   mouseDamping: 0.05,
   parallax: true,
   parallaxStrength: 0.2,
-  mixBlendMode: 'normal'
+  mixBlendMode: 'screen'
 });
 
 function hexToVec3(hex: string): Vector3 {
@@ -426,8 +433,8 @@ const setup = () => {
   };
 
   if (props.interactive) {
-    renderer.domElement.addEventListener('pointermove', handlePointerMove);
-    renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerleave', handlePointerLeave);
   }
 
   let raf = 0;
@@ -459,8 +466,8 @@ const setup = () => {
     }
 
     if (props.interactive) {
-      renderer.domElement.removeEventListener('pointermove', handlePointerMove);
-      renderer.domElement.removeEventListener('pointerleave', handlePointerLeave);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerleave', handlePointerLeave);
     }
 
     geometry.dispose();
@@ -510,8 +517,11 @@ watch(
 <template>
   <div
     ref="containerRef"
-    class="relative w-full h-full overflow-hidden floating-lines-container"
+    class="floating-lines-container"
     :style="{
+      width: '100%',
+      height: '100%',
+      overflow: 'hidden',
       mixBlendMode: mixBlendMode
     }"
   />

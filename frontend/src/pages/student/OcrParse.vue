@@ -66,15 +66,17 @@
 
     <!-- 提交按钮 -->
     <div class="submit-area">
-      <el-button
-        type="primary"
-        size="large"
-        :loading="isSubmitting"
-        :disabled="fileList.length === 0"
-        @click="handleSubmit"
-      >
-        开始解析
-      </el-button>
+      <StarBorder as="div" color="#409eff" speed="3s">
+        <el-button
+          type="primary"
+          size="large"
+          :loading="isSubmitting"
+          :disabled="fileList.length === 0"
+          @click="handleSubmit"
+        >
+          开始解析
+        </el-button>
+      </StarBorder>
     </div>
 
     <!-- 任务列表 -->
@@ -129,21 +131,25 @@
               :closable="false"
               show-icon
             />
-            <el-button size="small" @click="handleRetry(task)">
-              重新上传
-            </el-button>
-          </div>
+              <StarBorder as="div" color="#909399" speed="4s">
+                <el-button size="small" @click="handleRetry(task)">
+                  重新上传
+                </el-button>
+              </StarBorder>
+            </div>
 
-          <!-- 移除按钮 -->
-          <el-button
-            type="danger"
-            size="small"
-            text
-            @click="removeTask(task.taskId)"
-          >
-            移除
-          </el-button>
-        </div>
+            <!-- 移除按钮 -->
+            <StarBorder as="div" color="#f56c6c" speed="5s">
+              <el-button
+                type="danger"
+                size="small"
+                text
+                @click="removeTask(task.taskId)"
+              >
+                移除
+              </el-button>
+            </StarBorder>
+          </div>
       </div>
     </el-card>
   </div>
@@ -156,6 +162,7 @@ import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useOcr, type OcrTask } from '@/composables/useOcr'
 import type { OcrParams } from '@/api/ocr'
+import StarBorder from '@/components/StarBorder.vue'
 
 const { tasks, isSubmitting, submitTask, removeTask } = useOcr()
 

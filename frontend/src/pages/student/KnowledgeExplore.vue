@@ -20,16 +20,18 @@
           <span v-else-if="g.status === 'pending'" class="graph-status-tag pending">构建中</span>
         </el-option>
       </el-select>
-      <el-button
-        v-if="selectedGraphId"
-        type="danger"
-        plain
-        size="small"
-        :icon="Delete"
-        @click="handleDelete"
-      >
-        删除
-      </el-button>
+      <StarBorder as="div" color="#f56c6c" speed="3s">
+        <el-button
+          v-if="selectedGraphId"
+          type="danger"
+          plain
+          size="small"
+          :icon="Delete"
+          @click="handleDelete"
+        >
+          删除
+        </el-button>
+      </StarBorder>
     </div>
 
     <!-- 图谱主体 -->
@@ -48,7 +50,9 @@
           :sub-title="store.error.message"
         >
           <template #extra>
-            <el-button type="primary" @click="store.loadGraphData(store.currentGraphName || undefined)">重试</el-button>
+            <StarBorder as="div" color="#409eff" speed="4s">
+              <el-button type="primary" @click="store.loadGraphData(store.currentGraphName || undefined)">重试</el-button>
+            </StarBorder>
           </template>
         </el-result>
       </div>
@@ -59,9 +63,11 @@
           <template #image>
             <div class="empty-graph-icon">🔍</div>
           </template>
-          <el-button type="primary" @click="$router.push('/student/kg-pipeline')">
-            上传文档构建知识图谱
-          </el-button>
+          <StarBorder as="div" color="#409eff" speed="5s">
+            <el-button type="primary" @click="$router.push('/student/kg-pipeline')">
+              上传文档构建知识图谱
+            </el-button>
+          </StarBorder>
         </el-empty>
       </div>
 
@@ -137,6 +143,7 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 import KnowledgeGraph from '@/components/KnowledgeGraph.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
+import StarBorder from '@/components/StarBorder.vue'
 
 const route = useRoute()
 const $router = useRouter()

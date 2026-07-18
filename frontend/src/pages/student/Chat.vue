@@ -4,26 +4,15 @@
     <div class="chat-header">
       <h3>AI 助教</h3>
       <div class="header-actions">
-        <el-tag
-          :type="chatMode === 'quick' ? 'success' : 'info'"
-          effect="plain"
-          style="cursor: pointer"
-          @click="chatMode = 'quick'"
-        >
-          快速回答
-        </el-tag>
-        <el-tag
-          :type="chatMode === 'deep' ? 'success' : 'info'"
-          effect="plain"
-          style="cursor: pointer"
-          @click="chatMode = 'deep'"
-        >
-          深度思考
-        </el-tag>
-        <el-tag type="info" effect="plain" disabled>规划模式（开发中）</el-tag>
-        <el-button text @click="clearMessages" :disabled="messages.length === 0">
-          清空对话
-        </el-button>
+        <GooeyNav 
+          :items="navItems"
+          v-model="chatMode"
+        />
+        <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
+          <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
+            清空对话
+          </el-button>
+        </StarBorder>
       </div>
     </div>
 
@@ -53,9 +42,17 @@ import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import GooeyNav from '@/components/GooeyNav.vue'
+import StarBorder from '@/components/StarBorder.vue'
 
 const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
 const messagesRef = ref<HTMLElement>()
+
+const navItems = [
+  { label: '快速回答', value: 'quick' },
+  { label: '深度思考', value: 'deep' },
+  { label: '规划模式 (开发中)', value: 'plan', disabled: true }
+]
 
 // 自动滚动到底部
 watch(
@@ -100,8 +97,11 @@ watch(
 }
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   align-items: center;
+}
+.clear-btn {
+  margin-left: 8px;
 }
 .chat-messages {
   flex: 1;

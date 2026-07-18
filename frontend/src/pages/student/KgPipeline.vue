@@ -26,9 +26,11 @@
     </el-card>
 
     <div class="submit-area">
-      <el-button type="primary" size="large" :loading="isSubmitting" :disabled="fileList.length === 0" @click="handleSubmit">
-        开始构建知识图谱
-      </el-button>
+      <StarBorder as="div" color="#409eff" speed="3s">
+        <el-button type="primary" size="large" :loading="isSubmitting" :disabled="fileList.length === 0" @click="handleSubmit">
+          开始构建知识图谱
+        </el-button>
+      </StarBorder>
     </div>
 
     <el-card v-if="tasks.length > 0" class="tasks-card">
@@ -52,14 +54,18 @@
               <div class="result-item"><span class="label">边</span><span class="value">{{ task.edges ?? '-' }}</span></div>
               <div class="result-item"><span class="label">切片</span><span class="value">{{ task.chunks ?? '-' }}</span></div>
             </div>
-            <el-button type="success" @click="goToGraph">查看知识图谱</el-button>
+            <StarBorder as="div" color="#67c23a" speed="4s">
+              <el-button type="success" @click="goToGraph">查看知识图谱</el-button>
+            </StarBorder>
           </div>
 
           <div v-else-if="task.status === 'failed'" class="task-error">
             <el-alert :title="task.error || '构建失败'" type="error" :closable="false" show-icon />
           </div>
 
-          <el-button type="danger" size="small" text @click="removeTask(task.taskId)">移除</el-button>
+          <StarBorder as="div" color="#f56c6c" speed="5s">
+            <el-button type="danger" size="small" text @click="removeTask(task.taskId)">移除</el-button>
+          </StarBorder>
         </div>
       </div>
     </el-card>
@@ -73,6 +79,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useKgPipeline, type KgTask } from '@/composables/useKgPipeline'
+import StarBorder from '@/components/StarBorder.vue'
 
 const router = useRouter()
 const { tasks, isSubmitting, submitTask, removeTask } = useKgPipeline()

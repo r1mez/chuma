@@ -266,7 +266,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  background: #0F0F0F;
+  background: rgba(15, 15, 15, 0.4);
+  backdrop-filter: blur(8px);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -288,8 +289,9 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding: 12px 20px;
-  background: #1a1a2e;
-  border-bottom: 1px solid #2a2a3e;
+  background: rgba(26, 26, 46, 0.4);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(42, 42, 62, 0.5);
 }
 .kg-stats {
   display: flex;
@@ -307,8 +309,9 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px 20px;
-  background: #1a1a2e;
-  border-bottom: 1px solid #2a2a3e;
+  background: rgba(26, 26, 46, 0.4);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(42, 42, 62, 0.5);
 }
 .legend-item {
   display: flex;

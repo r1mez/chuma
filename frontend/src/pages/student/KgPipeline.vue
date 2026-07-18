@@ -169,7 +169,7 @@ function elapsed(task: KgTask): string {
 .task-time { font-size: 12px; color: #909399; }
 .task-result { margin-top: 10px; }
 .result-stats { display: flex; gap: 16px; margin-bottom: 12px; }
-.result-item { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; background: #f5f7fa; border-radius: 4px; }
+.result-item { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; background: rgba(0, 0, 0, 0.02); border-radius: 4px; }
 .result-item .label { font-size: 12px; color: #909399; }
 .result-item .value { font-size: 20px; font-weight: bold; color: #303133; }
 .task-error { margin-top: 10px; }

@@ -81,15 +81,17 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #fafafa;
+  background: transparent;
 }
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  border-bottom: 1px solid #e4e7ed;
-  background: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  color: #303133;
 }
 .chat-header h3 {
   margin: 0;

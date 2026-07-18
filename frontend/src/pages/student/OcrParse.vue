@@ -388,7 +388,7 @@ function getProcessingTime(task: OcrTask): string {
   flex-direction: column;
   align-items: center;
   padding: 8px;
-  background: #f5f7fa;
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 4px;
 }
 

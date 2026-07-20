@@ -59,20 +59,14 @@ uniform int lineGradientCount;
 const vec3 BLACK = vec3(0.0);
 const vec3 PINK  = vec3(233.0, 71.0, 245.0) / 255.0;
 const vec3 BLUE  = vec3(47.0,  75.0, 162.0) / 255.0;
+const vec3 BG_COLOR = vec3(191.0, 197.0, 187.0) / 255.0; // #bfc5bb
 
 mat2 rotate(float r) {
   return mat2(cos(r), sin(r), -sin(r), cos(r));
 }
 
 vec3 background_color(vec2 uv) {
-  vec3 col = vec3(0.0);
-
-  float y = sin(uv.x - 0.2) * 0.3 - 0.1;
-  float m = uv.y - y;
-
-  col += mix(BLUE, BLACK, smoothstep(0.0, 1.0, abs(m)));
-  col += mix(PINK, BLACK, smoothstep(0.0, 1.0, abs(m - 0.8)));
-  return col * 0.5;
+  return BG_COLOR;
 }
 
 vec3 getLineColor(float t, vec3 baseColor) {
@@ -97,7 +91,7 @@ vec3 getLineColor(float t, vec3 baseColor) {
     gradientColor = mix(c1, c2, f);
   }
 
-  return gradientColor * 0.5;
+  return gradientColor * 0.15; // 降低基础线条颜色的亮度 (原本是 0.5)
 }
 
 float wave(vec2 uv, float offset, vec2 screenUv, vec2 mouseUv, bool shouldBend) {
@@ -116,7 +110,8 @@ float wave(vec2 uv, float offset, vec2 screenUv, vec2 mouseUv, bool shouldBend) 
   }
 
   float m = uv.y - y;
-  return 0.0175 / max(abs(m) + 0.01, 1e-3) + 0.01;
+  // 大幅降低线条发光强度，原本是 0.0175，现在改为 0.005
+  return 0.005 / max(abs(m) + 0.01, 1e-3) + 0.005;
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -127,9 +122,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     baseUv += parallaxOffset;
   }
 
-  vec3 col = vec3(0.0);
+  vec3 col = BG_COLOR;
 
-  vec3 b = lineGradientCount > 0 ? vec3(0.0) : background_color(baseUv);
+  vec3 b = lineGradientCount > 0 ? vec3(0.0) : vec3(1.0);
 
   vec2 mouseUv = vec2(0.0);
   if (interactive) {
@@ -241,7 +236,7 @@ const props = withDefaults(defineProps<FloatingLinesProps>(), {
   mouseDamping: 0.05,
   parallax: true,
   parallaxStrength: 0.2,
-  mixBlendMode: 'screen'
+  mixBlendMode: 'normal'
 });
 
 function hexToVec3(hex: string): Vector3 {

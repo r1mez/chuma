@@ -243,13 +243,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-:deep(.el-empty__description p) { color: #6b7280; }
+:deep(.el-empty__description p) { color: #080808; }
 :deep(.el-result__title p) { color: #1f2937; }
 :deep(.el-result__subtitle p) { color: #6b7280; }
 :deep(.el-select__wrapper) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; }
 :deep(.el-input__inner) { color: #1f2937; }
 .kg-page {
-  height: calc(100vh - 32px);
+  height: calc(100vh - 170px);
   margin: 16px;
 }
 .kg-header {

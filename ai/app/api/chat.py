@@ -21,10 +21,11 @@ async def rag_query():
 @router.post("/query/stream")
 async def quick_chat_stream(req: QuickChatRequest):
     """快速回答 — 流式输出（纯 LLM，不走 RAG）"""
-    llm = LLMClient(default_profile=quick_profile())
+    # llm = LLMClient(default_profile=quick_profile())
+    llm = LLMClient(default_profile=deepseek_profile())
 
     messages = [
-        {"role": "system", "content": "你是础码，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。请用简洁准确的中文回答用户的问题。"},
+        {"role": "system", "content": "你是智教慧学，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。请用简洁准确的中文回答用户的问题。"},
         *req.history,
         {"role": "user", "content": req.message},
     ]
@@ -47,7 +48,7 @@ async def deep_chat_stream(req: DeepChatRequest):
     llm = LLMClient(default_profile=deepseek_profile())
 
     messages = [
-        {"role": "system", "content": "你是础码，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。请用深入、详细、结构化的中文回答用户的问题，必要时可以分点说明。"},
+        {"role": "system", "content": "你是智教慧学，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。请用深入、详细、结构化的中文回答用户的问题，必要时可以分点说明。"},
         *req.history,
         {"role": "user", "content": req.question},
     ]

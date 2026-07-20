@@ -1,4 +1,4 @@
-"""础码 (ChuMa) — FastAPI 后端应用入口"""
+"""智教慧学 — FastAPI 后端应用入口"""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

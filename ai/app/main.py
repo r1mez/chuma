@@ -26,12 +26,11 @@ async def lifespan(app: FastAPI):
 
     worker_task = asyncio.create_task(start_worker())
 
-    # Connect MCP client (gracefully skip if not configured)
-    await mcp_client.connect(settings.MCP_SEARCH_URL, settings.MCP_SEARCH_TOKEN)
+    # 初始化 MCP 客户端连接（Search + Database）
+    # 由于我们在 mcp_client.py 中重写了 __aenter__，它会自动连接配置的所有 Server
+    async with mcp_client:
+        yield
 
-    yield
-
-    await mcp_client.close()
     worker_task.cancel()
     try:
         await worker_task

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 项目根目录（本文件位于 backend/app/core/，向上三级到根目录）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:80"]
 
-    class Config:
-        env_file = PROJECT_ROOT / ".env"
-        extra = "ignore"
-
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_ROOT / ".env"),
+        extra="ignore"
+    )
 
 settings = Settings()

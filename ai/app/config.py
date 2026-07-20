@@ -5,7 +5,7 @@
 """
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 项目根目录（本文件位于 ai/app/，向上两级到根目录）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -68,10 +68,12 @@ class Settings(BaseSettings):
     MCP_SEARCH_TOKEN: str = ""
     MCP_PROXY: str = ""
 
-    class Config:
-        # .env 在项目根目录（chuma/.env），而非 ai/ 目录
-        env_file = PROJECT_ROOT.parent / ".env"
-        extra = "ignore"
+    # MCP 数据库服务 (FastMCP SSE)
+    MCP_DB_URL: str = "http://localhost:8005/sse"
 
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_ROOT / ".env"),
+        extra="ignore"
+    )
 
 settings = Settings()

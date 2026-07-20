@@ -23,15 +23,15 @@ async def submit_answer():
     pass
 
 
-@router.get("/wrong-book")
-async def get_wrong_book():
-    """获取错题本（含归因分析：概念/方法/计算错误）"""
+@router.get("/exercise-records")
+async def get_exercise_records():
+    """获取做题记录（含做题归因分析：概念/方法/计算情况）"""
     pass
 
 
-@router.get("/wrong-book/analytics")
-async def get_wrong_book_analytics():
-    """获取错题分析报告（薄弱知识点统计）"""
+@router.get("/exercise-records/analytics")
+async def get_exercise_records_analytics():
+    """获取做题记录分析报告（知识点掌握度统计）"""
     pass
 
 

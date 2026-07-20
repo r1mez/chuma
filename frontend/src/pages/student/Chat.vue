@@ -4,16 +4,18 @@
     <div class="chat-header">
       <h3>AI 助教</h3>
       <div class="header-actions">
-        <GooeyNav 
-          :items="navItems"
-          v-model="chatMode"
-          :particle-count="15"
-          :particle-distances="[90, 10]"
-          :particle-r="100"
-          :animation-time="600"
-          :time-variance="300"
-          :colors="[1, 2, 3, 1, 2, 3, 1, 4]"
-        />
+        <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
+          <GooeyNav 
+            :items="navItems"
+            v-model="chatMode"
+            :particle-count="15"
+            :particle-distances="[90, 10]"
+            :particle-r="100"
+            :animation-time="600"
+            :time-variance="300"
+            :colors="[1, 2, 3, 1, 2, 3, 1, 4]"
+          />
+        </StarBorder>
         <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
           <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
             清空对话
@@ -90,6 +92,8 @@ watch(
   --color-3: #45b7d1;
   --color-4: #f9ca24;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   background: transparent;
 }
 .chat-header {
@@ -112,13 +116,44 @@ watch(
   align-items: center;
 }
 .clear-btn {
-  margin-left: 8px;
+  margin-left: 0;
+  padding: 8px 16px;
+}
+.nav-wrapper :deep(.inner-content) {
+  background: #e5e8e4;
+  border-radius: 9999px; /* 让边框适配胶囊形状 */
+}
+.nav-wrapper {
+  border-radius: 9999px; /* 外层也改为胶囊状 */
+}
+.clear-btn-wrapper :deep(.inner-content) {
+  background: #e5e8e4;
 }
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 280px;
+  padding: 20px;
 }
+
+/* 自定义滚动条样式 */
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;

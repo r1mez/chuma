@@ -164,7 +164,7 @@ function toolLabel(tool: string): string {
 }
 .chat-message.user .avatar {
   background: #409eff;
-  color: white;
+  color: #000;
 }
 .chat-message.assistant .avatar {
   background: #e4e7ed;
@@ -180,7 +180,7 @@ function toolLabel(tool: string): string {
 }
 .chat-message.user .bubble {
   background: #409eff;
-  color: white;
+  color: #000;
   border-top-right-radius: 4px;
 }
 .chat-message.assistant .bubble {
@@ -357,7 +357,7 @@ function toolLabel(tool: string): string {
 .tool-calls {
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: #f0f9eb;
+  background: #d7dfd3;
   border-radius: 8px;
   border: 1px solid #e1f3d8;
 }

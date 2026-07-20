@@ -119,15 +119,15 @@ watch(input, () => {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background-color: #2d2d2d;
+  background-color: #ffffff;
   padding: 10px 15px;
   border-radius: 10px;
-  border: 1px solid rgb(63, 63, 63);
+  border: 1px solid #ccc;
   box-sizing: border-box;
 }
 
 .messageBox:focus-within {
-  border: 1px solid rgb(110, 110, 110);
+  border: 1px solid #999;
 }
 
 .fileUploadWrapper {
@@ -166,12 +166,12 @@ watch(input, () => {
 }
 
 .fileUploadWrapper label:hover svg path {
-  stroke: #fff;
+  stroke: #000;
 }
 
 .fileUploadWrapper label:hover svg circle {
-  stroke: #fff;
-  fill: #3c3c3c;
+  stroke: #000;
+  fill: #e0e0e0;
 }
 
 .fileUploadWrapper label:hover .tooltip {
@@ -184,14 +184,14 @@ watch(input, () => {
   top: -40px;
   display: none;
   opacity: 0;
-  color: white;
+  color: #000;
   font-size: 10px;
   text-wrap: nowrap;
-  background-color: #000;
+  background-color: #fff;
   padding: 6px 10px;
-  border: 1px solid #3c3c3c;
+  border: 1px solid #ccc;
   border-radius: 5px;
-  box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.596);
+  box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1);
   transition: all 0.3s;
   z-index: 10;
 }
@@ -204,7 +204,7 @@ watch(input, () => {
   outline: none;
   border: none;
   padding: 2px 10px;
-  color: white;
+  color: #000;
   resize: none;
   line-height: 20px;
   font-size: 14px;
@@ -216,14 +216,14 @@ watch(input, () => {
   width: 4px;
 }
 #messageInput::-webkit-scrollbar-thumb {
-  background: #6c6c6c;
+  background: #ccc;
   border-radius: 2px;
 }
 
 #messageInput:focus ~ #sendButton svg path,
 #messageInput:valid ~ #sendButton svg path {
-  fill: #3c3c3c;
-  stroke: white;
+  fill: #e0e0e0;
+  stroke: #000;
 }
 
 #sendButton {
@@ -249,8 +249,8 @@ watch(input, () => {
 }
 
 #sendButton:hover svg path {
-  fill: #3c3c3c;
-  stroke: white;
+  fill: #e0e0e0;
+  stroke: #000;
 }
 
 #sendButton:disabled {

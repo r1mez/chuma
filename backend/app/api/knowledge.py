@@ -11,12 +11,11 @@ router = APIRouter()
 
 
 @router.get("/graphs", response_model=list[KgGraphResponse])
-async def list_user_graphs(current_user: dict = Depends(get_current_user_optional)):
-    """获取当前用户的所有知识图谱列表"""
-    user_id = current_user.get("id")
+async def list_graphs(current_user: dict = Depends(get_current_user_optional)):
+    """获取所有知识图谱列表"""
     kg_service = KgGraphService()
     async with async_session() as db:
-        graphs = await kg_service.list_user_graphs(user_id, db)
+        graphs = await kg_service.list_graphs(db)
     return graphs
 
 
@@ -29,14 +28,13 @@ async def delete_graph(
     import logging
 
     logger = logging.getLogger(__name__)
-    user_id = current_user.get("id")
     kg_service = KgGraphService()
 
-    # Step 1: Verify ownership and get graph_name (without deleting yet)
+    # Step 1: Verify graph exists and get graph_name (without deleting yet)
     async with async_session() as db:
-        kg_record = await kg_service.get_graph_by_id(user_id, graph_id, db)
+        kg_record = await kg_service.get_graph_by_id(graph_id, db)
         if kg_record is None:
-            raise HTTPException(status_code=404, detail="图谱不存在或无权限")
+            raise HTTPException(status_code=404, detail="图谱不存在")
         graph_name = kg_record.graph_name
 
     # Step 2: Call AI engine to clear AGE graph (before deleting DB record)
@@ -55,7 +53,7 @@ async def delete_graph(
 
     # Step 3: Delete PostgreSQL record and local file
     async with async_session() as db:
-        await kg_service.delete_graph(user_id, graph_id, db)
+        await kg_service.delete_graph(graph_id, db)
 
     return {"status": "ok", "graph_id": graph_id}
 

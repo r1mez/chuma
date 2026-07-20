@@ -75,12 +75,10 @@ async def start_kg_build(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    user_id = current_user.get("id")
     # 创建图谱元数据记录
     kg_service = KgGraphService()
     async with async_session() as db:
         kg_record = await kg_service.create_graph(
-            user_id=user_id,
             original_filename=file.filename or "upload",
             file_path=file_path,
             db=db,

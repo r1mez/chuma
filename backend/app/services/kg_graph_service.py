@@ -37,7 +37,6 @@ class KgGraphService:
 
     async def create_graph(
         self,
-        user_id: int,
         original_filename: str,
         file_path: str,
         db: AsyncSession,
@@ -45,7 +44,6 @@ class KgGraphService:
         """创建图谱元数据记录"""
         graph_name = self._generate_graph_name(original_filename)
         kg_graph = KgGraph(
-            user_id=user_id,
             original_filename=original_filename,
             file_path=file_path,
             graph_name=graph_name,
@@ -56,15 +54,13 @@ class KgGraphService:
         await db.refresh(kg_graph)
         return KgGraphResponse.model_validate(kg_graph)
 
-    async def list_user_graphs(
+    async def list_graphs(
         self,
-        user_id: int,
         db: AsyncSession,
     ) -> list[KgGraphResponse]:
-        """查询用户的图谱列表，按创建时间降序"""
+        """查询所有图谱列表，按创建时间降序"""
         result = await db.execute(
             select(KgGraph)
-            .where(KgGraph.user_id == user_id)
             .order_by(KgGraph.created_at.desc())
         )
         graphs = result.scalars().all()
@@ -72,16 +68,12 @@ class KgGraphService:
 
     async def get_graph_by_id(
         self,
-        user_id: int,
         graph_id: int,
         db: AsyncSession,
     ) -> Optional[KgGraph]:
-        """按 ID 查询图谱（校验用户权限）"""
+        """按 ID 查询图谱"""
         result = await db.execute(
-            select(KgGraph).where(
-                KgGraph.id == graph_id,
-                KgGraph.user_id == user_id,
-            )
+            select(KgGraph).where(KgGraph.id == graph_id)
         )
         return result.scalar_one_or_none()
 
@@ -108,17 +100,16 @@ class KgGraphService:
 
     async def delete_graph(
         self,
-        user_id: int,
         graph_id: int,
         db: AsyncSession,
     ) -> Optional[str]:
         """删除图谱元数据记录，返回 graph_name（用于通知 AI 引擎清图）"""
-        kg_graph = await self.get_graph_by_id(user_id, graph_id, db)
+        kg_graph = await self.get_graph_by_id(graph_id, db)
         if kg_graph is None:
             return None
         graph_name = kg_graph.graph_name
         file_path = kg_graph.file_path
-        await db.execute(delete(KgGraph).where(KgGraph.id == graph_id, KgGraph.user_id == user_id))
+        await db.execute(delete(KgGraph).where(KgGraph.id == graph_id))
         await db.commit()
         # 清理本地文件
         if file_path and os.path.exists(file_path):

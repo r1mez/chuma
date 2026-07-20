@@ -4,33 +4,15 @@
     <div class="chat-header">
       <h3>AI 助教</h3>
       <div class="header-actions">
-        <el-tag
-          :type="chatMode === 'quick' ? 'success' : 'info'"
-          effect="plain"
-          style="cursor: pointer"
-          @click="chatMode = 'quick'"
-        >
-          快速回答
-        </el-tag>
-        <el-tag
-          :type="chatMode === 'deep' ? 'success' : 'info'"
-          effect="plain"
-          style="cursor: pointer"
-          @click="chatMode = 'deep'"
-        >
-          深度思考
-        </el-tag>
-        <el-tag
-          :type="chatMode === 'agent' ? 'success' : 'info'"
-          effect="plain"
-          style="cursor: pointer"
-          @click="chatMode = 'agent'"
-        >
-          🤖 智能管家
-        </el-tag>
-        <el-button text @click="clearMessages" :disabled="messages.length === 0">
-          清空对话
-        </el-button>
+        <GooeyNav 
+          :items="navItems"
+          v-model="chatMode"
+        />
+        <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
+          <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
+            清空对话
+          </el-button>
+        </StarBorder>
       </div>
     </div>
 
@@ -60,9 +42,18 @@ import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import GooeyNav from '@/components/GooeyNav.vue'
+import StarBorder from '@/components/StarBorder.vue'
 
 const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
 const messagesRef = ref<HTMLElement>()
+
+const navItems = [
+  { label: '快速回答', value: 'quick' },
+  { label: '深度思考', value: 'deep' },
+  { label: '智能管家', value: 'agent' },
+  { label: '规划模式 (开发中)', value: 'plan', disabled: true }
+]
 
 // 自动滚动到底部
 watch(
@@ -88,18 +79,18 @@ watch(
 
 <style scoped>
 .chat-page {
-  display: flex;
-  flex-direction: column;
   height: 100%;
-  background: #fafafa;
+  background: transparent;
 }
 .chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  border-bottom: 1px solid #e4e7ed;
-  background: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  color: #1f2937;
 }
 .chat-header h3 {
   margin: 0;
@@ -107,13 +98,16 @@ watch(
 }
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 16px;
   align-items: center;
+}
+.clear-btn {
+  margin-left: 8px;
 }
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 300px;
 }
 .empty-state {
   display: flex;
@@ -121,14 +115,15 @@ watch(
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #909399;
+  color: #6b7280;
 }
 .empty-state p {
   margin: 8px 0 0;
   font-size: 14px;
+  color: #4b5563;
 }
 .hint {
   font-size: 12px !important;
-  color: #c0c4cc;
+  color: #9ca3af;
 }
 </style>

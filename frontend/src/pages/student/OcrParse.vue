@@ -1,12 +1,12 @@
 <!-- frontend/src/pages/student/OcrParse.vue -->
 <template>
-  <div class="ocr-page">
-    <h1 class="page-title">📄 OCR 文档解析</h1>
+  <BorderGlow class="ocr-page" background-color="transparent">
+    <h1 class="page-title">OCR 文档解析</h1>
 
     <!-- 上传区域 -->
     <el-card class="upload-card">
       <template #header>
-        <span>🗂️ 上传文件</span>
+        <span>上传文件</span>
       </template>
 
       <el-upload
@@ -35,7 +35,7 @@
     <!-- 解析参数 -->
     <el-card class="params-card">
       <template #header>
-        <span>⚙️ 解析参数</span>
+        <span>解析参数</span>
       </template>
 
       <el-form :model="params" label-width="120px">
@@ -66,21 +66,23 @@
 
     <!-- 提交按钮 -->
     <div class="submit-area">
-      <el-button
-        type="primary"
-        size="large"
-        :loading="isSubmitting"
-        :disabled="fileList.length === 0"
-        @click="handleSubmit"
-      >
-        开始解析
-      </el-button>
+      <StarBorder as="div" color="#409eff" speed="3s">
+        <el-button
+          type="primary"
+          size="large"
+          :loading="isSubmitting"
+          :disabled="fileList.length === 0"
+          @click="handleSubmit"
+        >
+          开始解析
+        </el-button>
+      </StarBorder>
     </div>
 
     <!-- 任务列表 -->
     <el-card v-if="tasks.length > 0" class="tasks-card">
       <template #header>
-        <span>📋 任务列表</span>
+        <span>任务列表</span>
       </template>
 
       <div class="task-list">
@@ -140,24 +142,28 @@
               :closable="false"
               show-icon
             />
-            <el-button size="small" @click="handleRetry(task)">
-              重新上传
-            </el-button>
-          </div>
+              <StarBorder as="div" color="#909399" speed="4s">
+                <el-button size="small" @click="handleRetry(task)">
+                  重新上传
+                </el-button>
+              </StarBorder>
+            </div>
 
-          <!-- 移除按钮 -->
-          <el-button
-            type="danger"
-            size="small"
-            text
-            @click="removeTask(task.taskId)"
-          >
-            移除
-          </el-button>
-        </div>
+            <!-- 移除按钮 -->
+            <StarBorder as="div" color="#f56c6c" speed="5s">
+              <el-button
+                type="danger"
+                size="small"
+                text
+                @click="removeTask(task.taskId)"
+              >
+                移除
+              </el-button>
+            </StarBorder>
+          </div>
       </div>
     </el-card>
-  </div>
+  </BorderGlow>
 </template>
 
 <script setup lang="ts">
@@ -168,6 +174,8 @@ import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useOcr, type OcrTask } from '@/composables/useOcr'
 import type { OcrParams } from '@/api/ocr'
+import StarBorder from '@/components/StarBorder.vue'
+import BorderGlow from '@/components/BorderGlow.vue'
 
 const { tasks, isSubmitting, submitTask, removeTask } = useOcr()
 
@@ -299,131 +307,32 @@ function getProcessingTime(task: OcrTask): string {
 </script>
 
 <style scoped>
-.ocr-page {
-  padding: 20px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.page-title {
-  font-size: 24px;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.upload-card,
-.params-card,
-.tasks-card {
-  margin-bottom: 20px;
-}
-
-.upload-area {
-  width: 100%;
-}
-
-.upload-icon {
-  font-size: 48px;
-  color: #909399;
-  margin-bottom: 10px;
-}
-
-.upload-text {
-  color: #606266;
-}
-
-.upload-text em {
-  color: #409eff;
-  font-style: normal;
-}
-
-.upload-tip {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-}
-
-.submit-area {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.page-separator {
-  margin: 0 10px;
-  color: #909399;
-}
-
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.task-item {
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  padding: 12px;
-}
-
-.task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.task-files {
-  font-weight: bold;
-  color: #303133;
-  word-break: break-all;
-}
-
-.task-progress {
-  margin-top: 10px;
-}
-
-.task-time {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 5px;
-}
-
-.task-stats {
-  margin-top: 10px;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px;
-  background: #f5f7fa;
-  border-radius: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.stat-value {
-  font-size: 18px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.task-error {
-  margin-top: 10px;
-}
-
-.download-area {
-  margin-top: 12px;
-  text-align: center;
-}
+.ocr-page { padding: 20px; max-width: 800px; margin: 20px auto; color: #eceef0; min-height: calc(100vh - 40px); }
+.page-title { font-size: 24px; margin-bottom: 20px; text-align: center; }
+:deep(.el-card) { background: rgba(255, 255, 255, 0.4); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; backdrop-filter: blur(10px); }
+:deep(.el-card__header) { border-bottom-color: rgba(0, 0, 0, 0.05); }
+:deep(.el-form-item__label) { color: #1f2937; }
+:deep(.el-upload-dragger) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); }
+:deep(.el-upload-dragger:hover) { border-color: #409eff; }
+.upload-card, .params-card, .tasks-card { margin-bottom: 20px; }
+.upload-area { width: 100%; }
+.upload-icon { font-size: 48px; color: #9ca3af; margin-bottom: 10px; }
+.upload-text { color: #4b5563; }
+.upload-text em { color: #409eff; font-style: normal; }
+.upload-tip { font-size: 12px; color: #6b7280; margin-top: 10px; }
+.submit-area { text-align: center; margin-bottom: 20px; }
+.page-separator { margin: 0 10px; color: #9ca3af; }
+.task-list { display: flex; flex-direction: column; gap: 12px; }
+.task-item { border: 1px solid rgba(0, 0, 0, 0.05); border-radius: 4px; padding: 12px; background: rgba(255, 255, 255, 0.3); }
+.task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.task-files { font-weight: bold; color: #1f2937; word-break: break-all; }
+.task-progress { margin-top: 10px; }
+.task-time { font-size: 12px; color: #6b7280; margin-top: 5px; }
+.task-stats { margin-top: 10px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.stat-item { display: flex; flex-direction: column; align-items: center; padding: 8px; background: rgba(0, 0, 0, 0.02); border-radius: 4px; }
+.stat-label { font-size: 12px; color: #6b7280; }
+.stat-value { font-size: 18px; font-weight: bold; color: #1f2937; }
+.task-error { margin-top: 10px; }
+.download-area { margin-top: 12px; text-align: center; }
 </style>

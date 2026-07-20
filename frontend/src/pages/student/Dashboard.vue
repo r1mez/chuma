@@ -1,7 +1,20 @@
 <template>
-  <div>Dashboard</div>
+  <BorderGlow class="dashboard-page" background-color="transparent">
+    <div class="content">Dashboard</div>
+  </BorderGlow>
 </template>
 
 <script setup lang="ts">
-// Dashboard 页面
+import BorderGlow from '@/components/BorderGlow.vue'
 </script>
+
+<style scoped>
+.dashboard-page {
+  color: #eceef0;
+  min-height: calc(100vh - 40px);
+  margin: 20px;
+}
+.content {
+  padding: 20px;
+}
+</style>

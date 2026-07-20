@@ -38,7 +38,7 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/student/chat',
+      redirect: '/login',
     },
   ],
 })

@@ -5,9 +5,9 @@ httpx==0.28.*
 redis==5.2.*
 apscheduler==3.11.*
 chromadb==0.6.*
-openai==1.60.*
-torch>=2.0.*
-torch-geometric>=2.5.*
+openai>=1.70.0,<3
+torch>=2.0
+torch-geometric>=2.5
 mineru>=3.4.0
 
 # === 知识图谱构建 Pipeline ===

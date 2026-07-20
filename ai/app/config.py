@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     MCP_SEARCH_TOKEN: str = ""
     MCP_PROXY: str = ""
 
+    # MCP 数据库服务 (FastMCP SSE)
+    MCP_DB_URL: str = "http://localhost:8005/sse"
+
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),
         extra="ignore"

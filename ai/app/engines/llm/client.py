@@ -146,67 +146,78 @@ class LLMClient:
                 payload["tools"] = tools
                 payload["tool_choice"] = "auto"
 
-            async with client.stream(
-                "POST",
-                f"{p.base_url}/chat/completions",
-                headers=p.auth_headers,
-                json=payload,
-                timeout=p.timeout,
-            ) as response:
-                response.raise_for_status()
+            print(f"--- Sending LLM request to: {p.base_url}/chat/completions ---")
 
-                # Accumulate tool_calls across chunks
-                tool_call_accum: dict[int, dict] = {}
-                has_any_tool_calls = False
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{p.base_url}/chat/completions",
+                    headers=p.auth_headers,
+                    json=payload,
+                    timeout=p.timeout,
+                ) as response:
+                    response.raise_for_status()
 
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                        delta = chunk["choices"][0].get("delta", {})
+                    # Accumulate tool_calls across chunks
+                    tool_call_accum: dict[int, dict] = {}
+                    has_any_tool_calls = False
 
-                        # Handle tool_calls streaming
-                        if delta.get("tool_calls"):
-                            has_any_tool_calls = True
-                            for tc in delta["tool_calls"]:
-                                idx = tc.get("index", 0)
-                                if idx not in tool_call_accum:
-                                    tool_call_accum[idx] = {
-                                        "id": "", "name": "", "arguments": ""
-                                    }
-                                if "id" in tc and tc["id"]:
-                                    tool_call_accum[idx]["id"] = tc["id"]
-                                if tc.get("function", {}).get("name"):
-                                    tool_call_accum[idx]["name"] = tc["function"]["name"]
-                                if tc.get("function", {}).get("arguments"):
-                                    tool_call_accum[idx]["arguments"] += tc["function"]["arguments"]
-
-                        content = delta.get("content", "")
-                        reasoning = delta.get("reasoning_content", "")
-                        if content or reasoning:
-                            yield {"content": content, "reasoning": reasoning}
-                    except (json.JSONDecodeError, KeyError, IndexError):
-                        continue
-
-                # Yield accumulated tool_calls at end of stream
-                if has_any_tool_calls and tool_call_accum:
-                    parsed = []
-                    for idx in sorted(tool_call_accum.keys()):
-                        tc = tool_call_accum[idx]
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            break
                         try:
-                            parsed.append({
-                                "id": tc["id"],
-                                "name": tc["name"],
-                                "arguments": json.loads(tc["arguments"]) if tc["arguments"] else {},
-                            })
-                        except json.JSONDecodeError:
-                            parsed.append({
-                                "id": tc["id"],
-                                "name": tc["name"],
-                                "arguments": {},
-                            })
-                    yield {"tool_calls": parsed}
+                            chunk = json.loads(data)
+                            delta = chunk["choices"][0].get("delta", {})
+
+                            # Handle tool_calls streaming
+                            if delta.get("tool_calls"):
+                                has_any_tool_calls = True
+                                for tc in delta["tool_calls"]:
+                                    idx = tc.get("index", 0)
+                                    if idx not in tool_call_accum:
+                                        tool_call_accum[idx] = {
+                                            "id": "", "name": "", "arguments": ""
+                                        }
+                                    if "id" in tc and tc["id"]:
+                                        tool_call_accum[idx]["id"] = tc["id"]
+                                    if tc.get("function", {}).get("name"):
+                                        tool_call_accum[idx]["name"] = tc["function"]["name"]
+                                    if tc.get("function", {}).get("arguments"):
+                                        tool_call_accum[idx]["arguments"] += tc["function"]["arguments"]
+
+                            content = delta.get("content", "")
+                            reasoning = delta.get("reasoning_content", "")
+                            if content or reasoning:
+                                yield {"content": content, "reasoning": reasoning}
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+
+                    # Yield accumulated tool_calls at end of stream
+                    if has_any_tool_calls and tool_call_accum:
+                        parsed = []
+                        for idx in sorted(tool_call_accum.keys()):
+                            tc = tool_call_accum[idx]
+                            try:
+                                parsed.append({
+                                    "id": tc["id"],
+                                    "name": tc["name"],
+                                    "arguments": json.loads(tc["arguments"]) if tc["arguments"] else {},
+                                })
+                            except json.JSONDecodeError:
+                                parsed.append({
+                                    "id": tc["id"],
+                                    "name": tc["name"],
+                                    "arguments": {},
+                                })
+                        yield {"tool_calls": parsed}
+            except httpx.HTTPStatusError as e:
+                # 友好的流式错误提示，不让服务直接崩掉
+                err_msg = f"大模型接口调用失败 (HTTP {e.response.status_code})。请检查您的 API Key 是否正确加载！"
+                if e.response.status_code == 401:
+                    err_msg = "大模型 API Key 无效或未提供 (HTTP 401)。请确保终端没有缓存错误的全局环境变量，并已重载 .env 文件！"
+                yield {"content": f"⚠️ {err_msg}", "reasoning": ""}
+            except Exception as e:
+                yield {"content": f"⚠️ 内部发生未知网络错误: {str(e)}", "reasoning": ""}

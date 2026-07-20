@@ -307,7 +307,7 @@ function getProcessingTime(task: OcrTask): string {
 </script>
 
 <style scoped>
-.ocr-page { padding: 20px; max-width: 800px; margin: 20px auto; color: #eceef0; min-height: calc(100vh - 40px); }
+.ocr-page { padding: 20px; max-width: 800px; margin: 20px auto; color: #eceef0; min-height: calc(100vh - 170px); }
 .page-title { font-size: 24px; margin-bottom: 20px; text-align: center; }
 :deep(.el-card) { background: rgba(255, 255, 255, 0.4); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; backdrop-filter: blur(10px); }
 :deep(.el-card__header) { border-bottom-color: rgba(0, 0, 0, 0.05); }

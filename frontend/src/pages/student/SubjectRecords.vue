@@ -1,6 +1,6 @@
 <template>
-  <BorderGlow class="learning-plan-page" background-color="transparent">
-    <div class="content">LearningPlan</div>
+  <BorderGlow class="subject-records-page" background-color="transparent">
+    <div class="content">学科做题记录详细占位页</div>
   </BorderGlow>
 </template>
 
@@ -9,8 +9,8 @@ import BorderGlow from '@/components/BorderGlow.vue'
 </script>
 
 <style scoped>
-.learning-plan-page {
-  color: #eceef0;
+.subject-records-page {
+  color: #000;
   min-height: calc(100vh - 170px);
   margin: 20px;
 }

@@ -79,7 +79,7 @@ const handleLogin = () => {
 
   // 根据角色跳转到不同的主页面
   if (role.value === 'student') {
-    router.push('/student/chat')
+    router.push('/student/dashboard')
   } else {
     router.push('/teacher/courses')
   }

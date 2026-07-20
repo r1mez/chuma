@@ -19,6 +19,7 @@ const router = createRouter({
         { path: 'knowledge', component: () => import('@/pages/student/KnowledgeExplore.vue') },
         { path: 'practice', component: () => import('@/pages/student/Practice.vue') },
         { path: 'exercise-records', component: () => import('@/pages/student/ExerciseRecords.vue') },
+        { path: 'subject-records', component: () => import('@/pages/student/SubjectRecords.vue') },
         { path: 'chat', component: () => import('@/pages/student/Chat.vue') },
         { path: 'plan', component: () => import('@/pages/student/LearningPlan.vue') },
         { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },

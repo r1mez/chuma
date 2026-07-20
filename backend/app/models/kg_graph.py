@@ -11,7 +11,6 @@ class KgGraph(Base):
     __tablename__ = "kg_graphs"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, nullable=False, index=True)
     graph_name = Column(String(128), nullable=False, unique=True)
     original_filename = Column(String(256), nullable=False)
     file_path = Column(String(512))

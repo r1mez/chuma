@@ -72,7 +72,7 @@ const menuItems = [
   { name: '学习仪表盘', path: '/student/dashboard' },
   { name: '知识图谱', path: '/student/knowledge' },
   { name: '题目练习', path: '/student/practice' },
-  { name: '错题本', path: '/student/wrong-book' },
+  { name: '做题记录', path: '/student/exercise-records' },
   { name: 'AI 助教', path: '/student/chat' },
   { name: '学习计划', path: '/student/plan' },
   { name: '文档解析', path: '/student/ocr' },

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 智教慧学 是一个面向计算机科学学科的 AI 智能助教助学平台，采用"双引擎"架构（助学引擎 + 助教引擎），面向数据结构、计算机网络、操作系统、计算机组成原理和数据库原理学习。
 
-- **学生侧**：知识图谱探索、GraphRAG 智能问答、个性化学习计划、错题归因分析、渐进式解题引导
+- **学生侧**：知识图谱探索、GraphRAG 智能问答、个性化学习计划、做题记录归因分析、渐进式解题引导
 - **教师侧**：学情分析报告、学生画像、作业批改、教案推荐
 
 ## 技术栈
@@ -215,7 +215,7 @@ frontend/src/
 ├── layouts/          # 布局组件（DefaultLayout 学生侧 / TeacherLayout 教师侧）
 ├── pages/            # 页面组件
 │   ├── auth/         # 登录、注册
-│   ├── student/      # 仪表盘、图谱探索、练习、错题本、AI 对话、学习计划
+│   ├── student/      # 仪表盘、图谱探索、练习、做题记录、AI 对话、学习计划
 │   └── teacher/      # 课程管理、学生管理、学情报告、预警、批改
 ├── router/           # Vue Router 路由配置
 ├── stores/           # Pinia 全局状态管理（auth、knowledge、learning）
@@ -243,7 +243,7 @@ backend/app/
 │   ├── auth.py           # 注册、登录、JWT 认证
 │   ├── knowledge.py      # 知识图谱数据查询（供前端 ECharts 可视化）
 │   ├── learning.py       # 学习计划、学习进度、学习历史
-│   ├── practice.py       # 题目列表、做题提交、错题本、归因分析、渐进式提示
+│   ├── practice.py       # 题目列表、做题提交、做题记录、归因分析、渐进式提示
 │   ├── teacher.py        # 班级管理、学情分析、预警、学生画像、作业管理
 │   └── ai_gateway.py     # 代理转发到 AI 引擎服务（注入 X-Service-Token）
 ├── services/         # 业务逻辑层（每个路由模块对应一个 service）

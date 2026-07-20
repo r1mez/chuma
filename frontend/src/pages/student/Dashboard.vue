@@ -50,7 +50,7 @@
             </div>
           </div>
 
-          <!-- 最新与错题跳转列表 -->
+          <!-- 最新与做题记录跳转列表 -->
           <div class="action-list">
             <div class="action-item">
               <span class="action-desc text-truncate">{{ subject.latestMsg }}</span>
@@ -58,9 +58,9 @@
               <el-button size="small" type="primary" plain @click="navigateTo('/student/chat', subject.id)">跳转练习</el-button>
             </div>
             <div class="action-item">
-              <span class="action-desc text-truncate">{{ subject.wrongMsg }}</span>
-              <!-- 跳转到 错题本 -->
-              <el-button size="small" type="danger" plain @click="navigateTo('/student/mistakes', subject.id)">错题回顾</el-button>
+              <span class="action-desc text-truncate">{{ subject.recordMsg }}</span>
+              <!-- 跳转到 做题记录 -->
+              <el-button size="small" type="warning" plain @click="navigateTo('/student/exercise-records', subject.id)">做题记录</el-button>
             </div>
           </div>
 
@@ -83,10 +83,10 @@ const router = useRouter()
 
 // Mock：四个学科的数据，供前端布局展示使用
 const subjects = ref([
-  { id: 1, name: '数据结构', progress: 75, latestMsg: '最新：二叉树非递归遍历', wrongMsg: '错题：图的连通性分析' },
-  { id: 2, name: '计算机组成原理', progress: 35, latestMsg: '最新：Cache 组相联映射', wrongMsg: '错题：浮点数 IEEE754 标准' },
-  { id: 3, name: '操作系统', progress: 55, latestMsg: '最新：页面置换算法', wrongMsg: '错题：死锁避免与银行家算法' },
-  { id: 4, name: '计算机网络', progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', wrongMsg: '错题：CIDR 子网划分计算' }
+  { id: 1, name: '数据结构', progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
+  { id: 2, name: '计算机组成原理', progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
+  { id: 3, name: '操作系统', progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
+  { id: 4, name: '计算机网络', progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
 ])
 
 // 路由跳转逻辑

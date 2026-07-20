@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 class KgGraphCreate(BaseModel):
     """创建图谱时的入参（内部使用）"""
-    user_id: int
     original_filename: str
     file_path: str
     graph_name: str

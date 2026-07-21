@@ -5,6 +5,7 @@ Your task is to extract structured knowledge points and their relationships from
 ## Entity Types
 Choose from these predefined types for each entity:
 
+- Chapter: Chapter or section headings (NOTE: these are auto-generated — do NOT extract them)
 - Concept: Fundamental theoretical concepts, e.g., "virtual memory", "interrupt", "polymorphism"
 - Algorithm: Specific algorithms, e.g., "quicksort", "banker's algorithm", "LRU replacement"
 - DataStructure: Specific data structures, e.g., "hash table", "B+ tree", "stack"
@@ -17,23 +18,23 @@ Choose from these predefined types for each entity:
 ## Entity Extraction Rules
 
 1. Extract only meaningful computer science knowledge points. Ignore ordinary nouns, examples, section numbers, and non-technical words.
-2. Prefer complete and standardized Chinese names. Do not split a complete concept into multiple entities.
-3. Resolve pronouns (e.g., “该算法”“它”) to the corresponding entity whenever possible.
-4. Merge duplicate entities that refer to the same knowledge point.
-5. Every entity must contain:
+2. **禁止提取章节标题。** Chapter/section titles are automatically generated — do NOT extract them as entities.
+3. Prefer complete and standardized Chinese names. Do not split a complete concept into multiple entities.
+4. Resolve pronouns (e.g., "该算法""它") to the corresponding entity whenever possible.
+5. Merge duplicate entities that refer to the same knowledge point.
+6. Every entity must contain:
 
    * id (same as the standardized Chinese name)
    * name
-   * type
+   * type (must NOT be "Chapter")
    * description (based only on the source text)
-6. Do not use external knowledge.
+7. Do not use external knowledge.
 
 ## Knowledge Point Priority
 
 Priority should be given to concepts that are:
 
 * explicitly defined;
-* used as chapter or section topics;
 * classified into types or components;
 * described with characteristics, functions, principles, or applications;
 * prerequisites for understanding subsequent content.
@@ -42,7 +43,7 @@ Priority should be given to concepts that are:
 
 1. Extract only relationships explicitly stated in the text.
 2. Every relationship must connect two extracted entities.
-3. Relationship names must use中文表达（推荐使用简洁的中文短语，如“包含”“属于”“使用”“依赖”“实现”“基于”“前置于”等）。
+3. Relationship names must use中文表达（推荐使用简洁的中文短语，如"包含""属于""使用""依赖""实现""基于""前置于"等）。
 4. Keep relationship directions semantically correct.
 5. Remove duplicate edges and self-loops.
 6. Each edge description must be a complete Chinese sentence explicitly mentioning both endpoint entities。
@@ -57,8 +58,8 @@ BAD:
 
 ## Special Rules
 
-* Chapter or section titles may be extracted only if they represent actual knowledge points.
-* When the text lists components, stages, types, or classifications, extract both the parent concept and the listed items, then connect them using appropriate relationships（如“包含”“类型”“组成部分”“阶段”等）。
+* **禁止提取章节标题作为实体。** Chapter nodes are generated automatically — only extract specific knowledge points within chapters.
+* When the text lists components, stages, types, or classifications, extract both the parent concept and the listed items, then connect them using appropriate relationships（如"包含""类型""组成部分""阶段"等）。
 * If no meaningful relationship exists, return an empty edges array.
 
 ## Output Format
@@ -86,4 +87,5 @@ Requirements:
 * Output JSON only.
 * Do not output explanations or Markdown.
 * Every edge endpoint must exist in `nodes`.
+* Entity type must NOT be "Chapter".
 * If no entities exist, return:{"nodes":[],"edges":[]}

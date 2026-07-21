@@ -34,6 +34,33 @@ def _load_prompt(filename: str = "kg_extraction.txt") -> str:
         return f.read()
 
 
+def _build_chapter_context(chunk: DocumentChunk) -> str:
+    """构建章节上下文注入文本
+
+    当 chunk 携带 heading_path 时，在 user message 开头注入章节上下文，
+    提醒 LLM 不要提取章节标题，只提取具体知识点。
+
+    Args:
+        chunk: 文档切片
+
+    Returns:
+        章节上下文字符串，无 heading_path 时返回空字符串
+    """
+    if not chunk.heading_path:
+        return ""
+
+    path_str = " > ".join(chunk.heading_path)
+    return (
+        f"## 章节上下文\n\n"
+        f"你正在处理教材的以下章节：\n"
+        f"{path_str}\n\n"
+        f"规则：\n"
+        f"- 不要提取章节标题作为实体（章节节点已自动生成）\n"
+        f"- 只提取章节内的具体知识点（算法、数据结构、概念等）\n"
+        f"- 提取的知识点将自动归属于上述章节\n\n"
+    )
+
+
 def _parse_llm_json_response(raw: str) -> dict:
     """从 LLM 响应中提取 JSON
 
@@ -82,9 +109,13 @@ class KGExtractor:
         Raises:
             LlmExtractionError: LLM 返回格式无法解析
         """
+        # 构建章节上下文 + 原始文本
+        chapter_context = _build_chapter_context(chunk)
+        user_content = chapter_context + chunk.text
+
         messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": chunk.text},
+            {"role": "user", "content": user_content},
         ]
 
         try:

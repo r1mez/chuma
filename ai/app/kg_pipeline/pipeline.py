@@ -189,7 +189,7 @@ class KGPipeline:
         )
 
     async def run_from_file(self, file_path: str) -> PipelineResult:
-        """从原始文档文件构建知识图谱（PDF → OCR → KG）
+        """从原始文档文件构建知识图谱（PDF → OCR → KG，或 Markdown → 直接处理）
 
         Args:
             file_path: 原始文档路径
@@ -198,6 +198,19 @@ class KGPipeline:
             PipelineResult 执行统计
         """
         logger.info(f"[KG] Starting pipeline for: {file_path}")
+
+        # 检查文件类型：Markdown 直接处理，跳过 OCR
+        suffix = os.path.splitext(file_path)[1].lstrip(".").lower()
+        if suffix == "md":
+            logger.info("[KG] Markdown file detected, skipping OCR")
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    md_content = f.read()
+                logger.info(f"[KG] Loaded Markdown, length: {len(md_content)} chars")
+                return await self.run_from_markdown(md_content)
+            except Exception as e:
+                logger.error(f"[KG] Failed to read Markdown file: {e}", exc_info=True)
+                return PipelineResult(status="failed", error=str(e))
 
         with tempfile.TemporaryDirectory() as tmpdir:
             try:

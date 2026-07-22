@@ -306,7 +306,10 @@ function handleNodeDblClick(node: GraphNode) {
     return
   }
 
-  // 展开：BFS 向外找 3 跳的所有连通知识点（跨章节）
+  // 展开：先清空已有的展开状态，确保只有一个锚点
+  const newMap = new Map<string, Set<string>>()
+
+  // BFS 1 跳（只收集与被双击节点直接连通的知识点）
   const kpTypes = new Set(['Concept', 'Algorithm', 'DataStructure', 'Protocol', 'Principle', 'Term', 'Technology', 'Model'])
 
   // 建立邻接表
@@ -318,7 +321,7 @@ function handleNodeDblClick(node: GraphNode) {
     adj.get(edge.target)!.push(edge.source)
   }
 
-  // BFS 2 跳（遍历所有节点类型以正确计算步数，但只收集知识点节点）
+  // BFS 1 跳（只收集与被双击节点直接连通的知识点）
   const visited = new Set<string>([node.id])
   const queue: string[] = [node.id]
   const collected = new Set<string>()
@@ -343,7 +346,6 @@ function handleNodeDblClick(node: GraphNode) {
     distance++
   }
 
-  const newMap = new Map(expandedNodeMap.value)
   newMap.set(node.id, collected)
   expandedNodeMap.value = newMap
 }

@@ -12,15 +12,19 @@ const props = defineProps<{
   data: GraphData
   showLabels: boolean
   activeTypes: Set<string>
+  expandedNodeIds: Set<string>
+  anchorNodeIds?: Set<string>
 }>()
 
 const emit = defineEmits<{
   nodeClick: [node: GraphNode]
+  nodeDblClick: [node: GraphNode]
 }>()
 
 const store = useKnowledgeStore()
 const chartRef = ref<HTMLElement>()
 const chart = shallowRef<echarts.ECharts>()
+let clickTimer: ReturnType<typeof setTimeout> | null = null
 
 // Cognee 风格颜色映射
 const TYPE_COLORS: Record<string, string> = {
@@ -81,7 +85,29 @@ function buildOption() {
         id: n.id,
         name: n.name,
         value: n.type,
-        itemStyle: { color: getColor(n.type) },
+        itemStyle: {
+          color: getColor(n.type),
+          borderColor: props.anchorNodeIds?.has(n.id)
+            ? '#00E5FF'
+            : props.expandedNodeIds.has(n.id)
+              ? '#FFD700'
+              : '#fff',
+          borderWidth: props.anchorNodeIds?.has(n.id)
+            ? 4
+            : props.expandedNodeIds.has(n.id)
+              ? 3
+              : 1,
+          shadowBlur: props.anchorNodeIds?.has(n.id)
+            ? 24
+            : props.expandedNodeIds.has(n.id)
+              ? 16
+              : 6,
+          shadowColor: props.anchorNodeIds?.has(n.id)
+            ? 'rgba(0, 229, 255, 0.8)'
+            : props.expandedNodeIds.has(n.id)
+              ? 'rgba(255, 215, 0, 0.6)'
+              : 'rgba(0,0,0,0.3)',
+        },
         symbolSize: Math.max(20, Math.min(50, 10 + (n.degree || 0) * 3)),
         label: {
           show: props.showLabels,
@@ -124,12 +150,6 @@ function buildOption() {
         lineStyle: { opacity: 0.1 },
       },
       lineStyle: { color: 'source' },
-      itemStyle: {
-        borderColor: '#fff',
-        borderWidth: 1,
-        shadowBlur: 6,
-        shadowColor: 'rgba(0,0,0,0.3)',
-      },
     }],
   }
 }
@@ -141,8 +161,24 @@ function initChart() {
 
   chart.value.on('click', (params: any) => {
     if (params.dataType === 'node') {
+      // 延迟执行单击，若 300ms 内发生双击则取消
+      clickTimer = setTimeout(() => {
+        const node = props.data.nodes.find(n => n.id === params.data.id)
+        if (node) emit('nodeClick', node)
+      }, 300)
+    }
+  })
+
+  chart.value.on('dblclick', (params: any) => {
+    if (clickTimer) {
+      clearTimeout(clickTimer)
+      clickTimer = null
+    }
+    if (params.dataType === 'node') {
       const node = props.data.nodes.find(n => n.id === params.data.id)
-      if (node) emit('nodeClick', node)
+      if (node && node.type !== 'Chapter') {
+        emit('nodeDblClick', node)
+      }
     }
   })
 }
@@ -152,7 +188,7 @@ function handleResize() {
 }
 
 watch(
-  () => [props.data, props.showLabels, props.activeTypes],
+  () => [props.data, props.showLabels, props.activeTypes, props.expandedNodeIds],
   () => { chart.value?.setOption(buildOption(), true) },
   { deep: true }
 )
@@ -163,6 +199,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (clickTimer) clearTimeout(clickTimer)
   window.removeEventListener('resize', handleResize)
   chart.value?.dispose()
 })

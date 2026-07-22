@@ -146,6 +146,8 @@
             :active-types="store.activeTypes"
             :expanded-node-ids="allExpandedNodeIds"
             :anchor-node-ids="anchorNodeIds"
+            :highlighted-node-ids="highlightedNodeIds"
+            :node-fx-map="nodeFxMap"
             @node-click="handleNodeClick"
             @node-dbl-click="handleNodeDblClick"
           />
@@ -198,6 +200,12 @@ const drillPath = ref<GraphNode[]>([])
 // 双击展开状态：nodeId → 因该节点展开而加入的节点 ID 集合
 const expandedNodeMap = ref<Map<string, Set<string>>>(new Map())
 
+// 展开时需高亮的节点 ID（已在原图中的一跳邻居）
+const highlightedNodeIds = ref<Set<string>>(new Set())
+
+// 节点位置覆盖（fx/fy）- 使用普通对象替代 Map 以确保 Vue 响应式
+const nodeFxMap = ref<Record<string, {fx: number; fy: number}>>({})
+
 // 引用计数：nodeId → 被多少个展开锚点引用
 const expandedRefCount = computed(() => {
   const counter = new Map<string, number>()
@@ -218,6 +226,8 @@ const anchorNodeIds = computed(() => new Set(expandedNodeMap.value.keys()))
 // 钻取路径改变时清空展开状态
 watch(drillPath, () => {
   expandedNodeMap.value = new Map()
+  highlightedNodeIds.value = new Set()
+  nodeFxMap.value = {}
 })
 
 const TYPE_COLORS: Record<string, string> = {
@@ -295,24 +305,106 @@ function handleNodeClick(node: GraphNode) {
   }
 }
 
+/**
+ * 计算新节点的目标位置——沿"原图中心 → 锚点"方向向外辐射
+ * @param anchorPos 锚点当前位置
+ * @param centerPos 原图中心位置
+ * @param newNeighborIds 需要定位的新节点 ID 列表
+ * @returns 每个新节点的目标位置映射
+ */
+function calculateGrowthPositions(
+  anchorPos: {x: number; y: number},
+  centerPos: {x: number; y: number},
+  newNeighborIds: string[],
+): Map<string, {fx: number; fy: number}> {
+  const result = new Map<string, {fx: number; fy: number}>()
+
+  // 计算从原图中心到锚点的方向向量
+  const dx = anchorPos.x - centerPos.x
+  const dy = anchorPos.y - centerPos.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  if (dist < 1) {
+    // 锚点就在中心附近 → 均匀散射
+    const baseDistance = 280
+    newNeighborIds.forEach((id, i) => {
+      const angle = (2 * Math.PI * i) / newNeighborIds.length
+      result.set(id, {
+        fx: anchorPos.x + baseDistance * Math.cos(angle),
+        fy: anchorPos.y + baseDistance * Math.sin(angle),
+      })
+    })
+    return result
+  }
+
+  // 归一化方向向量
+  const nx = dx / dist
+  const ny = dy / dist
+  // 增加延伸距离系数，确保新节点明显远离原图中心
+  const extensionDist = Math.max(500, dist * 1.4)
+
+  if (newNeighborIds.length === 1) {
+    // 单个新节点 → 放在锚点正外侧
+    result.set(newNeighborIds[0], {
+      fx: anchorPos.x + nx * extensionDist,
+      fy: anchorPos.y + ny * extensionDist,
+    })
+  } else {
+    // 多个新节点 → 在"远离中心"一侧扇形展开
+    // 扇形角度自适应：节点越多扇形越宽（90°~150°）
+    const spreadAngle = Math.min(Math.PI * 0.85, Math.PI / 2 + (Math.PI / 6) * newNeighborIds.length / 5)
+    newNeighborIds.forEach((id, i) => {
+      // 均匀分布在扇形内（-spreadAngle/2 ~ +spreadAngle/2）
+      const ratio = newNeighborIds.length > 1
+        ? (i / (newNeighborIds.length - 1)) - 0.5  // -0.5 到 +0.5
+        : 0
+      const angle = ratio * spreadAngle
+      const cosA = Math.cos(angle)
+      const sinA = Math.sin(angle)
+      // 旋转方向向量
+      const fxDir = nx * cosA - ny * sinA
+      const fyDir = nx * sinA + ny * cosA
+      // 中间节点近一点，边缘节点远一点（弧形展开）
+      const distFromAnchor = extensionDist * (1 + Math.abs(ratio) * 0.3)
+      result.set(id, {
+        fx: anchorPos.x + fxDir * distFromAnchor,
+        fy: anchorPos.y + fyDir * distFromAnchor,
+      })
+    })
+  }
+
+  return result
+}
+
 function handleNodeDblClick(node: GraphNode) {
+  console.log('节点:', node)
+  console.log('hierarchy:', hierarchy.value ? '存在' : '不存在')
+  console.log('store.graphData:', store.graphData ? '存在' : '不存在')
   if (!hierarchy.value || !store.graphData) return
 
-  // 如果已展开 → 收起
+  // 如果已展开 → 折叠
   if (expandedNodeMap.value.has(node.id)) {
+    console.log('节点已展开，执行折叠')
     const newMap = new Map(expandedNodeMap.value)
     newMap.delete(node.id)
     expandedNodeMap.value = newMap
+    // 折叠后清空高亮和位置覆盖
+    highlightedNodeIds.value = new Set()
+    nodeFxMap.value = {}
     return
   }
 
-  // 展开：先清空已有的展开状态，确保只有一个锚点
-  const newMap = new Map<string, Set<string>>()
+  // 获取当前所有节点的渲染位置（用于冻结原图）
+  let currentPositions = new Map<string, {x: number; y: number}>()
+  if (graphRef.value) {
+    try {
+      currentPositions = graphRef.value.getNodePositions()
+    } catch {
+      currentPositions = new Map()
+    }
+  }
 
-  // BFS 1 跳（只收集与被双击节点直接连通的知识点）
+  // BFS 1 跳
   const kpTypes = new Set(['Concept', 'Algorithm', 'DataStructure', 'Protocol', 'Principle', 'Term', 'Technology', 'Model'])
-
-  // 建立邻接表
   const adj = new Map<string, string[]>()
   for (const edge of store.graphData.edges) {
     if (!adj.has(edge.source)) adj.set(edge.source, [])
@@ -321,10 +413,9 @@ function handleNodeDblClick(node: GraphNode) {
     adj.get(edge.target)!.push(edge.source)
   }
 
-  // BFS 1 跳（只收集与被双击节点直接连通的知识点）
   const visited = new Set<string>([node.id])
   const queue: string[] = [node.id]
-  const collected = new Set<string>()
+  const oneHopNeighbors = new Set<string>()
   let distance = 0
 
   while (queue.length > 0 && distance < 1) {
@@ -338,7 +429,7 @@ function handleNodeDblClick(node: GraphNode) {
           queue.push(nb)
           const nbNode = hierarchy.value.nodeMap.get(nb)
           if (nbNode && kpTypes.has(nbNode.type) && nb !== node.id) {
-            collected.add(nb)
+            oneHopNeighbors.add(nb)
           }
         }
       }
@@ -346,8 +437,107 @@ function handleNodeDblClick(node: GraphNode) {
     distance++
   }
 
-  newMap.set(node.id, collected)
+  console.log('oneHopNeighbors 大小:', oneHopNeighbors.size)
+  console.log('oneHopNeighbors:', Array.from(oneHopNeighbors))
+
+  // 分类一跳邻居
+  const base = getVisibleData(store.graphData, drillPath.value, hierarchy.value)
+  const baseNodeIds = new Set(base.nodes.map(n => n.id))
+  const existingNeighborIds = new Set<string>()
+  const newNeighborIds: string[] = []
+
+  for (const nbId of oneHopNeighbors) {
+    if (baseNodeIds.has(nbId)) {
+      existingNeighborIds.add(nbId)
+    } else {
+      newNeighborIds.push(nbId)
+    }
+  }
+
+  console.log('existingNeighborIds:', Array.from(existingNeighborIds))
+  console.log('newNeighborIds:', newNeighborIds)
+
+  if (newNeighborIds.length === 0 && existingNeighborIds.size === 0) {
+    console.log('没有邻居需要展开，直接返回')
+    return
+  }
+
+  // === 一步到位：同时设置 expandedNodeMap + nodeFxMap + highlightedNodeIds ===
+
+  // 1. 计算原图中心
+  let centerX = 0, centerY = 0, count = 0
+  for (const [id, pos] of currentPositions) {
+    if (baseNodeIds.has(id)) {
+      centerX += pos.x
+      centerY += pos.y
+      count++
+    }
+  }
+  if (count > 0) {
+    centerX /= count
+    centerY /= count
+  }
+
+  // 2. 获取锚点位置
+  const anchorPos = currentPositions.get(node.id)
+  if (!anchorPos) {
+    // 拿不到锚点位置 → 只高亮，不冻结位置
+    const fallbackMap = new Map<string, Set<string>>()
+    fallbackMap.set(node.id, oneHopNeighbors)
+    expandedNodeMap.value = fallbackMap
+    highlightedNodeIds.value = existingNeighborIds
+    nodeFxMap.value = {}
+    return
+  }
+
+  // 3. 计算新节点目标位置（沿"中心→锚点"方向外扩）
+  const growthPositions = calculateGrowthPositions(
+    anchorPos,
+    {x: centerX, y: centerY},
+    newNeighborIds,
+  )
+
+  // 4. 构建位置覆盖映射：原图节点冻结 + 新节点定位
+  const fxMap = new Map<string, {fx: number; fy: number}>()
+
+  // 冻结当前 visible 中的所有节点（包括原图节点和一跳邻居）
+  for (const [id, pos] of currentPositions) {
+    if (baseNodeIds.has(id) || oneHopNeighbors.has(id) || id === node.id) {
+      fxMap.set(id, {fx: pos.x, fy: pos.y})
+    }
+  }
+
+  // 新节点用计算出的位置覆盖（增加距离，确保分离）
+  for (const [id, pos] of growthPositions) {
+    fxMap.set(id, pos)
+  }
+
+  // 5. 一次性触发渲染
+  // 创建新的 Map 实例以确保 Vue 响应式系统检测到变化
+  const newMap = new Map<string, Set<string>>()
+  newMap.set(node.id, oneHopNeighbors)
   expandedNodeMap.value = newMap
+  highlightedNodeIds.value = new Set(existingNeighborIds)
+
+  // 将 fxMap 转换为普通对象，确保 Vue 响应式系统检测到变化
+  const fxMapObj: Record<string, {fx: number; fy: number}> = {}
+  for (const [id, pos] of fxMap) {
+    fxMapObj[id] = pos
+  }
+  // 直接赋值新对象
+  nodeFxMap.value = fxMapObj
+
+  // 调试日志
+  console.log('=== 双击展开调试 ===')
+  console.log('锚点位置:', anchorPos)
+  console.log('原图中心:', {x: centerX, y: centerY})
+  console.log('新节点数量:', newNeighborIds.length)
+  console.log('新节点位置:', Array.from(growthPositions.entries()))
+  console.log('fxMap 大小:', fxMap.size)
+  console.log('currentPositions 大小:', currentPositions.size)
+  console.log('nodeFxMap 即将设置为:', fxMapObj)
+  console.log('nodeFxMap.value:', nodeFxMap.value)
+  console.log('=====================')
 }
 
 function querySearch(query: string, cb: (results: any[]) => void) {

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class EntityType(str, Enum):
     """预定义的计算机学科实体类型"""
+    CHAPTER = "Chapter"           # 章（标题层级第1层）
     CONCEPT = "Concept"
     ALGORITHM = "Algorithm"
     DATA_STRUCTURE = "DataStructure"
@@ -19,6 +20,19 @@ class EntityType(str, Enum):
     TERM = "Term"
     TECHNOLOGY = "Technology"
     MODEL = "Model"
+    OPERATION = "Operation"       # 操作/运算
+    METHOD = "Method"             # 方法/方式
+    PROCESS = "Process"           # 流程/过程
+    FUNCTION = "Function"         # 函数/系统调用
+    STANDARD = "Standard"         # 标准/规范
+    TOOL = "Tool"                 # 软件工具/平台
+
+    @classmethod
+    def _missing_(cls, value):
+        """未知类型时降级为 Term，不中断流水线"""
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning(f"[KG] Unknown entity type '{value}', falling back to 'Term'")
+        return cls.TERM
 
 
 class KGNode(BaseModel):
@@ -55,6 +69,8 @@ class DocumentChunk(BaseModel):
     text: str
     chunk_index: int = 0
     chunk_size: int = 0
+    heading_path: list[str] = []      # 如 ["第3章 栈和队列", "3.1 栈"]
+    heading_levels: list[int] = []    # 如 [2, 3]
 
 
 class PipelineResult(BaseModel):

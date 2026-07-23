@@ -9,14 +9,11 @@
         <h2 class="title">智教慧学Agent平台</h2>
         
         <!-- Role Selector -->
-        <div class="role-selector">
-          <label class="radio-label">
-            <input type="radio" v-model="role" value="student" /> Student
-          </label>
-          <label class="radio-label">
-            <input type="radio" v-model="role" value="teacher" /> Teacher
-          </label>
-        </div>
+        <el-radio-group v-model="role" class="role-selector">
+          <el-radio-button value="student">学生</el-radio-button>
+          <el-radio-button value="teacher">教师</el-radio-button>
+          <el-radio-button value="admin">管理员</el-radio-button>
+        </el-radio-group>
 
         <span class="input-span">
           <label for="email" class="label">Email</label>
@@ -38,9 +35,9 @@
             required 
           />
         </span>
-        <span class="span"><a href="#">Forgot password?</a></span>
+        <span class="span"><span class="forgot-password-text">Forgot password?</span></span>
         <input class="submit" type="submit" value="Log in" />
-        <span class="span">Don't have an account? <a href="#">Sign up</a></span>
+        <span class="span">Don't have an account? <router-link to="/register">Sign up</router-link></span>
       </form>
     </div>
   </div>
@@ -58,7 +55,7 @@ const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
-const role = ref<'student' | 'teacher'>('student')
+const role = ref<'student' | 'teacher' | 'admin'>('student')
 
 const handleLogin = () => {
   if (!email.value || !password.value) {
@@ -66,22 +63,28 @@ const handleLogin = () => {
     return
   }
 
-  // 模拟登录，不需要判断密码，只要不为空就可以跳转
-  // 伪造一个简单的 token 和 user 存入 store 以保证后续功能正常
-  authStore.setToken('mock-token-for-development')
-  authStore.user = {
-    id: 1,
-    name: email.value.split('@')[0],
-    role: role.value
+  // Mock login — admin detection by email prefix
+  let effectiveRole: 'student' | 'teacher' | 'admin' = role.value
+  if (email.value.startsWith('admin')) {
+    effectiveRole = 'admin'
   }
 
-  ElMessage.success(`Logged in as ${role.value}`)
+  authStore.setToken('mock-token-for-development')
+  authStore.setUser({
+    id: 1,
+    name: email.value.split('@')[0],
+    role: effectiveRole
+  })
 
-  // 根据角色跳转到不同的主页面
-  if (role.value === 'student') {
+  ElMessage.success(`Logged in as ${effectiveRole}`)
+
+  // Redirect by role
+  if (effectiveRole === 'student') {
     router.push('/student/dashboard')
+  } else if (effectiveRole === 'teacher') {
+    router.push('/teacher/dashboard')
   } else {
-    router.push('/teacher/courses')
+    router.push('/admin/ocr')
   }
 }
 </script>
@@ -131,16 +134,6 @@ const handleLogin = () => {
   justify-content: center;
   gap: 1.5rem;
   margin-bottom:1rem;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: 600;
-  color: #555;
-  font-size: 1.5rem;
 }
 
 /* 引入 template.txt 的样式 */

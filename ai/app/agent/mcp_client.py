@@ -49,6 +49,7 @@ class MCPClient:
 
     def __init__(self):
         self._sessions: dict[str, Any] = {} # 存储 {server_name: ClientSession}
+        self._tool_server_map: dict[str, str] = {}  # tool_name → server_name
         self._cm_stack: Any = None  # contextlib.AsyncExitStack
 
     @property
@@ -132,6 +133,7 @@ class MCPClient:
                     description=tool.description or "",
                     parameters=tool.inputSchema if hasattr(tool, 'inputSchema') else {},
                 )
+                self._tool_server_map[tool.name] = server_name
                 logger.info(f"[{server_name}] Discovered MCP tool: {tool.name}")
 
             logger.info(f"[{server_name}] MCP connected to {url}, {len(tools_result.tools)} tools discovered")
@@ -145,40 +147,41 @@ class MCPClient:
             return False
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """调用 MCP Server 的工具"""
+        """调用 MCP Server 的工具 — 根据工具注册时的映射直接路由到正确的 server"""
         if not self._sessions:
             return "MCP 服务暂不可用（未连接）"
 
-        # 遍历所有会话寻找工具（也可以在注册时记录工具归属的 server，这里用简单遍历）
-        # mcp 1.28.1 的 call_tool 在找不到工具时会抛出错误
-        last_error = None
-        for server_name, session in self._sessions.items():
-            try:
-                result = await asyncio.wait_for(
-                    session.call_tool(name, arguments),
-                    timeout=10.0,
-                )
+        # 查找工具归属的 server，直接路由
+        server_name = self._tool_server_map.get(name)
+        if server_name is None:
+            return f"未找到工具 '{name}' 所属的 MCP Server"
 
-                # Extract text from content blocks
-                parts = []
-                for block in result.content:
-                    if hasattr(block, "text"):
-                        parts.append(block.text)
-                    elif hasattr(block, "data"):
-                        parts.append(str(block.data))
-                    else:
-                        parts.append(str(block))
-                return "\n".join(parts) if parts else "(empty result)"
-                
-            except asyncio.TimeoutError:
-                return f"工具调用超时 (Server: {server_name})"
-            except Exception as e:
-                # 记录错误并尝试下一个 server
-                last_error = e
-                continue
-                
-        logger.error(f"MCP tool '{name}' failed across all servers: {last_error}")
-        return f"工具执行异常或未找到: {str(last_error)}"
+        session = self._sessions.get(server_name)
+        if session is None:
+            return f"工具 '{name}' 所属的 MCP Server '{server_name}' 未连接"
+
+        try:
+            result = await asyncio.wait_for(
+                session.call_tool(name, arguments),
+                timeout=10.0,
+            )
+
+            # Extract text from content blocks
+            parts = []
+            for block in result.content:
+                if hasattr(block, "text"):
+                    parts.append(block.text)
+                elif hasattr(block, "data"):
+                    parts.append(str(block.data))
+                else:
+                    parts.append(str(block))
+            return "\n".join(parts) if parts else "(empty result)"
+
+        except asyncio.TimeoutError:
+            return f"工具调用超时 (Server: {server_name})"
+        except Exception as e:
+            logger.error(f"MCP tool '{name}' on server '{server_name}' failed: {e}")
+            return f"工具执行异常: {str(e)}"
 
     async def close(self):
         """关闭所有 MCP 连接"""

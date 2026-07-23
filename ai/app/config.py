@@ -66,10 +66,23 @@ class Settings(BaseSettings):
     # MCP 联网搜索
     MCP_SEARCH_URL: str = ""
     MCP_SEARCH_TOKEN: str = ""
+    MCP_SERVER_URLS: str = ""  # 逗号分隔的 MCP Server URL 列表，自动遍历连接
     MCP_PROXY: str = ""
 
     # MCP 数据库服务 (FastMCP SSE)
-    MCP_DB_URL: str = "http://localhost:8005/sse"
+    MCP_DB_URL: str = ""
+
+    def get_mcp_server_urls(self) -> list[str]:
+        """返回所有待连接的 MCP Server URL 列表
+
+        从 MCP_SERVER_URLS（逗号分隔）解析。
+        """
+        if not self.MCP_SERVER_URLS:
+            return []
+        urls = [u.strip() for u in self.MCP_SERVER_URLS.split(",") if u.strip()]
+        # 去重保序
+        seen: set[str] = set()
+        return [u for u in urls if not (u in seen or seen.add(u))]
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),

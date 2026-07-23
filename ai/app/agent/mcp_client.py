@@ -3,11 +3,15 @@
 使用 Streamable HTTP 传输协议（/mcp 端点）。
 相比 SSE 传输，Streamable HTTP 每次请求都是独立的 HTTP POST，
 无需维持长连接，更适合通过代理访问外网 MCP Server。
+
+所有待连接的 MCP Server 通过 MCP_SERVER_URLS（逗号分隔列表）配置，
+系统启动时自动遍历连接，无需修改代码。
 """
 import asyncio
 import logging
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -28,6 +32,14 @@ def _resolve_proxy() -> str | None:
     )
 
 
+def _url_to_server_name(url: str) -> str:
+    """从 URL 提取 host:port 作为 server 名称"""
+    parsed = urlparse(url)
+    host = parsed.hostname or "unknown"
+    port = parsed.port
+    return f"{host}:{port}" if port else host
+
+
 class MCPClient:
     """封装 MCP 连接和工具调用
 
@@ -45,12 +57,27 @@ class MCPClient:
 
     async def __aenter__(self):
         self._cm_stack = __import__("contextlib").AsyncExitStack()
-        
-        # 尝试连接所有配置了的 MCP Servers
-        # 暂时注释掉 search 避免无配置导致整个 MCP_CLIENT 卡住
-        # await self.connect_server("search", settings.MCP_SEARCH_URL, settings.MCP_SEARCH_TOKEN)
-        await self.connect_server("database", settings.MCP_DB_URL)
-        
+
+        # 从配置读取所有待连接的 MCP Server URL，自动遍历连接
+        urls = settings.get_mcp_server_urls()
+        if not urls:
+            logger.info("No MCP server URLs configured, skipping MCP initialization")
+            return self
+
+        token = settings.MCP_SEARCH_TOKEN or None
+        seen_names: set[str] = set()
+
+        for url in urls:
+            server_name = _url_to_server_name(url)
+            # 去重：同名 URL 追加序号
+            base_name = server_name
+            counter = 2
+            while server_name in seen_names:
+                server_name = f"{base_name}-{counter}"
+                counter += 1
+            seen_names.add(server_name)
+            await self.connect_server(server_name, url, token)
+
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -64,7 +91,7 @@ class MCPClient:
 
         try:
             from mcp.client.session import ClientSession
-            from mcp.client.sse import sse_client
+            from mcp.client.streamable_http import streamablehttp_client
 
             proxy_url = _resolve_proxy()
 
@@ -80,9 +107,9 @@ class MCPClient:
             if self._cm_stack is None:
                 self._cm_stack = __import__("contextlib").AsyncExitStack()
 
-            # 进入 sse_client 上下文 (FastMCP 和标准 MCP SDK 现在推荐使用 sse_client)
+            # 使用 Streamable HTTP 传输（/mcp 端点），每次请求独立 HTTP POST
             streams = await self._cm_stack.enter_async_context(
-                sse_client(url, headers=headers, httpx_client_factory=httpx_factory)
+                streamablehttp_client(url, headers=headers, httpx_client_factory=httpx_factory)
             )
             read_stream, write_stream = streams[0], streams[1]
 

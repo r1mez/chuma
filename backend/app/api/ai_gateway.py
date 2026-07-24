@@ -68,7 +68,7 @@ async def deep_chat(request: Request):
 
 @router.post("/agent/chat")
 async def agent_chat(request: Request):
-    """智能管家对话 — SSE 透传到 AI 引擎 Agent 路由"""
+    """智能体模式对话 — SSE 透传到 AI 引擎 Agent 路由"""
     body = await request.json()
     # Inject current user ID from auth context
     user = getattr(request.state, "user", None)

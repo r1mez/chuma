@@ -147,7 +147,7 @@ export async function sendDeepMessage(
 }
 
 /**
- * 智能管家 Agent 对话 — 流式调用（支持工具调用）
+ * 智能体模式 Agent 对话 — 流式调用（支持工具调用）
  */
 export async function sendAgentMessage(
   message: string,

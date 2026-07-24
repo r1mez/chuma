@@ -59,8 +59,7 @@ const messagesRef = ref<HTMLElement>()
 const navItems = [
   { label: '快速回答', value: 'quick' },
   { label: '深度思考', value: 'deep' },
-  { label: '智能管家', value: 'agent' },
-  { label: '规划模式 (开发中)', value: 'plan', disabled: true }
+  { label: '智能体模式', value: 'agent' }
 ]
 
 // 自动滚动到底部

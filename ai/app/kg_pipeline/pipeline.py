@@ -23,6 +23,7 @@ from app.kg_pipeline.extraction import KGExtractor, LlmExtractionError
 from app.kg_pipeline.graph_builder import GraphBuilder
 from app.kg_pipeline.cross_chapter import CrossChapterExtractor
 from app.kg_pipeline.storage import AgeStorage, AgeConnectionError
+from app.engines.rag.ingestion import DocIngestion
 from app.ocr.service import (
     get_infer_result,
     get_output_parse_dir,
@@ -163,6 +164,28 @@ class KGPipeline:
         self.storage.initialize_graph()
         edge_count = self.storage.write_graph(graph)
         logger.info(f"[KG] Written {edge_count} edges to AGE")
+
+        # Step 7: pgvector Ingestion (不依赖 Step 6 的成功)
+        logger.info("[KG] Phase 7: pgvector ingestion")
+        try:
+            entities_per_chunk: dict[int, list[str]] = {}
+            for i, kg in enumerate(chunk_graphs):
+                ci = chunks[i].chunk_index if i < len(chunks) else i
+                entities_per_chunk[ci] = [n.name for n in kg.nodes]
+
+            ingestor = DocIngestion()
+            sub_count = await ingestor.ingest(
+                chunks=chunks,
+                entities_per_chunk=entities_per_chunk,
+                kg_graph_id=None,
+                course_id=None,
+                source="kg_pipeline",
+            )
+            logger.info(f"[KG] Ingested {sub_count} vector chunks to pgvector")
+        except Exception as e:
+            logger.warning(f"[KG] Step 7 (pgvector ingestion) failed: {e}")
+            # Step 7 失败不影响整体 Pipeline 结果
+
         return PipelineResult(
             chunks=len(chunks),
             nodes=graph.number_of_nodes(),

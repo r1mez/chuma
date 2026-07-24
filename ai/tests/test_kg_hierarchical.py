@@ -92,7 +92,8 @@ class TestChunkerHeadingPath:
         md = "## 第3章 栈和队列\n\n栈是后进先出的数据结构。\n\n### 3.1 栈\n\n顺序栈和链栈。\n"
         chunker = MarkdownChunker(max_chunk_size=1024)
         chunks = chunker.chunk(md)
-        assert len(chunks) >= 2
+        # Each heading section = 1 chunk (no more token aggregation)
+        assert len(chunks) == 2
         first = [c for c in chunks if "第3章" in c.text][0]
         assert "第3章 栈和队列" in first.heading_path
         second = [c for c in chunks if "3.1 栈" in c.text][0]
@@ -111,12 +112,11 @@ class TestChunkerHeadingPath:
         md = "# 第1章\n\n## 1.1\n\n### 1.1.1\n\n详细内容。\n"
         chunker = MarkdownChunker(max_chunk_size=1024)
         chunks = chunker.chunk(md)
-        deep_chunks = [c for c in chunks if "1.1.1" in c.heading_path]
-        assert len(deep_chunks) >= 1
-        deep = deep_chunks[0]
-        assert "第1章" in deep.heading_path
-        assert "1.1" in deep.heading_path
-        assert "1.1.1" in deep.heading_path
+        # 3 headings -> 3 chunks
+        # The third chunk (### 1.1.1) should inherit ancestors
+        assert len(chunks) == 3
+        deep = chunks[2]  # third chunk
+        assert deep.heading_path == ["第1章", "1.1", "1.1.1"]
 
 
 from app.kg_pipeline.chapter_builder import ChapterBuilder

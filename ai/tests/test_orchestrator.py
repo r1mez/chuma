@@ -1,5 +1,8 @@
 import pytest
+from unittest.mock import AsyncMock, patch
+
 from app.agent.orchestrator import AgentOrchestrator
+from app.agent.tool_registry import ToolRegistry
 from app.engines.llm.client import ChatResponse
 
 
@@ -86,3 +89,63 @@ class TestAgentOrchestrator:
         # Must not exceed 10 + 1 (force) turns worth of tool calls
         tool_used_count = sum(1 for c in chunks if c["type"] == "tool_used")
         assert tool_used_count <= 11  # 10 normal + 1 forced
+
+
+class TestReadDocumentTool:
+    """read_document 工具 — 验证薄封装行为"""
+
+    @pytest.mark.asyncio
+    async def test_tool_delegates_to_pipeline(self):
+        """read_document 应委托给 RagPipeline.run()"""
+        with patch("app.agent.tools.read_document.RagPipeline") as MockPipeline:
+            mock_instance = AsyncMock()
+            mock_instance.run.return_value = "模拟结果"
+            MockPipeline.return_value = mock_instance
+
+            result = await ToolRegistry.execute(
+                "read_document",
+                {"query": "共享栈", "top_k": 3, "detail_level": "subgraph"},
+                user_id=1,
+            )
+
+            assert "模拟结果" in result
+            mock_instance.run.assert_called_once_with(
+                query="共享栈", top_k=3,
+                detail_level="subgraph", course_id=None,
+            )
+
+    @pytest.mark.asyncio
+    async def test_tool_with_course_id(self):
+        """course_id 参数应透传到 pipeline"""
+        with patch("app.agent.tools.read_document.RagPipeline") as MockPipeline:
+            mock_instance = AsyncMock()
+            mock_instance.run.return_value = "结果"
+            MockPipeline.return_value = mock_instance
+
+            await ToolRegistry.execute(
+                "read_document",
+                {"query": "栈", "course_id": 1},
+                user_id=1,
+            )
+
+            mock_instance.run.assert_called_once_with(
+                query="栈", top_k=5,
+                detail_level="text", course_id=1,
+            )
+
+    @pytest.mark.asyncio
+    async def test_tool_handles_pipeline_error(self):
+        """pipeline 异常时应返回友好错误信息"""
+        with patch("app.agent.tools.read_document.RagPipeline") as MockPipeline:
+            mock_instance = AsyncMock()
+            mock_instance.run.side_effect = Exception("数据库连接失败")
+            MockPipeline.return_value = mock_instance
+
+            result = await ToolRegistry.execute(
+                "read_document",
+                {"query": "共享栈"},
+                user_id=1,
+            )
+
+            assert "检索失败" in result or "数据库" in result
+

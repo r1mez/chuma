@@ -4,11 +4,14 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", force=True)
+
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI
 
 from app.api import chat, gnn, kg
 from app.agent import router as agent_router
+import app.agent.tools  #触发built-in工具注册
 from app.config import settings
 from app.dependencies import verify_service_token
 from app.tasks.scheduler import start_scheduler, stop_scheduler

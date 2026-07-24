@@ -1,4 +1,4 @@
-"""Agent API 路由 — 智能管家对话 SSE 端点"""
+"""Agent API 路由 — 智能体模式对话 SSE 端点"""
 import json
 import logging
 
@@ -19,7 +19,7 @@ auth_dep = [Depends(verify_service_token)]
 
 @router.post("/chat/stream")
 async def agent_chat_stream(req: AgentChatRequest):
-    """智能管家 Agent 对话（SSE 流式）
+    """智能体模式 Agent 对话（SSE 流式）
 
     支持多步推理和工具调用。Agent 会在必要时自动查询知识图谱、
     检索文档或联网搜索，然后整合信息给出回答。

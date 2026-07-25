@@ -110,6 +110,7 @@ class RagPipeline:
         try:
             conn = await asyncpg.connect(self.pg_dsn)
             try:
+                query_vec_str = str(query_vec)
                 rows = await conn.fetch(
                     """
                     SELECT id, chunk_text, metadata,
@@ -120,13 +121,18 @@ class RagPipeline:
                     ORDER BY distance ASC
                     LIMIT $3
                     """,
-                    query_vec,
+                    query_vec_str,
                     course_id,
                     limit,
                 )
                 results = []
                 for row in rows:
-                    meta = row["metadata"] or {}
+                    meta = row["metadata"]
+                    if isinstance(meta, str):
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    elif meta is None:
+                        meta = {}
                     entities = meta.get("entities", [])
                     chapter_path = meta.get("chapter_path", "")
                     results.append(ChunkResult(

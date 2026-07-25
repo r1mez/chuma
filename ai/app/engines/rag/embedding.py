@@ -8,7 +8,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "bge-m3"
+EMBEDDING_MODEL = "/home/ll_yqs2/models/bge-m3"
 EMBEDDING_DIM = 1024
 
 

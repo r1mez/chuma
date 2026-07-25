@@ -155,7 +155,7 @@ class DocIngestion:
                     }
                     records.append((
                         sub["text"],
-                        embeddings[i],
+                        str(embeddings[i]),  # list → "[0.0199, -0.0138, ...]"
                         json.dumps(metadata),
                         kg_graph_id,
                         course_id,

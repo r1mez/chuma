@@ -72,12 +72,12 @@ class Settings(BaseSettings):
     # MCP 数据库服务 (FastMCP SSE)
     MCP_DB_URL: str = ""
 
-    # BGE-M3 嵌入模型（vLLM 部署，端口 8010）
-    BGE_M3_URL: str = "http://10.16.75.254:8010"
+    # BGE-M3 嵌入模型
+    BGE_M3_URL: str = ""
     BGE_M3_DIM: int = 1024
 
-    # BGE-Reranker-v2-M3 重排序模型（vLLM 部署，端口 8011）
-    BGE_RERANKER_URL: str = "http://10.16.75.254:8011"
+    # BGE-Reranker-v2-M3 重排序模型
+    BGE_RERANKER_URL: str = ""
 
     # pgvector DSN（留空则从 AGE 配置自动构建）
     PGVECTOR_DSN: str = ""

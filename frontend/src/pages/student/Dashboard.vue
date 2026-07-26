@@ -54,8 +54,8 @@
           <div class="action-list">
             <div class="action-item">
               <span class="action-desc text-truncate">{{ subject.latestMsg }}</span>
-              <!-- 跳转到 AI 练习 -->
-              <el-button size="small" type="primary" plain @click="navigateTo('/student/chat', subject.id)">跳转练习</el-button>
+              <!-- 跳转到 题目练习面板 -->
+              <el-button size="small" type="primary" plain @click="navigateTo('/student/practice/panel', subject.id)">跳转练习</el-button>
             </div>
             <div class="action-item">
               <span class="action-desc text-truncate">{{ subject.recordMsg }}</span>
@@ -65,7 +65,7 @@
           </div>
 
           <!-- 知识图谱全宽按钮 -->
-          <el-button class="full-width-btn" type="success" plain @click="navigateTo('/student/graph', subject.id)">
+          <el-button class="full-width-btn" type="success" plain @click="navigateTo('/student/knowledge', subject.id)">
             {{ subject.name }} 知识图谱
           </el-button>
         </div>
@@ -81,19 +81,19 @@ import BorderGlow from '@/components/BorderGlow.vue'
 
 const router = useRouter()
 
-// Mock：四个学科的数据，供前端布局展示使用
+// Mock：四个学科的数据，供前端布局展示使用。ID 使用与 PracticeHome 一致的字符串 ID
 const subjects = ref([
-  { id: 1, name: '数据结构', progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
-  { id: 2, name: '计算机组成原理', progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
-  { id: 3, name: '操作系统', progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
-  { id: 4, name: '计算机网络', progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
+  { id: 'ds', name: '数据结构', progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
+  { id: 'co', name: '计算机组成原理', progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
+  { id: 'os', name: '操作系统', progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
+  { id: 'net', name: '计算机网络', progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
 ])
 
 // 路由跳转逻辑
-const navigateTo = (path: string, subjectId?: number) => {
+const navigateTo = (path: string, subjectId?: string) => {
   router.push({
     path,
-    query: subjectId ? { subject: subjectId } : undefined
+    query: subjectId ? { module: subjectId } : undefined
   })
 }
 </script>

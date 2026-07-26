@@ -3,9 +3,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, shallowRef, nextTick } from 'vue'
-import * as echarts from 'echarts'
-import type { GraphData, GraphNode, GraphEdge } from '@/api/knowledge'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import ForceGraph3D from '3d-force-graph'
+import * as THREE from 'three'
+import SpriteText from 'three-spritetext'
+import type { GraphData, GraphNode } from '@/api/knowledge'
 import { useKnowledgeStore } from '@/stores/knowledge'
 
 const props = defineProps<{
@@ -23,10 +25,15 @@ const emit = defineEmits<{
   nodeDblClick: [node: GraphNode]
 }>()
 
-const store = useKnowledgeStore()
 const chartRef = ref<HTMLElement>()
-const chart = shallowRef<echarts.ECharts>()
+let graph: any = null
 let clickTimer: ReturnType<typeof setTimeout> | null = null
+let resizeObserver: ResizeObserver | null = null
+
+// 点击聚焦状态
+const focusedNode = ref<GraphNode | null>(null)
+const focusedNeighbors = ref<Set<string>>(new Set())
+const hoverNode = ref<GraphNode | null>(null) // 新增悬停状态
 
 // Cognee 风格颜色映射
 const TYPE_COLORS: Record<string, string> = {
@@ -44,7 +51,9 @@ function getColor(type: string): string {
   return TYPE_COLORS[type] || '#94A3B8'
 }
 
-function buildOption() {
+function updateGraphData() {
+  if (!graph) return
+
   const filteredNodes = props.data.nodes.filter(
     n => props.activeTypes.size === 0 || props.activeTypes.has(n.type)
   )
@@ -53,190 +62,217 @@ function buildOption() {
     e => activeNodeIds.has(e.source) && activeNodeIds.has(e.target)
   )
 
-  // 展开（有 nodeFxMap 数据）时禁用入场动画，让节点直接出现在正确位置
-  // 避免 notMerge: true 重建图表时的"全量闪烁"效果
-  const hasFxMap = props.nodeFxMap && Object.keys(props.nodeFxMap).length > 0
-
-  return {
-    backgroundColor: '#0F0F0F',
-    tooltip: {
-      formatter: (params: any) => {
-        if (params.dataType === 'node') {
-          const n = params.data
-          return `
-            <div style="font-weight:600;margin-bottom:4px">${n.name}</div>
-            <span style="display:inline-block;padding:0 6px;border-radius:4px;
-              background:${getColor(n.value)};color:#fff;font-size:11px">${n.value}</span>
-            <p style="margin:6px 0 0;font-size:12px;color:#aaa">${n.description || ''}</p>
-          `
-        }
-        return ''
-      },
-      backgroundColor: '#1a1a2e',
-      borderColor: '#333',
-      textStyle: { color: '#F4F4F4', fontSize: 12 },
-    },
-    series: [{
-      type: 'graph',
-      layout: 'force',
-      force: {
-        repulsion: 350,
-        edgeLength: [80, 200],
-        layoutAnimation: true,
-        friction: 0.1,
-      },
-      animation: hasFxMap ? false : undefined,
-      animationDuration: hasFxMap ? 0 : 600,
-      animationDurationUpdate: hasFxMap ? 0 : 600,
-      animationEasingUpdate: 'cubicOut',
-      roam: true,
-      draggable: true,
-      data: filteredNodes.map(n => {
-        const layout = props.nodeFxMap?.[n.id]
-        const isHighlighted = props.highlightedNodeIds?.has(n.id)
-        const isAnchor = props.anchorNodeIds?.has(n.id)
-        const isExpanded = props.expandedNodeIds.has(n.id)
-
-        // 调试日志
-        if (layout) {
-          console.log('节点', n.id, '使用 fx/fy:', layout)
-        }
-
-        let borderColor = '#fff'
-        let borderWidth = 1
-        let shadowBlur = 6
-        let shadowColor = 'rgba(0,0,0,0.3)'
-
-        if (isHighlighted) {
-          // 橙色高亮（已存在于图中的一跳节点）
-          borderColor = '#FF8C00'
-          borderWidth = 3
-          shadowBlur = 16
-          shadowColor = 'rgba(255, 140, 0, 0.6)'
-        }
-        if (isAnchor) {
-          borderColor = '#00E5FF'
-          borderWidth = 4
-          shadowBlur = 24
-          shadowColor = 'rgba(0, 229, 255, 0.8)'
-        } else if (isExpanded && !isHighlighted) {
-          // 新展开的节点（非橙色）
-          borderColor = '#A78BFA'
-          borderWidth = 3
-          shadowBlur = 16
-          shadowColor = 'rgba(167, 139, 250, 0.6)'
-        }
-
-        // 高亮节点的填充色也变为橙色
-        const fillColor = isHighlighted ? '#FF8C00' : getColor(n.type)
-
-        return {
-          id: n.id,
-          name: n.name,
-          value: n.type,
-          x: layout?.fx,  // 初始位置 = 目标固定位置，force 布局从此开始
-          y: layout?.fy,
-          fx: layout?.fx,
-          fy: layout?.fy,
-          fixed: layout ? true : undefined,  // 有 fx/fy 的节点需显式标记为固定
-          itemStyle: {
-            color: fillColor,
-            borderColor,
-            borderWidth,
-            shadowBlur,
-            shadowColor,
-          },
-          symbolSize: isHighlighted
-            ? Math.max(22, Math.min(55, 12 + (n.degree || 0) * 3))  // 橙色节点稍微放大
-            : Math.max(20, Math.min(50, 10 + (n.degree || 0) * 3)),
-          label: {
-            show: props.showLabels,
-            color: isHighlighted ? '#FF8C00' : '#F4F4F4',
-            fontSize: isHighlighted ? 12 : 11,
-            fontWeight: isHighlighted ? 600 : 500,
-            textShadowBlur: 4,
-            textShadowColor: '#000',
-          },
-          description: n.description,
-          degree: n.degree,
-        }
-      }),
-      links: filteredEdges.map(e => ({
-        source: e.source,
-        target: e.target,
-        label: {
-          show: props.showLabels,
-          formatter: e.relationship_name,
-          color: '#94A3B8',
-          fontSize: 9,
-        },
-        lineStyle: {
-          color: '#333',
-          width: 1.5,
-          opacity: 0.6,
-          curveness: 0.2,
-        },
-      })),
-      edgeLabel: {
-        show: props.showLabels,
-        fontSize: 9,
-        color: '#94A3B8',
-      },
-      emphasis: {
-        focus: 'adjacency',
-        lineStyle: { width: 3, opacity: 0.8, color: '#666' },
-      },
-      blur: {
-        opacity: 0.15,
-        lineStyle: { opacity: 0.1 },
-      },
-      lineStyle: { color: 'source' },
-    }],
+  // 【关键修复】参照旧逻辑数据处理，必须进行深拷贝，彻底解除 Vue 3 Proxy 响应式追踪。
+  // 否则 3d-force-graph 底层引擎修改节点坐标时会引发严重性能问题或崩溃导致黑屏。
+  const gData = {
+    nodes: JSON.parse(JSON.stringify(filteredNodes)),
+    links: JSON.parse(JSON.stringify(filteredEdges)).map((e: any) => ({
+      ...e,
+      source: e.source,
+      target: e.target
+    }))
   }
+
+  graph.graphData(gData)
 }
 
 function initChart() {
   if (!chartRef.value) return
-  chart.value = echarts.init(chartRef.value, undefined, { renderer: 'canvas' })
-  chart.value.setOption(buildOption())
 
-  chart.value.on('click', (params: any) => {
-    if (params.dataType === 'node') {
-      // 延迟执行单击，若 300ms 内发生双击则取消
-      clickTimer = setTimeout(() => {
-        const node = props.data.nodes.find(n => n.id === params.data.id)
-        if (node) emit('nodeClick', node)
-      }, 300)
-    }
-  })
+  const ForceGraph3DClass = (ForceGraph3D as any).default || ForceGraph3D
 
-  chart.value.on('dblclick', (params: any) => {
-    if (clickTimer) {
-      clearTimeout(clickTimer)
-      clickTimer = null
-    }
-    if (params.dataType === 'node') {
-      const node = props.data.nodes.find(n => n.id === params.data.id)
-      if (node && node.type !== 'Chapter') {
-        emit('nodeDblClick', node)
+  // @ts-ignore
+  graph = ForceGraph3DClass()(chartRef.value)
+    .backgroundColor('rgba(0,0,0,0)') // 透明背景以融合当前卡片样式
+    .showNavInfo(false) // 隐藏底部提示文字
+    
+  if (chartRef.value.clientWidth && chartRef.value.clientHeight) {
+    graph.width(chartRef.value.clientWidth).height(chartRef.value.clientHeight)
+  }
+
+  graph.nodeThreeObject((node: any) => {
+      const group = new THREE.Group()
+
+      const isFocused = focusedNode.value && (node.id === focusedNode.value.id || focusedNeighbors.value.has(node.id))
+      const isDimmed = focusedNode.value && !isFocused
+      const isHovered = hoverNode.value?.id === node.id
+
+      // 决定颜色 (实体化处理，不再使用透明度)
+      const baseColorStr = isFocused ? '#FF8C00' : getColor(node.type)
+      const sphereColor = new THREE.Color(baseColorStr)
+      if (isDimmed) {
+        sphereColor.multiplyScalar(0.3) // 暗淡状态下，直接让颜色变暗，而不是变透明
       }
-    }
-  })
-}
 
-function handleResize() {
-  chart.value?.resize()
+      // 绘制主球体 (使用 Phong 材质增加反光质感，完全实体化)
+      const radius = Math.max(4, Math.min(10, 3 + (node.degree || 0) * 0.5))
+      const currentRadius = isHovered ? radius * 1.2 : radius
+      const geometry = new THREE.SphereGeometry(currentRadius, 32, 32)
+      const material = new THREE.MeshPhongMaterial({ 
+        color: sphereColor, 
+        transparent: false, // 彻底关闭透明，保证球体是实心的
+        opacity: 1,
+        shininess: isDimmed ? 10 : 60, // 高光反光
+        emissive: sphereColor,
+        emissiveIntensity: isFocused || isHovered ? 0.5 : (isDimmed ? 0.0 : 0.1)
+      })
+      const sphere = new THREE.Mesh(geometry, material)
+      group.add(sphere)
+
+      // 绘制文字标签
+      if (props.showLabels) {
+        try {
+          const SpriteTextClass = (SpriteText as any).default || SpriteText
+          const sprite = new SpriteTextClass(String(node.name || ''))
+          // isDimmed 状态下字体颜色稍微亮一点，避免与背景融为一体
+          sprite.color = isFocused ? '#FF8C00' : (isDimmed ? '#999999' : '#FFFFFF')
+          sprite.textHeight = isFocused || isHovered ? 6 : (isDimmed ? 3 : 3.5)
+          sprite.position.y = - (currentRadius + sprite.textHeight + 2) // 将文字放在球体下方
+          sprite.material.depthWrite = false // 防止文字遮挡
+          sprite.material.opacity = isDimmed ? 0.5 : 1 // 暗淡时文字也半透明，但不至于看不见
+          group.add(sprite)
+        } catch (e) {
+          console.error('SpriteText render error:', e)
+        }
+      }
+
+      return group
+    })
+    .linkColor((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      
+      // 两端都点亮（高亮）则边高亮
+      if (focusedNode.value) {
+        const isSrcBright = srcId === focusedNode.value.id || focusedNeighbors.value.has(srcId)
+        const isTgtBright = tgtId === focusedNode.value.id || focusedNeighbors.value.has(tgtId)
+        if (isSrcBright && isTgtBright) {
+          return '#FFB84D' // 高亮边（稍微亮一点的橙色）
+        }
+        return 'rgba(255,255,255,0.06)' // 暗淡边 (提升可见度)
+      }
+      return 'rgba(255,255,255,0.15)' // 正常边
+    })
+    .linkOpacity((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      if (focusedNode.value) {
+        const isSrcBright = srcId === focusedNode.value.id || focusedNeighbors.value.has(srcId)
+        const isTgtBright = tgtId === focusedNode.value.id || focusedNeighbors.value.has(tgtId)
+        if (isSrcBright && isTgtBright) return 0.8
+        return 0.15 // 提升透明度，防止看不见
+      }
+      return 0.3
+    })
+    .linkWidth((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      if (focusedNode.value) {
+        const isSrcBright = srcId === focusedNode.value.id || focusedNeighbors.value.has(srcId)
+        const isTgtBright = tgtId === focusedNode.value.id || focusedNeighbors.value.has(tgtId)
+        if (isSrcBright && isTgtBright) return 2.5
+        return 0.2
+      }
+      return 0.8
+    })
+    // ==========================================
+    // 新增：灵动效果 - 连线上的流动光点粒子
+    // ==========================================
+    .linkDirectionalParticles((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      if (focusedNode.value) {
+        const isSrcBright = srcId === focusedNode.value.id || focusedNeighbors.value.has(srcId)
+        const isTgtBright = tgtId === focusedNode.value.id || focusedNeighbors.value.has(tgtId)
+        if (isSrcBright && isTgtBright) return 4 // 高亮边粒子更多
+        return 0 // 暗淡边不要粒子
+      }
+      return 2 // 正常状态下每条边2个粒子流
+    })
+    .linkDirectionalParticleWidth((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      if (focusedNode.value) {
+        const isSrcBright = srcId === focusedNode.value.id || focusedNeighbors.value.has(srcId)
+        const isTgtBright = tgtId === focusedNode.value.id || focusedNeighbors.value.has(tgtId)
+        if (isSrcBright && isTgtBright) return 3 // 高亮边粒子更大
+        return 0
+      }
+      return 1.5 // 正常粒子大小
+    })
+    .linkDirectionalParticleSpeed(0.004) // 粒子流动速度
+    .linkDirectionalParticleColor(() => '#FFFFFF') // 粒子颜色为纯白发光
+    // ==========================================
+    .onNodeHover((node: any) => {
+      if (chartRef.value) {
+        chartRef.value.style.cursor = node ? 'pointer' : 'default'
+      }
+      if (hoverNode.value?.id !== node?.id) {
+        hoverNode.value = node || null
+        // 触发节点重绘以显示悬停光晕
+        graph.nodeThreeObject(graph.nodeThreeObject())
+      }
+    })
+    .onNodeClick((node: any) => {
+      // 模拟单击与双击
+      if (clickTimer) {
+        clearTimeout(clickTimer)
+        clickTimer = null
+        emit('nodeDblClick', node)
+      } else {
+        clickTimer = setTimeout(() => {
+          clickTimer = null
+          
+          // 聚焦逻辑
+          if (focusedNode.value?.id === node.id) {
+            // 取消聚焦
+            focusedNode.value = null
+            focusedNeighbors.value.clear()
+          } else {
+            focusedNode.value = node
+            const neighbors = new Set<string>()
+            props.data.edges.forEach(e => {
+              if (e.source === node.id) neighbors.add(e.target)
+              if (e.target === node.id) neighbors.add(e.source)
+            })
+            focusedNeighbors.value = neighbors
+          }
+          
+          // 触发重新着色
+          graph.nodeThreeObject(graph.nodeThreeObject())
+               .linkColor(graph.linkColor())
+               .linkOpacity(graph.linkOpacity())
+               .linkWidth(graph.linkWidth())
+
+          emit('nodeClick', node)
+          
+          // 3D相机移动到该节点
+          if (focusedNode.value) {
+            const distance = 200
+            const x = node.x || 0, y = node.y || 0, z = node.z || 0
+            const hyp = Math.hypot(x, y, z) || 1
+            const distRatio = 1 + distance / hyp
+            graph.cameraPosition(
+              { x: x * distRatio, y: y * distRatio, z: z * distRatio }, 
+              node, 
+              1500 
+            )
+          }
+        }, 300)
+      }
+    })
+    
+  updateGraphData()
 }
 
 watch(
-  () => [props.data, props.showLabels, props.activeTypes, props.expandedNodeIds, props.highlightedNodeIds, props.nodeFxMap],
+  () => [props.data, props.activeTypes, props.showLabels],
   () => {
-    console.log('=== ECharts 更新 ===')
-    console.log('节点数量:', props.data.nodes.length)
-    console.log('边数量:', props.data.edges.length)
-    console.log('fxMap 大小:', Object.keys(props.nodeFxMap || {}).length)
     nextTick(() => {
-      chart.value?.setOption(buildOption(), { notMerge: true, lazyUpdate: false })
+      updateGraphData()
+      if (graph) {
+        graph.nodeThreeObject(graph.nodeThreeObject())
+      }
     })
   },
   { deep: true }
@@ -244,44 +280,48 @@ watch(
 
 onMounted(() => {
   initChart()
-  window.addEventListener('resize', handleResize)
+  
+  if (chartRef.value) {
+    resizeObserver = new ResizeObserver((entries) => {
+      if (graph && entries.length > 0) {
+        const { width, height } = entries[0].contentRect
+        if (width > 0 && height > 0) {
+          graph.width(width)
+          graph.height(height)
+        }
+      }
+    })
+    resizeObserver.observe(chartRef.value)
+  }
 })
 
 onUnmounted(() => {
   if (clickTimer) clearTimeout(clickTimer)
-  window.removeEventListener('resize', handleResize)
-  chart.value?.dispose()
+  if (resizeObserver) resizeObserver.disconnect()
+  if (graph) {
+    graph._destructor()
+  }
 })
 
+// 为兼容原组件的方法
 function getNodePositions(): Map<string, {x: number; y: number}> {
-  const result = new Map<string, {x: number; y: number}>()
-  if (!chart.value) return result
-  try {
-    const seriesModel = (chart.value as any).getModel().getSeries()[0]
-    if (!seriesModel) return result
-    // ECharts 力导布局将坐标写入 GraphNode.setLayout([x, y])，而非 data.setItemLayout()
-    // series.getData().getItemLayout(i) 对 graph series 不返回布局计算结果
-    // 正确做法：通过 series.getGraph().nodes 遍历，从 GraphNode.getLayout() 读取
-    const graph = (seriesModel as any).getGraph?.()
-    if (!graph || !graph.nodes) return result
-    for (const node of graph.nodes) {
-      if (!node.id) continue
-      const layout = node.getLayout?.()
-      if (layout && Array.isArray(layout) && layout.length >= 2
-          && !isNaN(layout[0]) && !isNaN(layout[1])) {
-        result.set(String(node.id), { x: layout[0], y: layout[1] })
-      }
-    }
-  } catch {
-    // ECharts 内部状态可能不完整
-  }
-  return result
+  return new Map() // 3D 图不再需要 2D 位置
 }
 
 defineExpose({
-  zoomIn: () => { /* via ECharts action */ },
-  zoomOut: () => { /* via ECharts action */ },
-  resetView: () => { chart.value?.setOption(buildOption(), true) },
+  zoomIn: () => { if(graph) { const p = graph.cameraPosition(); graph.cameraPosition({z: p.z - 100}, null, 500) } },
+  zoomOut: () => { if(graph) { const p = graph.cameraPosition(); graph.cameraPosition({z: p.z + 100}, null, 500) } },
+  resetView: () => { 
+    focusedNode.value = null; 
+    focusedNeighbors.value.clear(); 
+    if(graph) {
+      graph.nodeThreeObject(graph.nodeThreeObject())
+           .linkColor(graph.linkColor())
+           .linkOpacity(graph.linkOpacity())
+           .linkWidth(graph.linkWidth())
+      graph.zoomToFit(500);
+    }
+  },
   getNodePositions,
 })
 </script>
@@ -291,5 +331,8 @@ defineExpose({
   width: 100%;
   height: 100%;
   min-height: 500px;
+  background: #000; /* 为了3D效果，保留纯黑背景以突显立体感 */
+  border-radius: 8px;
+  overflow: hidden;
 }
 </style>

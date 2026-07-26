@@ -1,7 +1,21 @@
 <template>
   <BorderGlow class="subject-records-page" background-color="transparent">
     <div class="glass-card page-container">
-      <h2 class="page-title">{{ subjectName }}做题记录</h2>
+      <div class="header-toolbar">
+        <el-button class="back-btn" plain @click="goBack">返回</el-button>
+        <h2 class="page-title">{{ subjectName }}做题记录</h2>
+        <div class="search-box">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索题目..."
+            clearable
+          >
+            <template #append>
+              <el-button @click="handleSearch">搜索</el-button>
+            </template>
+          </el-input>
+        </div>
+      </div>
       
       <!-- 记录列表区域，独立滚动 -->
       <div class="list-container scroll-area">
@@ -47,10 +61,20 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
 
 const route = useRoute()
 const router = useRouter()
+
+const goBack = () => {
+  router.back()
+}
+
+const searchQuery = ref('')
+const handleSearch = () => {
+  ElMessage.success(`搜索内容：${searchQuery.value}`)
+}
 
 const moduleId = route.query.module as string
 
@@ -110,13 +134,48 @@ const goToPracticePanel = (questionId: number) => {
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
+.header-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-shrink: 0;
+  position: relative;
+}
+
 .page-title {
-  margin: 0 0 24px 0;
+  margin: 0;
   font-size: 1.5rem;
   font-weight: bold;
   color: #000;
-  text-align: center;
-  flex-shrink: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.back-btn {
+  border-color: #666;
+  color: #333;
+  background: transparent;
+}
+.back-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #000;
+  border-color: #000;
+}
+
+.search-box {
+  width: 250px;
+}
+:deep(.search-box .el-input__wrapper) {
+  background: transparent;
+  box-shadow: 0 0 0 1px #666 inset;
+}
+:deep(.search-box .el-input-group__append) {
+  background: transparent;
+  border: 1px solid #666;
+  border-left: none;
+  color: #333;
 }
 
 .list-container {

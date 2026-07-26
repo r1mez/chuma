@@ -74,11 +74,6 @@
       <!-- 图谱视图 -->
       <template v-else-if="store.graphData">
         <div class="kg-toolbar">
-          <div class="kg-stats">
-            <span class="stat-item">节点: {{ store.nodeCount }}</span>
-            <span class="stat-divider" />
-            <span class="stat-item">边: {{ store.edgeCount }}</span>
-          </div>
           <div class="kg-search-wrapper">
             <el-autocomplete
               v-model="store.searchQuery"

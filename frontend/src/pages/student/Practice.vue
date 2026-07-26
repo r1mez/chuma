@@ -10,6 +10,7 @@
             <div class="question-actions">
               <el-button size="small" type="danger" plain @click="prevQuestion">上一题</el-button>
               <el-button size="small" type="danger" plain @click="nextQuestion">下一题</el-button>
+              <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
             </div>
           </div>
           <div class="scroll-area">
@@ -118,8 +119,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+
+const router = useRouter()
 
 // -----------------
 // Mock 业务数据
@@ -156,6 +160,10 @@ const prevQuestion = () => {
 
 const nextQuestion = () => {
   ElMessage.success('已切换至下一题')
+}
+
+const goBack = () => {
+  router.back()
 }
 
 // 仅用于测试前端独立滚动条是否生效的超长文本

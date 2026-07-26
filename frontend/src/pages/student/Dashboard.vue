@@ -7,11 +7,11 @@
         <div class="glass-card personal-info">
           <h3 class="card-title">个人信息</h3>
           <div class="info-content">
-            <div class="avatar-placeholder">🧑‍🎓</div>
+            <div class="avatar-placeholder">🧑</div>
             <div class="info-text">
-              <p><strong>姓名：</strong>张三</p>
-              <p><strong>学号：</strong>2024001</p>
-              <p><strong>目标：</strong>408 计算机考研</p>
+              <p><strong>姓名：</strong>秦诗浩</p>
+              <p><strong>学号：</strong>S240231118</p>
+              <p><strong>目标：</strong>计算机知识学习</p>
             </div>
           </div>
         </div>
@@ -44,9 +44,9 @@
               <div class="flag-pole"></div>
               <div class="flag-cloth"></div>
             </div>
-            <!-- 跑步小人 (基于进度动态定位) -->
-            <div class="runner" :style="{ left: `calc(${subject.progress}% - 12px)` }">
-              🏃
+            <!-- 进度条 (基于进度动态定位) -->
+            <div class="progress-bar" :style="{ left: `calc(${subject.progress}% - 12px)` }">
+              🚀
             </div>
           </div>
 
@@ -244,8 +244,8 @@ const navigateTo = (path: string, subjectId?: number) => {
   clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
 
-/* 跑步的小人 */
-.runner {
+/* 进度条 */
+.progress-bar {
   position: absolute;
   bottom: 0;
   font-size: 24px;

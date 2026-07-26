@@ -13,7 +13,7 @@ export interface KgTask {
 }
 
 const POLL_INTERVAL = 3000
-const MAX_POLL_TIME = 30 * 60 * 1000
+const MAX_POLL_TIME = 720 * 60 * 1000
 
 export function useKgPipeline() {
   const tasks = ref<KgTask[]>([])

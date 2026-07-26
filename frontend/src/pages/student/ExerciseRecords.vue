@@ -17,7 +17,20 @@
 
       <!-- 右侧：错题记录列表 -->
       <div class="right-panel glass-card">
-        <h3 class="panel-title">错题记录</h3>
+        <div class="right-header">
+          <h3 class="panel-title">错题记录</h3>
+          <div class="search-box">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索错题..."
+              clearable
+            >
+              <template #append>
+                <el-button @click="handleSearch">搜索</el-button>
+              </template>
+            </el-input>
+          </div>
+        </div>
         <div class="records-list scroll-area">
           <div 
             v-for="record in pagedWrongRecords" 
@@ -57,9 +70,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
 
 const router = useRouter()
+
+const searchQuery = ref('')
+const handleSearch = () => {
+  ElMessage.success(`搜索错题：${searchQuery.value}`)
+}
 
 // 跳转到具体学科做题记录
 const enterSubjectDetail = (subjectId: string) => {
@@ -172,12 +191,37 @@ const pagedWrongRecords = computed(() => {
   overflow: hidden;
 }
 
+.right-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+  position: relative;
+}
+
 .panel-title {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 1.2rem;
   font-weight: bold;
-  text-align: center;
-  flex-shrink: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.search-box {
+  width: 200px;
+  margin-left: auto; /* push to right if absolute center doesn't push it */
+}
+:deep(.search-box .el-input__wrapper) {
+  background: transparent;
+  box-shadow: 0 0 0 1px #666 inset;
+}
+:deep(.search-box .el-input-group__append) {
+  background: transparent;
+  border: 1px solid #666;
+  border-left: none;
+  color: #333;
 }
 
 .records-list {

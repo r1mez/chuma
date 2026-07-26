@@ -17,7 +17,8 @@ const router = createRouter({
       children: [
         { path: 'dashboard', component: () => import('@/pages/student/Dashboard.vue') },
         { path: 'knowledge', component: () => import('@/pages/student/KnowledgeExplore.vue') },
-        { path: 'practice', component: () => import('@/pages/student/Practice.vue') },
+        { path: 'practice', component: () => import('@/pages/student/PracticeHome.vue') },
+        { path: 'practice/panel', component: () => import('@/pages/student/Practice.vue') },
         { path: 'exercise-records', component: () => import('@/pages/student/ExerciseRecords.vue') },
         { path: 'subject-records', component: () => import('@/pages/student/SubjectRecords.vue') },
         { path: 'chat', component: () => import('@/pages/student/Chat.vue') },

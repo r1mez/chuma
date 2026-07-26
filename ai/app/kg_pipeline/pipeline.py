@@ -85,15 +85,27 @@ class KGPipeline:
         return md_content
     async def _extract_all_chunks(
         self, chunks: list[DocumentChunk]
-    ) -> list[KnowledgeGraph]:
-        """逐块进行 LLM 抽取"""
+    ) -> tuple[list[KnowledgeGraph], int]:
+        """逐块进行 LLM 抽取，单块失败不中断整体流程
+
+        Returns:
+            (chunk_graphs, failed_count): 抽取结果列表 + 失败块计数
+        """
         chunk_graphs: list[KnowledgeGraph] = []
+        failed = 0
         total = len(chunks)
         for i, chunk in enumerate(chunks):
             logger.info(f"[KG] Extracting chunk {i + 1}/{total}")
-            kg = await self.extractor.extract_from_chunk(chunk)
-            chunk_graphs.append(kg)
-        return chunk_graphs
+            try:
+                kg = await self.extractor.extract_from_chunk(chunk)
+                chunk_graphs.append(kg)
+            except LlmExtractionError as e:
+                logger.warning(
+                    f"[KG] Chunk {i + 1}/{total} extraction failed, skipping: {e}"
+                )
+                chunk_graphs.append(KnowledgeGraph(nodes=[], edges=[]))
+                failed += 1
+        return chunk_graphs, failed
     async def run_from_markdown(self, markdown_text: str) -> PipelineResult:
         """从 Markdown 文本直接构建知识图谱（跳过 OCR）
 
@@ -128,10 +140,12 @@ class KGPipeline:
         logger.info(f"[KG] Generated {len(chapter_graph.nodes)} chapter nodes, {len(chapter_graph.edges)} contains edges")
         # Step 3: LLM 知识点抽取
         logger.info("[KG] Phase 3: LLM Knowledge point extraction")
-        chunk_graphs = await self._extract_all_chunks(chunks)
+        chunk_graphs, failed_chunks = await self._extract_all_chunks(chunks)
         total_nodes = sum(len(kg.nodes) for kg in chunk_graphs)
         total_edges = sum(len(kg.edges) for kg in chunk_graphs)
         logger.info(f"[KG] Extracted {total_nodes} knowledge points, {total_edges} internal edges from LLM")
+        if failed_chunks > 0:
+            logger.warning(f"[KG] {failed_chunks}/{len(chunks)} chunks failed extraction")
         # Step 4: GraphBuilder — 合并章节 + 知识点，自动挂载
         logger.info("[KG] Phase 4: Graph building (merge + auto-mount)")
         graph = self.graph_builder.build(
@@ -191,6 +205,7 @@ class KGPipeline:
             nodes=graph.number_of_nodes(),
             edges=graph.number_of_edges(),
             status="completed",
+            failed_chunks=failed_chunks,
         )
     async def run_from_file(self, file_path: str) -> PipelineResult:
         """从原始文档文件构建知识图谱（PDF → OCR → KG，或 Markdown → 直接处理）

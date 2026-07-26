@@ -80,3 +80,4 @@ class PipelineResult(BaseModel):
     edges: int = 0
     status: str = "pending"
     error: Optional[str] = None
+    failed_chunks: int = 0

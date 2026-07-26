@@ -75,8 +75,8 @@ const menuItems = [
   { name: '做题记录', path: '/student/exercise-records' },
   { name: 'AI 助教', path: '/student/chat' },
   { name: '学习计划', path: '/student/plan' },
-  { name: '文档解析', path: '/student/ocr' },
-  { name: '图谱构建', path: '/student/kg-pipeline' }
+  { name: '互动专区', path: '/student/interactive' },
+  { name: '消息提醒', path: '/student/messages' }
 ]
 
 // 导航跳转逻辑

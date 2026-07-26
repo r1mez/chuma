@@ -24,6 +24,9 @@ const router = createRouter({
         { path: 'plan', component: () => import('@/pages/student/LearningPlan.vue') },
         { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },
         { path: 'kg-pipeline', component: () => import('@/pages/student/KgPipeline.vue') },
+        { path: 'interactive', component: () => import('@/pages/student/InteractiveZone.vue') },
+        { path: 'interactive/:id', component: () => import('@/pages/student/InteractiveDetail.vue') },
+        { path: 'messages', component: () => import('@/pages/student/MessageNotifications.vue') },
       ],
     },
     {

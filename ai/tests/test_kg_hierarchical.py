@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.kg_pipeline.models import EntityType, DocumentChunk, KGNode, KGEdge, KnowledgeGraph
+from app.kg_pipeline.models import EntityType, DocumentChunk, KGNode, KGEdge, KnowledgeGraph3D
 
 
 class TestEntityType:
@@ -179,14 +179,14 @@ class TestChapterBuilder:
         assert len(contains_edges) == 1
 
     def test_empty_chunks(self):
-        """空 chunks 返回空 KnowledgeGraph"""
+        """空 chunks 返回空 KnowledgeGraph3D"""
         builder = ChapterBuilder()
         kg = builder.build([])
         assert len(kg.nodes) == 0
         assert len(kg.edges) == 0
 
     def test_chunks_without_headings(self):
-        """没有 heading_path 的 chunks 返回空 KnowledgeGraph"""
+        """没有 heading_path 的 chunks 返回空 KnowledgeGraph3D"""
         chunks = [DocumentChunk(text="内容")]
         builder = ChapterBuilder()
         kg = builder.build(chunks)
@@ -254,7 +254,7 @@ class TestGraphBuilderChapterMount:
         builder = GraphBuilder()
 
         # 章节图
-        chapter_graph = KnowledgeGraph(
+        chapter_graph = KnowledgeGraph3D(
             nodes=[
                 KGNode(id="第3章 栈和队列", name="第3章 栈和队列", type=EntityType.CHAPTER),
                 KGNode(id="3.1 栈", name="3.1 栈", type=EntityType.CHAPTER),
@@ -266,7 +266,7 @@ class TestGraphBuilderChapterMount:
 
         # 知识点图（LLM 抽取结果）
         chunk_graphs = [
-            KnowledgeGraph(
+            KnowledgeGraph3D(
                 nodes=[
                     KGNode(id="顺序栈", name="顺序栈", type=EntityType.DATA_STRUCTURE, description="用数组实现的栈", source_chunk_index=0),
                     KGNode(id="链栈", name="链栈", type=EntityType.DATA_STRUCTURE, description="用链表实现的栈", source_chunk_index=0),
@@ -308,7 +308,7 @@ class TestGraphBuilderChapterMount:
         """不传 chunks 时不自动挂载（向后兼容）"""
         builder = GraphBuilder()
         chunk_graphs = [
-            KnowledgeGraph(
+            KnowledgeGraph3D(
                 nodes=[KGNode(id="TCP", name="TCP", type=EntityType.PROTOCOL)],
                 edges=[],
             ),
@@ -321,7 +321,7 @@ class TestGraphBuilderChapterMount:
         """章节节点和知识点节点应合并到同一张图"""
         builder = GraphBuilder()
 
-        chapter_graph = KnowledgeGraph(
+        chapter_graph = KnowledgeGraph3D(
             nodes=[
                 KGNode(id="第1章", name="第1章", type=EntityType.CHAPTER),
             ],
@@ -329,7 +329,7 @@ class TestGraphBuilderChapterMount:
         )
 
         chunk_graphs = [
-            KnowledgeGraph(
+            KnowledgeGraph3D(
                 nodes=[
                     KGNode(id="算法", name="算法", type=EntityType.CONCEPT, source_chunk_index=0),
                 ],
@@ -466,7 +466,7 @@ class TestPipelineIntegration:
         """Pipeline 应生成章节节点并挂载知识点"""
         # Mock extractor 和 storage
         mock_extractor = AsyncMock()
-        mock_extractor.extract_from_chunk.return_value = KnowledgeGraph(
+        mock_extractor.extract_from_chunk.return_value = KnowledgeGraph3D(
             nodes=[
                 KGNode(id="顺序栈", name="顺序栈", type=EntityType.DATA_STRUCTURE, description="用数组实现的栈", source_chunk_index=0),
             ],

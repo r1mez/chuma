@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.kg_pipeline.models import KGNode, KGEdge, KnowledgeGraph, DocumentChunk, EntityType, PipelineResult
+from app.kg_pipeline.models import KGNode, KGEdge, KnowledgeGraph3D, DocumentChunk, EntityType, PipelineResult
 from app.kg_pipeline.chunking import MarkdownChunker
 from app.kg_pipeline.chapter_builder import ChapterBuilder
 from app.kg_pipeline.extraction import KGExtractor
@@ -14,7 +14,7 @@ def get_pipeline() -> type:
     return KGPipeline
 
 __all__ = [
-    "KGNode", "KGEdge", "KnowledgeGraph", "DocumentChunk", "EntityType", "PipelineResult",
+    "KGNode", "KGEdge", "KnowledgeGraph3D", "DocumentChunk", "EntityType", "PipelineResult",
     "MarkdownChunker", "ChapterBuilder", "KGExtractor", "GraphBuilder",
     "CrossChapterExtractor", "AgeStorage",
 ]

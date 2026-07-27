@@ -16,7 +16,7 @@ import tempfile
 import datetime
 from typing import Optional
 from app.config import settings
-from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph, PipelineResult
+from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph3D, PipelineResult
 from app.kg_pipeline.chunking import MarkdownChunker
 from app.kg_pipeline.chapter_builder import ChapterBuilder
 from app.kg_pipeline.extraction import KGExtractor, LlmExtractionError
@@ -84,9 +84,9 @@ class KGPipeline:
         return md_content
     async def _extract_all_chunks(
         self, chunks: list[DocumentChunk]
-    ) -> list[KnowledgeGraph]:
+    ) -> list[KnowledgeGraph3D]:
         """逐块进行 LLM 抽取"""
-        chunk_graphs: list[KnowledgeGraph] = []
+        chunk_graphs: list[KnowledgeGraph3D] = []
         total = len(chunks)
         for i, chunk in enumerate(chunks):
             logger.info(f"[KG] Extracting chunk {i + 1}/{total}")

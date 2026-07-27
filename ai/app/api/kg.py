@@ -20,6 +20,7 @@ router = APIRouter()
 async def start_kg_build(
     file_path: str = Body(..., embed=True),
     graph_name: str | None = Body(default=None, embed=True),
+    kg_graph_id: int | None = Body(default=None, embed=True),
 ):
     """提交知识图谱构建任务（异步）"""
     task_id = str(uuid.uuid4())
@@ -30,7 +31,8 @@ async def start_kg_build(
         "task_id": task_id,
         "file_path": file_path,
         "output_key": f"kg:result:{task_id}",
-        "graph_name": graph_name,  # pass through to task worker
+        "graph_name": graph_name,
+        "kg_graph_id": kg_graph_id,
     }))
 
     return TaskSubmitResponse(

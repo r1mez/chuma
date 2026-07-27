@@ -11,6 +11,8 @@ class AgentChatRequest(BaseModel):
     user_id: int = 1  # TODO 暂时默认 1，登录实现后改为必填
     message: str
     history: list[dict] = Field(default_factory=list)
+    kg_graph_ids: list[int] = Field(default_factory=list)
+    graph_names: list[str] = Field(default_factory=list)
 
 
 @dataclass

@@ -1,79 +1,65 @@
-"""文档读取工具 — 从 ChromaDB 向量数据库检索上传的课件/笔记/教材内容"""
+"""文档读取工具 — 基于 pgvector + GraphRAG 的 RAG 查询"""
+
 import logging
 
-import chromadb
-
+from app.agent.context import current_kg_graph_ids
 from app.agent.tool_registry import ToolRegistry
-from app.config import settings
+from app.engines.rag.pipeline import RagPipeline, DetailLevel
 
 logger = logging.getLogger(__name__)
-
-DOCUMENT_COLLECTION = "documents"
-
-
-def _get_collection():
-    """获取 ChromaDB 文档集合"""
-    client = chromadb.HttpClient(
-        host=settings.CHROMADB_HOST,
-        port=settings.CHROMADB_PORT,
-    )
-    try:
-        return client.get_collection(DOCUMENT_COLLECTION)
-    except Exception:
-        return None
 
 
 @ToolRegistry.register(
     name="read_document",
-    description="读取学生上传的课件、笔记、教材内容。当用户询问特定课程/章节内容时使用。",
+    description="""读取学生上传的课件、笔记、教材内容。
+当用户询问特定课程/章节的知识点时使用。
+支持三种详细程度，通过 detail_level 控制：
+- text: 仅返回相关文本片段
+- entities: 返回文本 + 涉及的知识点实体名
+- subgraph: 返回文本 + 实体 + 知识点章节路径""",
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "文档检索关键词，如'虚存管理'、'数据库范式'等",
+                "description": "检索关键词，如'虚存管理'、'数据库范式'等",
             },
             "top_k": {
                 "type": "integer",
                 "description": "返回的最大文档片段数，默认5",
             },
+            "detail_level": {
+                "type": "string",
+                "enum": ["text", "entities", "subgraph"],
+                "description": "详细程度：text=仅文本(默认), entities=文本+实体, subgraph=文本+实体+章节路径",
+            },
+            "course_id": {
+                "type": "integer",
+                "description": "按课程过滤（可选，传入课程ID）",
+            },
         },
         "required": ["query"],
     },
 )
-async def read_document(user_id: int, query: str, top_k: int = 5) -> str:
-    """从 ChromaDB 检索相关文档片段"""
+async def read_document(
+    user_id: int,
+    query: str,
+    top_k: int = 5,
+    detail_level: str = "text",
+    course_id: int | None = None,
+) -> str:
+    """从 pgvector 检索文档片段，经 GraphRAG 排序后返回"""
     try:
-        collection = _get_collection()
-        if collection is None:
-            return "文档库暂无内容。请先上传课件或教材文档。"
+        kg_graph_ids = current_kg_graph_ids.get()
 
-        results = collection.query(
-            query_texts=[query],
-            n_results=min(top_k, 10),
+        pipeline = RagPipeline()
+        return await pipeline.run(
+            query=query,
+            top_k=top_k,
+            detail_level=DetailLevel(detail_level),
+            course_id=course_id,
+            kg_graph_ids=kg_graph_ids if kg_graph_ids else None,
         )
-
-        documents = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-
-        if not documents:
-            return f"未在已上传文档中找到与 '{query}' 相关的内容。"
-
-        output_lines = [f"文档检索结果（关键词: {query}，共 {len(documents)} 个片段）:\n"]
-
-        for i, doc in enumerate(documents):
-            source = ""
-            if metadatas and i < len(metadatas) and metadatas[i]:
-                source = metadatas[i].get("source", "")
-            header = f"--- 片段 {i + 1}"
-            if source:
-                header += f"（来源: {source}）"
-            header += " ---"
-            output_lines.append(header)
-            output_lines.append(doc.strip())
-            output_lines.append("")
-
-        return "\n".join(output_lines)
     except Exception as e:
         logger.error(f"Document query failed: {e}")
-        return f"文档检索失败: {str(e)}"
+        return f"文档检索失败: {str(e)}。请检查数据库连接或稍后重试。"

@@ -23,6 +23,7 @@ export function useChat() {
   const streamingContent = ref('')
   const streamingReasoning = ref('')
   const chatMode = ref<ChatMode>('quick')
+  const kgGraphIds = ref<number[]>([])
 
   async function sendMessage(content: string) {
     messages.value.push({ role: 'user', content })
@@ -42,6 +43,7 @@ export function useChat() {
       await sendAgentMessage(
         content,
         history,
+        kgGraphIds.value,
         (event: AgentSSEEvent) => {
           if (event.type === 'tool_used') {
             messages.value[assistantIdx].toolCalls!.push({
@@ -111,5 +113,5 @@ export function useChat() {
     messages.value = []
   }
 
-  return { messages, loading, sendMessage, clearMessages, chatMode }
+  return { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds }
 }

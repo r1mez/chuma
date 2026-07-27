@@ -147,11 +147,12 @@ export async function sendDeepMessage(
 }
 
 /**
- * 智能管家 Agent 对话 — 流式调用（支持工具调用）
+ * 智能体模式 Agent 对话 — 流式调用（支持工具调用）
  */
 export async function sendAgentMessage(
   message: string,
   history: ChatHistoryItem[],
+  kgGraphIds: number[],
   onEvent: (event: AgentSSEEvent) => void,
   onDone: () => void,
   onError: (err: Error) => void,
@@ -164,7 +165,7 @@ export async function sendAgentMessage(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, kg_graph_ids: kgGraphIds }),
     })
 
     if (!response.ok) {

@@ -1,5 +1,6 @@
 """工具注册与调度 — 统一管理本地工具和 MCP 远程工具"""
 import logging
+import time
 
 from app.agent.schemas import ToolDef
 
@@ -76,6 +77,7 @@ class ToolRegistry:
             return f"未知工具: {name}"
 
         try:
+            t0 = time.perf_counter()
             if tool.is_mcp:
                 from app.agent.mcp_client import mcp_client
                 result = await mcp_client.call_tool(name, arguments)
@@ -84,10 +86,33 @@ class ToolRegistry:
             else:
                 return f"工具 {name} 没有配置处理器"
 
-            return cls._truncate_result(str(result))
+            elapsed = time.perf_counter() - t0
+            result_str = str(result)
+            lines = result_str.count("\n") + 1
+            arg_preview = cls._format_args(arguments)
+            result_preview = result_str[:200] + "..." if len(result_str) > 200 else result_str
+            logger.info(
+                f"Tool {name}({arg_preview}) → {len(result_str)} chars, "
+                f"{lines} lines, {elapsed:.2f}s: {result_preview}"
+            )
+
+            return cls._truncate_result(result_str)
         except Exception as e:
             logger.error(f"Tool '{name}' execution failed: {e}")
             return f"执行出错: {str(e)}"
+
+    @staticmethod
+    def _format_args(args: dict, max_len: int = 80) -> str:
+        """格式化工具参数用于日志，超长自动截断"""
+        if not args:
+            return ""
+        parts = []
+        for k, v in args.items():
+            s = str(v)
+            if len(s) > max_len:
+                s = s[:max_len] + "..."
+            parts.append(f"{k}={s!r}")
+        return ", ".join(parts)
 
     @staticmethod
     def _truncate_result(text: str, max_lines: int = 100) -> str:

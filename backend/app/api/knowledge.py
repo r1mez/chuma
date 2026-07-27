@@ -19,6 +19,34 @@ async def list_graphs(current_user: dict = Depends(get_current_user_optional)):
     return graphs
 
 
+@router.get("/graphs/{graph_id}/stats")
+async def get_graph_stats(graph_id: int):
+    """获取图谱资源统计（供删除确认用）"""
+    from sqlalchemy import text
+
+    kg_service = KgGraphService()
+    async with async_session() as db:
+        kg_record = await kg_service.get_graph_by_id(graph_id, db)
+        if kg_record is None:
+            raise HTTPException(status_code=404, detail="图谱不存在")
+
+        result = await db.execute(
+            text("SELECT COUNT(*) FROM document_chunks WHERE kg_graph_id = :gid"),
+            {"gid": graph_id},
+        )
+        chunk_count = result.scalar() or 0
+
+    return {
+        "graph_id": graph_id,
+        "graph_name": kg_record.graph_name,
+        "original_filename": kg_record.original_filename,
+        "node_count": kg_record.node_count,
+        "edge_count": kg_record.edge_count,
+        "chunk_count": chunk_count,
+        "status": kg_record.status,
+    }
+
+
 @router.delete("/graphs/{graph_id}")
 async def delete_graph(
     graph_id: int,
@@ -35,7 +63,19 @@ async def delete_graph(
         kg_record = await kg_service.get_graph_by_id(graph_id, db)
         if kg_record is None:
             raise HTTPException(status_code=404, detail="图谱不存在")
+        if kg_record.status == "pending":
+            raise HTTPException(status_code=400, detail="图谱正在构建中，无法删除")
         graph_name = kg_record.graph_name
+
+    # Step 1.5: Delete document_chunks for this graph
+    from sqlalchemy import text
+
+    async with async_session() as db:
+        await db.execute(
+            text("DELETE FROM document_chunks WHERE kg_graph_id = :gid"),
+            {"gid": graph_id},
+        )
+        await db.commit()
 
     # Step 2: Call AI engine to clear AGE graph (before deleting DB record)
     try:

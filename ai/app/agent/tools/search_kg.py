@@ -1,6 +1,7 @@
 """知识图谱查询工具"""
 import logging
 
+from app.agent.context import current_graph_names
 from app.agent.tool_registry import ToolRegistry
 from app.kg_pipeline.queries import search_nodes, GraphQueryError
 
@@ -28,7 +29,26 @@ logger = logging.getLogger(__name__)
 async def search_kg(user_id: int, query: str, top_k: int = 10) -> str:
     """查询知识图谱中的概念节点和关系"""
     try:
-        nodes = search_nodes(query)
+        graph_names = current_graph_names.get()
+        # 空列表或无图谱 → 回退到默认
+        if not graph_names:
+            nodes = search_nodes(query)
+        else:
+            all_nodes: list[dict] = []
+            seen: set[str] = set()
+            for gname in graph_names:
+                try:
+                    batch = search_nodes(query, graph_name=gname)
+                    for node in batch:
+                        nid = node.get("id", "")
+                        if nid not in seen:
+                            seen.add(nid)
+                            all_nodes.append(node)
+                except Exception as e:
+                    logger.warning(f"search_kg: graph '{gname}' query failed: {e}")
+                    continue
+            nodes = all_nodes
+
         if not nodes:
             return f"未在知识图谱中找到与 '{query}' 相关的概念。建议尝试其他关键词。"
 

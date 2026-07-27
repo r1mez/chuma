@@ -23,6 +23,7 @@ from app.kg_pipeline.extraction import KGExtractor, LlmExtractionError
 from app.kg_pipeline.graph_builder import GraphBuilder
 from app.kg_pipeline.cross_chapter import CrossChapterExtractor
 from app.kg_pipeline.storage import AgeStorage, AgeConnectionError
+from app.engines.rag.ingestion import DocIngestion
 from app.ocr.service import (
     get_infer_result,
     get_output_parse_dir,
@@ -84,16 +85,28 @@ class KGPipeline:
         return md_content
     async def _extract_all_chunks(
         self, chunks: list[DocumentChunk]
-    ) -> list[KnowledgeGraph3D]:
-        """逐块进行 LLM 抽取"""
+    ) -> tuple[list[KnowledgeGraph3D], int]:
+        """逐块进行 LLM 抽取，单块失败不中断整体流程
+
+        Returns:
+            (chunk_graphs, failed_count): 抽取结果列表 + 失败块计数
+        """
         chunk_graphs: list[KnowledgeGraph3D] = []
+        failed = 0
         total = len(chunks)
         for i, chunk in enumerate(chunks):
             logger.info(f"[KG] Extracting chunk {i + 1}/{total}")
-            kg = await self.extractor.extract_from_chunk(chunk)
-            chunk_graphs.append(kg)
-        return chunk_graphs
-    async def run_from_markdown(self, markdown_text: str) -> PipelineResult:
+            try:
+                kg = await self.extractor.extract_from_chunk(chunk)
+                chunk_graphs.append(kg)
+            except LlmExtractionError as e:
+                logger.warning(
+                    f"[KG] Chunk {i + 1}/{total} extraction failed, skipping: {e}"
+                )
+                chunk_graphs.append(KnowledgeGraph3D(nodes=[], edges=[]))
+                failed += 1
+        return chunk_graphs, failed
+    async def run_from_markdown(self, markdown_text: str, kg_graph_id: int | None = None) -> PipelineResult:
         """从 Markdown 文本直接构建知识图谱（跳过 OCR）
 
         6 步流程：
@@ -127,10 +140,12 @@ class KGPipeline:
         logger.info(f"[KG] Generated {len(chapter_graph.nodes)} chapter nodes, {len(chapter_graph.edges)} contains edges")
         # Step 3: LLM 知识点抽取
         logger.info("[KG] Phase 3: LLM Knowledge point extraction")
-        chunk_graphs = await self._extract_all_chunks(chunks)
+        chunk_graphs, failed_chunks = await self._extract_all_chunks(chunks)
         total_nodes = sum(len(kg.nodes) for kg in chunk_graphs)
         total_edges = sum(len(kg.edges) for kg in chunk_graphs)
         logger.info(f"[KG] Extracted {total_nodes} knowledge points, {total_edges} internal edges from LLM")
+        if failed_chunks > 0:
+            logger.warning(f"[KG] {failed_chunks}/{len(chunks)} chunks failed extraction")
         # Step 4: GraphBuilder — 合并章节 + 知识点，自动挂载
         logger.info("[KG] Phase 4: Graph building (merge + auto-mount)")
         graph = self.graph_builder.build(
@@ -163,13 +178,36 @@ class KGPipeline:
         self.storage.initialize_graph()
         edge_count = self.storage.write_graph(graph)
         logger.info(f"[KG] Written {edge_count} edges to AGE")
+
+        # Step 7: pgvector Ingestion (不依赖 Step 6 的成功)
+        logger.info("[KG] Phase 7: pgvector ingestion")
+        try:
+            entities_per_chunk: dict[int, list[str]] = {}
+            for i, kg in enumerate(chunk_graphs):
+                ci = chunks[i].chunk_index if i < len(chunks) else i
+                entities_per_chunk[ci] = [n.name for n in kg.nodes]
+
+            ingestor = DocIngestion()
+            sub_count = await ingestor.ingest(
+                chunks=chunks,
+                entities_per_chunk=entities_per_chunk,
+                kg_graph_id=kg_graph_id,
+                course_id=None,
+                source="kg_pipeline",
+            )
+            logger.info(f"[KG] Ingested {sub_count} vector chunks to pgvector")
+        except Exception as e:
+            logger.warning(f"[KG] Step 7 (pgvector ingestion) failed: {e}")
+            # Step 7 失败不影响整体 Pipeline 结果
+
         return PipelineResult(
             chunks=len(chunks),
             nodes=graph.number_of_nodes(),
             edges=graph.number_of_edges(),
             status="completed",
+            failed_chunks=failed_chunks,
         )
-    async def run_from_file(self, file_path: str) -> PipelineResult:
+    async def run_from_file(self, file_path: str, kg_graph_id: int | None = None) -> PipelineResult:
         """从原始文档文件构建知识图谱（PDF → OCR → KG，或 Markdown → 直接处理）
 
         Args:
@@ -189,7 +227,7 @@ class KGPipeline:
                 with open(file_path, "r", encoding="utf-8") as f:
                     md_content = f.read()
                 logger.info(f"[KG] Loaded Markdown, length: {len(md_content)} chars")
-                return await self.run_from_markdown(md_content)
+                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
             except Exception as e:
                 logger.error(f"[KG] Failed to read Markdown file: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))
@@ -202,7 +240,7 @@ class KGPipeline:
                 logger.error(f"[KG] OCR failed: {e}")
                 return PipelineResult(status="failed", error=str(e))
             try:
-                return await self.run_from_markdown(md_content)
+                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
             except Exception as e:
                 logger.error(f"[KG] Pipeline failed after OCR: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))

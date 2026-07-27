@@ -66,10 +66,38 @@ class Settings(BaseSettings):
     # MCP 联网搜索
     MCP_SEARCH_URL: str = ""
     MCP_SEARCH_TOKEN: str = ""
+    MCP_SERVER_URLS: str = ""  # 逗号分隔的 MCP Server URL 列表，自动遍历连接
     MCP_PROXY: str = ""
 
     # MCP 数据库服务 (FastMCP SSE)
-    MCP_DB_URL: str = "http://localhost:8005/sse"
+    MCP_DB_URL: str = ""
+
+    # BGE-M3 嵌入模型
+    BGE_M3_URL: str = ""
+    BGE_M3_DIM: int = 1024
+
+    # BGE-Reranker-v2-M3 重排序模型
+    BGE_RERANKER_URL: str = ""
+
+    # pgvector DSN（留空则从 AGE 配置自动构建）
+    PGVECTOR_DSN: str = ""
+
+    # RAG Pipeline 三阶段参数
+    RAG_VECTOR_TOP_K: int = 30
+    RAG_FUSION_TOP_K: int = 15
+    RAG_RERANKER_TOP_K: int = 5
+
+    def get_mcp_server_urls(self) -> list[str]:
+        """返回所有待连接的 MCP Server URL 列表
+
+        从 MCP_SERVER_URLS（逗号分隔）解析。
+        """
+        if not self.MCP_SERVER_URLS:
+            return []
+        urls = [u.strip() for u in self.MCP_SERVER_URLS.split(",") if u.strip()]
+        # 去重保序
+        seen: set[str] = set()
+        return [u for u in urls if not (u in seen or seen.add(u))]
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),
@@ -77,3 +105,17 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+
+def get_pgvector_dsn() -> str:
+    """返回 pgvector 连接 DSN
+
+    优先使用 PGVECTOR_DSN，否则从 AGE 配置自动构建。
+    因为 AGE 和 document_chunks 在同一个 PostgreSQL 实例中。
+    """
+    if settings.PGVECTOR_DSN:
+        return settings.PGVECTOR_DSN
+    return (
+        f"postgresql://{settings.AGE_USER}:{settings.AGE_PASSWORD}"
+        f"@{settings.AGE_HOST}:{settings.AGE_PORT}/{settings.AGE_DB}"
+    )

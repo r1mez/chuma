@@ -81,7 +81,7 @@ const handleLogin = () => {
   if (role.value === 'student') {
     router.push('/student/dashboard')
   } else {
-    router.push('/teacher/courses')
+    router.push('/teacher/dashboard')
   }
 }
 </script>

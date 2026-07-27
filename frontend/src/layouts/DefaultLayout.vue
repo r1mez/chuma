@@ -12,6 +12,15 @@
       <LayoutGrid class="w-6 h-6 text-gray-700 group-hover:text-blue-500 transition-colors" />
     </button>
 
+    <!-- 右上角退出登录按钮 -->
+    <button 
+      @click="handleLogout"
+      class="fixed top-6 right-6 z-50 p-3 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/50 shadow-lg hover:bg-white/90 hover:scale-105 hover:bg-red-50 transition-all cursor-pointer flex items-center justify-center group"
+      title="退出登录"
+    >
+      <LogOut class="w-6 h-6 text-gray-700 group-hover:text-red-500 transition-colors" />
+    </button>
+
     <!-- 主内容区（子页面渲染处） -->
     <div class="relative z-10 w-full h-full overflow-auto pt-24 px-8 pb-8">
       <router-view />
@@ -54,12 +63,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { LayoutGrid } from 'lucide-vue-next'
+import { LayoutGrid, LogOut } from 'lucide-vue-next'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import FloatingLines from '@/components/FloatingLines.vue'
 import { unreadCount } from '@/store/messages'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 // 控制面板是否打开的响应式状态
 const isMenuOpen = ref(true)
@@ -78,7 +90,7 @@ const menuItems = [
   { name: '知识图谱', path: '/student/knowledge' },
   { name: '题目练习', path: '/student/practice' },
   { name: '做题记录', path: '/student/exercise-records' },
-  { name: 'AI 助教', path: '/student/chat' },
+  { name: 'AI 助学', path: '/student/chat' },
   { name: '学习计划', path: '/student/plan' },
   { name: '互动专区', path: '/student/interactive' },
   { name: '消息提醒', path: '/student/messages' }
@@ -93,6 +105,25 @@ const handleNav = (path: string) => {
 // 切换菜单显示/隐藏
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
+}
+
+// 退出登录逻辑
+const handleLogout = () => {
+  ElMessageBox.confirm('是否确定退出当前账号？', '退出登录', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+    customClass: 'logout-confirm-dialog'
+  }).then(() => {
+    authStore.logout()
+    ElMessage({
+      type: 'success',
+      message: '已成功退出',
+    })
+    router.push('/login')
+  }).catch(() => {
+    // 用户取消退出
+  })
 }
 
 // Magic Bento 鼠标跟踪发光特效逻辑
@@ -196,5 +227,19 @@ const handleMouseMove = (e: MouseEvent) => {
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.5) !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+}
+
+/* 退出登录确认弹窗的毛玻璃背景特效 */
+:global(.logout-confirm-dialog) {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+:global(.logout-confirm-dialog .el-message-box__header),
+:global(.logout-confirm-dialog .el-message-box__content),
+:global(.logout-confirm-dialog .el-message-box__btns) {
+  background: transparent !important;
 }
 </style>

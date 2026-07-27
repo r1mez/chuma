@@ -2,7 +2,7 @@
   <div class="chat-page">
     <!-- 顶部栏 -->
     <div class="chat-header">
-      <h3>AI 助教</h3>
+      <h3>AI 助学</h3>
       <div class="header-actions">
         <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
           <GooeyNav 
@@ -28,7 +28,7 @@
     <div class="chat-messages" ref="messagesRef">
       <div v-if="messages.length === 0" class="empty-state">
         <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-        <p>开始向 AI 助教提问吧！</p>
+        <p>开始向 AI 助学提问吧！</p>
         <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
       </div>
       <ChatMessage

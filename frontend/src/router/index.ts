@@ -34,11 +34,10 @@ const router = createRouter({
       path: '/teacher',
       component: () => import('@/layouts/TeacherLayout.vue'),
       children: [
-        { path: 'courses', component: () => import('@/pages/teacher/CourseManage.vue') },
-        { path: 'students', component: () => import('@/pages/teacher/StudentManage.vue') },
-        { path: 'analytics', component: () => import('@/pages/teacher/Analytics.vue') },
-        { path: 'alerts', component: () => import('@/pages/teacher/Alert.vue') },
-        { path: 'assignments', component: () => import('@/pages/teacher/AssignmentGrade.vue') },
+        { path: 'dashboard', component: () => import('@/pages/teacher/Analytics.vue') },
+        { path: 'chat', component: () => import('@/pages/teacher/Chat.vue') },
+        { path: 'interactive', component: () => import('@/pages/teacher/InteractiveZone.vue') },
+        { path: 'subject', component: () => import('@/pages/teacher/SubjectManage.vue') },
       ],
     },
     {

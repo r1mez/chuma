@@ -5,9 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user_optional
 from app.schemas.practice import QuestionCreate, QuestionResponse, ExerciseRecordCreate, ExerciseRecordResponse
+from app.schemas.course import CourseResponse
 from app.services.practice_service import PracticeService
+from app.services.course_service import CourseService
 
 router = APIRouter()
+
+@router.get("/courses", response_model=list[CourseResponse])
+async def list_courses(db: AsyncSession = Depends(get_db)):
+    service = CourseService()
+    return await service.list_courses(db)
+
 
 
 @router.get("/questions", response_model=list[QuestionResponse])

@@ -1,13 +1,13 @@
 """Practice Pydantic 请求/响应模型"""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 from pydantic import BaseModel
 
 
 class QuestionCreate(BaseModel):
     question_description: str
     question_answer: str
-    question_options: Optional[dict] = None
+    question_options: Optional[Any] = None
     question_type: str
     question_difficulty: int
     question_explanation: Optional[str] = None
@@ -19,7 +19,7 @@ class QuestionResponse(BaseModel):
     question_id: int
     question_description: str
     question_answer: str
-    question_options: Optional[dict] = None
+    question_options: Optional[Any] = None
     question_type: str
     question_difficulty: int
     question_explanation: Optional[str] = None

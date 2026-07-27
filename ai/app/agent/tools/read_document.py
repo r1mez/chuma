@@ -2,6 +2,7 @@
 
 import logging
 
+from app.agent.context import current_kg_graph_ids
 from app.agent.tool_registry import ToolRegistry
 from app.engines.rag.pipeline import RagPipeline, DetailLevel
 
@@ -49,12 +50,15 @@ async def read_document(
 ) -> str:
     """从 pgvector 检索文档片段，经 GraphRAG 排序后返回"""
     try:
+        kg_graph_ids = current_kg_graph_ids.get()
+
         pipeline = RagPipeline()
         return await pipeline.run(
             query=query,
             top_k=top_k,
             detail_level=DetailLevel(detail_level),
             course_id=course_id,
+            kg_graph_ids=kg_graph_ids if kg_graph_ids else None,
         )
     except Exception as e:
         logger.error(f"Document query failed: {e}")

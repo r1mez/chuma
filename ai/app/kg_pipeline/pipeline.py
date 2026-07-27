@@ -106,7 +106,7 @@ class KGPipeline:
                 chunk_graphs.append(KnowledgeGraph(nodes=[], edges=[]))
                 failed += 1
         return chunk_graphs, failed
-    async def run_from_markdown(self, markdown_text: str) -> PipelineResult:
+    async def run_from_markdown(self, markdown_text: str, kg_graph_id: int | None = None) -> PipelineResult:
         """从 Markdown 文本直接构建知识图谱（跳过 OCR）
 
         6 步流程：
@@ -191,7 +191,7 @@ class KGPipeline:
             sub_count = await ingestor.ingest(
                 chunks=chunks,
                 entities_per_chunk=entities_per_chunk,
-                kg_graph_id=None,
+                kg_graph_id=kg_graph_id,
                 course_id=None,
                 source="kg_pipeline",
             )
@@ -207,7 +207,7 @@ class KGPipeline:
             status="completed",
             failed_chunks=failed_chunks,
         )
-    async def run_from_file(self, file_path: str) -> PipelineResult:
+    async def run_from_file(self, file_path: str, kg_graph_id: int | None = None) -> PipelineResult:
         """从原始文档文件构建知识图谱（PDF → OCR → KG，或 Markdown → 直接处理）
 
         Args:
@@ -227,7 +227,7 @@ class KGPipeline:
                 with open(file_path, "r", encoding="utf-8") as f:
                     md_content = f.read()
                 logger.info(f"[KG] Loaded Markdown, length: {len(md_content)} chars")
-                return await self.run_from_markdown(md_content)
+                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
             except Exception as e:
                 logger.error(f"[KG] Failed to read Markdown file: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))
@@ -240,7 +240,7 @@ class KGPipeline:
                 logger.error(f"[KG] OCR failed: {e}")
                 return PipelineResult(status="failed", error=str(e))
             try:
-                return await self.run_from_markdown(md_content)
+                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
             except Exception as e:
                 logger.error(f"[KG] Pipeline failed after OCR: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))

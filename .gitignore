@@ -24,7 +24,7 @@ frontend/dist/
 ai/data/models/*.pt
 ai/data/models/*.pth
 ai/data/models/*.bin
-
+ai/tests
 
 .DS_Store
 Thumbs.db

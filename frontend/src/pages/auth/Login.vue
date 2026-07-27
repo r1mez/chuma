@@ -39,7 +39,7 @@
           />
         </span>
         <span class="span"><a href="#">Forgot password?</a></span>
-        <input class="submit" type="submit" value="Log in" />
+        <input class="submit" type="submit" value="Log in" :disabled="loading" />
         <span class="span">Don't have an account? <a href="#">Sign up</a></span>
       </form>
     </div>
@@ -52,6 +52,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import LetterGlitch from '@/components/LetterGlitch.vue'
+import request from '@/utils/request'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -59,29 +60,45 @@ const authStore = useAuthStore()
 const email = ref('')
 const password = ref('')
 const role = ref<'student' | 'teacher'>('student')
+const loading = ref(false)
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!email.value || !password.value) {
     ElMessage.warning('Email and Password cannot be empty')
     return
   }
 
-  // 模拟登录，不需要判断密码，只要不为空就可以跳转
-  // 伪造一个简单的 token 和 user 存入 store 以保证后续功能正常
-  authStore.setToken('mock-token-for-development')
-  authStore.user = {
-    id: 1,
-    name: email.value.split('@')[0],
-    role: role.value
-  }
+  loading.value = true
+  try {
+    const res: any = await request.post('/auth/login', {
+      email: email.value,
+      password: password.value,
+      user_type: role.value,
+    })
 
-  ElMessage.success(`Logged in as ${role.value}`)
+    console.log('Login response:', res)
 
-  // 根据角色跳转到不同的主页面
-  if (role.value === 'student') {
-    router.push('/student/dashboard')
-  } else {
-    router.push('/teacher/dashboard')
+    // 保存 token 和用户信息
+    authStore.setToken(res.access_token)
+    authStore.user = {
+      id: res.user_id,
+      name: email.value.split('@')[0],
+      role: role.value,
+    }
+
+    ElMessage.success(`Logged in as ${role.value}`)
+
+    // 根据角色跳转到不同的主页面
+    if (role.value === 'student') {
+      await router.push('/student/dashboard')
+    } else {
+      await router.push('/teacher/dashboard')
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.detail || '邮箱或密码错误'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
   }
 }
 </script>

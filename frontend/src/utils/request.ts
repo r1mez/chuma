@@ -19,8 +19,11 @@ request.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+      // 只在非登录页面时清除 token 并跳转
+      if (!window.location.pathname.includes('/login')) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   },

@@ -8,7 +8,8 @@
           v-for="module in practiceModules" 
           :key="module.id" 
           class="module-card glass-card"
-          @click="navigateToPanel(module.id)"
+          :class="{ 'placeholder-card': module.isPlaceholder }"
+          @click="navigateToPanel(module)"
         >
           <span class="module-name">{{ module.name }}</span>
         </div>
@@ -18,24 +19,61 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+import { fetchCourses, type Course } from '@/api/practice'
 
 const router = useRouter()
+const courses = ref<Course[]>([])
+const loading = ref(true)
 
-const practiceModules = [
-  { id: 'ds', name: '数据结构' },
-  { id: 'co', name: '计算机组成原理' },
-  { id: 'exam', name: '作业与考试' },
-  { id: 'os', name: '操作系统' },
-  { id: 'net', name: '计算机网络' },
-  { id: 'special', name: '专项练习' }
-]
+// 固定显示的 6 个模块（包含占位）
+const practiceModules = ref([
+  { id: 'placeholder-1', name: '学科1', isPlaceholder: true },
+  { id: 'placeholder-2', name: '学科2', isPlaceholder: true },
+  { id: 'exam', name: '作业与考试', isPlaceholder: true },
+  { id: 'placeholder-3', name: '学科3', isPlaceholder: true },
+  { id: 'placeholder-4', name: '学科4', isPlaceholder: true },
+  { id: 'special', name: '专项练习', isPlaceholder: true }
+])
 
-const navigateToPanel = (moduleId: string) => {
+onMounted(async () => {
+  try {
+    const data = await fetchCourses()
+    courses.value = data || []
+    
+    // 将真实学科填充到占位符中 (前 4 个位置)
+    let courseIndex = 0;
+    for (let i = 0; i < practiceModules.value.length; i++) {
+      if (practiceModules.value[i].id.startsWith('placeholder-') && courseIndex < courses.value.length) {
+        practiceModules.value[i] = {
+          id: courses.value[courseIndex].course_id.toString(),
+          name: courses.value[courseIndex].course_name,
+          isPlaceholder: false
+        }
+        courseIndex++;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch courses:', error)
+    ElMessage.error('获取学科列表失败')
+  } finally {
+    loading.value = false
+  }
+})
+
+const navigateToPanel = (module: any) => {
+  if (module.isPlaceholder) {
+    ElMessage.warning('功能开发中，敬请期待')
+    return
+  }
+  
+  // 直接跳转到题库页面
   router.push({
     path: '/student/practice/panel',
-    query: { module: moduleId }
+    query: { module: module.id }
   })
 }
 </script>

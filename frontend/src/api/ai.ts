@@ -152,6 +152,7 @@ export async function sendDeepMessage(
 export async function sendAgentMessage(
   message: string,
   history: ChatHistoryItem[],
+  kgGraphIds: number[],
   onEvent: (event: AgentSSEEvent) => void,
   onDone: () => void,
   onError: (err: Error) => void,
@@ -164,7 +165,7 @@ export async function sendAgentMessage(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, kg_graph_ids: kgGraphIds }),
     })
 
     if (!response.ok) {

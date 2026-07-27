@@ -30,12 +30,13 @@ async def run_kg_build(task_data: dict):
     file_path = task_data["file_path"]
     output_key = task_data.get("output_key", f"kg:result:{task_id}")
     graph_name = task_data.get("graph_name")  # 可选，为空则使用 settings.AGE_GRAPH_NAME
+    kg_graph_id = task_data.get("kg_graph_id")  # 可选，入库时关联 graph 记录
 
-    logger.info(f"[KGBuild] Task {task_id}: building KG from {file_path}")
+    logger.info(f"[KGBuild] Task {task_id}: building KG from {file_path} (kg_graph_id={kg_graph_id})")
 
     try:
         pipeline = KGPipeline(graph_name=graph_name)
-        result = await pipeline.run_from_file(file_path)
+        result = await pipeline.run_from_file(file_path, kg_graph_id=kg_graph_id)
     except Exception as e:
         logger.error(f"[KGBuild] Task {task_id} crashed: {e}", exc_info=True)
         result = PipelineResult(status="failed", error=str(e))

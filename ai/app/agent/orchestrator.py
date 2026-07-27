@@ -31,7 +31,9 @@ class AgentOrchestrator:
 
     @staticmethod
     def _build_system_prompt() -> str:
-        """根据当前注册的工具动态生成系统提示词"""
+        """根据当前注册的工具和教材上下文动态生成系统提示词"""
+        from app.agent.context import current_kg_graph_ids, current_graph_names
+
         tools = ToolRegistry.get_definitions()
 
         local_tools = []
@@ -57,6 +59,23 @@ class AgentOrchestrator:
 
         lines = ["你是智教慧学，一个计算机科学学习智能助教，擅长408考研和数据库原理相关知识。"]
         lines.append("")
+
+        # 注入教材上下文
+        kg_ids = current_kg_graph_ids.get()
+        g_names = current_graph_names.get()
+        if kg_ids and g_names:
+            lines.append("## 当前教材范围")
+            lines.append("以下教材已被用户选中，请优先基于这些教材的知识图谱和文档内容回答：")
+            import re
+            for gid, gname in zip(kg_ids, g_names):
+                # 从 graph_name 提取可读名称（去除 kg_xxx_ 前缀）
+                readable = gname
+                match = re.match(r'kg_(.+)_[a-f0-9]{8}$', gname)
+                if match:
+                    readable = match.group(1).replace('_', ' ')
+                lines.append(f"- {readable} (id={gid})")
+            lines.append("")
+
         lines.append("## 可用工具")
 
         if kg_tools:
@@ -101,6 +120,8 @@ class AgentOrchestrator:
         self,
         message: str,
         history: list[dict],
+        kg_graph_ids: list[int] | None = None,
+        graph_names: list[str] | None = None,
     ) -> AsyncIterator[dict]:
         """执行 Agent 循环，流式输出 SSE 事件
 
@@ -111,6 +132,11 @@ class AgentOrchestrator:
             {"type": "done"}
             {"type": "error", "content": str}
         """
+        # Set contextvars for downstream use (system prompt reads these)
+        from app.agent.context import current_kg_graph_ids, current_graph_names
+        current_kg_graph_ids.set(kg_graph_ids or [])
+        current_graph_names.set(graph_names or [])
+
         # Build initial messages — prompt is dynamic so it captures MCP tools too
         messages: list[dict] = [
             {"role": "system", "content": self._build_system_prompt()},

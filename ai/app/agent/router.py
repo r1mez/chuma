@@ -29,7 +29,7 @@ async def agent_chat_stream(req: AgentChatRequest):
 
     async def event_stream():
         try:
-            async for event in agent.run(req.message, req.history):
+            async for event in agent.run(req.message, req.history, req.kg_graph_ids, req.graph_names):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             logger.error(f"Agent stream error: {e}")

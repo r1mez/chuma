@@ -92,6 +92,7 @@ async def start_kg_build(
             json={
                 "file_path": file_path,
                 "graph_name": kg_record.graph_name,
+                "kg_graph_id": kg_record.id,
             },
         )
         if response.status_code >= 400:

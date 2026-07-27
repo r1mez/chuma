@@ -4,6 +4,24 @@
     <div class="chat-header">
       <h3>AI 助教</h3>
       <div class="header-actions">
+        <el-select
+          v-model="selectedGraphIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="全部教材"
+          clearable
+          size="small"
+          style="width: 240px"
+          @change="onGraphSelectionChange"
+        >
+          <el-option
+            v-for="g in knowledgeStore.graphList"
+            :key="g.id"
+            :label="g.original_filename"
+            :value="g.id"
+          />
+        </el-select>
         <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
           <GooeyNav 
             :items="navItems"
@@ -45,16 +63,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
+import { useKnowledgeStore } from '@/stores/knowledge'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
 
-const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
+const { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds } = useChat()
 const messagesRef = ref<HTMLElement>()
+
+const knowledgeStore = useKnowledgeStore()
+const selectedGraphIds = ref<number[]>([])
+
+onMounted(() => {
+  knowledgeStore.loadGraphList()
+})
+
+function onGraphSelectionChange(ids: number[]) {
+  kgGraphIds.value = ids
+}
 
 const navItems = [
   { label: '快速回答', value: 'quick' },

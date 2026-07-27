@@ -71,6 +71,7 @@ class RagPipeline:
         top_k: int = 5,
         detail_level: DetailLevel = DetailLevel.TEXT,
         course_id: int | None = None,
+        kg_graph_ids: list[int] | None = None,
     ) -> str:
         """执行完整 RAG 查询
 
@@ -79,10 +80,11 @@ class RagPipeline:
             top_k: 最终返回片段数
             detail_level: 详细程度
             course_id: 按课程过滤（可选）
+            kg_graph_ids: 按知识图谱 ID 过滤（可选，None 或空列表不过滤）
         """
         # Stage 1: 查询向量化 + pgvector 粗排
         query_vec = await self.embedder.encode(query)
-        candidates = await self._vector_search(query_vec, course_id=course_id)
+        candidates = await self._vector_search(query_vec, course_id=course_id, kg_graph_ids=kg_graph_ids)
 
         if not candidates:
             return self._empty_result(query)
@@ -102,9 +104,14 @@ class RagPipeline:
         self,
         query_vec: list[float],
         course_id: int | None = None,
+        kg_graph_ids: list[int] | None = None,
         limit: int | None = None,
     ) -> list[ChunkResult]:
-        """pgvector ANN 搜索 — 余弦距离"""
+        """pgvector ANN 搜索 — 余弦距离
+
+        Args:
+            kg_graph_ids: 按知识图谱 ID 过滤（可选，None 或空列表不过滤）
+        """
         if limit is None:
             limit = settings.RAG_VECTOR_TOP_K
         try:
@@ -118,12 +125,14 @@ class RagPipeline:
                     FROM document_chunks
                     WHERE embedding IS NOT NULL
                       AND ($2::bigint IS NULL OR course_id = $2)
+                      AND ($4::bigint[] IS NULL OR kg_graph_id = ANY($4))
                     ORDER BY distance ASC
                     LIMIT $3
                     """,
                     query_vec_str,
                     course_id,
                     limit,
+                    kg_graph_ids if kg_graph_ids else None,
                 )
                 results = []
                 for row in rows:

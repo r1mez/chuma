@@ -6,7 +6,7 @@
 
 import logging
 
-from app.kg_pipeline.models import DocumentChunk, EntityType, KGNode, KGEdge, KnowledgeGraph
+from app.kg_pipeline.models import DocumentChunk, EntityType, KGNode, KGEdge, KnowledgeGraph3D
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ChapterBuilder:
     """从 chunk 的 heading_path 生成章节节点和层级边"""
 
-    def build(self, chunks: list[DocumentChunk]) -> KnowledgeGraph:
+    def build(self, chunks: list[DocumentChunk]) -> KnowledgeGraph3D:
         """从所有 chunk 的 heading_path 生成章节节点和 contains 边
 
         生成规则：
@@ -27,7 +27,7 @@ class ChapterBuilder:
             chunks: 文档切片列表（需携带 heading_path 和 heading_levels）
 
         Returns:
-            KnowledgeGraph 包含章节节点和 contains 边
+            KnowledgeGraph3D 包含章节节点和 contains 边
         """
         nodes: dict[str, KGNode] = {}  # id -> KGNode, 去重
         edges: list[KGEdge] = []
@@ -62,7 +62,7 @@ class ChapterBuilder:
                         description=f"{source}包含{target}",
                     ))
 
-        return KnowledgeGraph(
+        return KnowledgeGraph3D(
             nodes=list(nodes.values()),
             edges=edges,
         )

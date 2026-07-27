@@ -13,7 +13,7 @@ from app.kg_pipeline.models import (
     EntityType,
     KGEdge,
     KGNode,
-    KnowledgeGraph,
+    KnowledgeGraph3D,
 )
 
 
@@ -29,11 +29,11 @@ class GraphBuilder:
 
     def build(
         self,
-        chunk_graphs: list[KnowledgeGraph],
-        chapter_graph: Optional[KnowledgeGraph] = None,
+        chunk_graphs: list[KnowledgeGraph3D],
+        chapter_graph: Optional[KnowledgeGraph3D] = None,
         chunks: Optional[list[DocumentChunk]] = None,
     ) -> nx.DiGraph:
-        """合并多个 KnowledgeGraph 片段为统一图
+        """合并多个 KnowledgeGraph3D 片段为统一图
 
         Args:
             chunk_graphs: 每个切片抽取的图片段（知识点）
@@ -60,8 +60,8 @@ class GraphBuilder:
 
         return G
 
-    def _add_knowledge_graph(self, G: nx.DiGraph, kg: KnowledgeGraph) -> None:
-        """将一个 KnowledgeGraph 的节点和边添加到图中"""
+    def _add_knowledge_graph(self, G: nx.DiGraph, kg: KnowledgeGraph3D) -> None:
+        """将一个 KnowledgeGraph3D 的节点和边添加到图中"""
         for node in kg.nodes:
             if node.id in G:
                 existing = G.nodes[node.id]
@@ -102,7 +102,7 @@ class GraphBuilder:
     def _auto_mount_chapters(
         self,
         G: nx.DiGraph,
-        chunk_graphs: list[KnowledgeGraph],
+        chunk_graphs: list[KnowledgeGraph3D],
         chunks: list[DocumentChunk],
     ) -> None:
         """为知识点自动添加"所属章节叶节点 → 知识点"的包含边

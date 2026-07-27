@@ -124,12 +124,12 @@ function initChart() {
         try {
           const SpriteTextClass = (SpriteText as any).default || SpriteText
           const sprite = new SpriteTextClass(String(node.name || ''))
-          // isDimmed 状态下字体颜色稍微亮一点，避免与背景融为一体
-          sprite.color = isFocused ? '#FF8C00' : (isDimmed ? '#999999' : '#FFFFFF')
+          // 文字颜色统一全部换成白色
+          sprite.color = '#FFFFFF'
           sprite.textHeight = isFocused || isHovered ? 6 : (isDimmed ? 3 : 3.5)
           sprite.position.y = - (currentRadius + sprite.textHeight + 2) // 将文字放在球体下方
           sprite.material.depthWrite = false // 防止文字遮挡
-          sprite.material.opacity = isDimmed ? 0.5 : 1 // 暗淡时文字也半透明，但不至于看不见
+          sprite.material.opacity = isDimmed ? 0.5 : 1 // 暗淡时文字半透明以区分层级，但保持纯白
           group.add(sprite)
         } catch (e) {
           console.error('SpriteText render error:', e)

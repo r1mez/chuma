@@ -57,7 +57,7 @@ class KGEdge(BaseModel):
     description: Optional[str] = None
 
 
-class KnowledgeGraph(BaseModel):
+class KnowledgeGraph3D(BaseModel):
     """单个切片的知识图谱"""
     nodes: list[KGNode] = Field(default_factory=list)
     edges: list[KGEdge] = Field(default_factory=list)

@@ -134,8 +134,9 @@
 
         <!-- 图容器 + 详情面板 -->
         <div class="kg-chart-wrapper">
-          <KnowledgeGraph
-            ref="graphRef"
+          <KnowledgeGraph3D
+            v-if="isKnowledgePointLevel"
+            ref="graphRef3D"
             :data="currentGraphData!"
             :show-labels="showLabels"
             :active-types="store.activeTypes"
@@ -145,6 +146,13 @@
             :node-fx-map="nodeFxMap"
             @node-click="handleNodeClick"
             @node-dbl-click="handleNodeDblClick"
+          />
+          <KnowledgeGraph2D
+            v-else
+            ref="graphRef2D"
+            :data="currentGraphData!"
+            :show-labels="showLabels"
+            @node-click="handleNodeClick"
           />
           <GraphDetailPanel
             v-if="store.selectedNode"
@@ -173,7 +181,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Search, ZoomIn, ZoomOut, Refresh, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useKnowledgeStore } from '@/stores/knowledge'
-import KnowledgeGraph from '@/components/KnowledgeGraph.vue'
+import KnowledgeGraph3D from '@/components/KnowledgeGraph3D.vue'
+import KnowledgeGraph2D from '@/components/KnowledgeGraph2D.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
 import StarBorder from '@/components/StarBorder.vue'
@@ -185,8 +194,9 @@ import type { GraphNode, GraphData } from '@/api/knowledge'
 const route = useRoute()
 const $router = useRouter()
 const store = useKnowledgeStore()
-const graphRef = ref<InstanceType<typeof KnowledgeGraph>>()
-const { showLabels, handleSearch, resetView } = useGraph()
+const graphRef3D = ref<InstanceType<typeof KnowledgeGraph3D>>()
+const graphRef2D = ref<InstanceType<typeof KnowledgeGraph2D>>()
+const { showLabels, handleSearch } = useGraph()
 const selectedGraphId = ref<number | null>(null)
 
 // 钻取状态
@@ -390,9 +400,9 @@ function handleNodeDblClick(node: GraphNode) {
 
   // 获取当前所有节点的渲染位置（用于冻结原图）
   let currentPositions = new Map<string, {x: number; y: number}>()
-  if (graphRef.value) {
+  if (graphRef3D.value) {
     try {
-      currentPositions = graphRef.value.getNodePositions()
+      currentPositions = graphRef3D.value.getNodePositions()
     } catch {
       currentPositions = new Map()
     }
@@ -555,8 +565,29 @@ function onSearchSelect(item: { value: string; nodeId: string }) {
   }
 }
 
-function zoomIn() { /* ECharts zoom */ }
-function zoomOut() { /* ECharts zoom */ }
+function zoomIn() {
+  if (isKnowledgePointLevel.value) {
+    graphRef3D.value?.zoomIn()
+  } else {
+    graphRef2D.value?.zoomIn()
+  }
+}
+
+function zoomOut() {
+  if (isKnowledgePointLevel.value) {
+    graphRef3D.value?.zoomOut()
+  } else {
+    graphRef2D.value?.zoomOut()
+  }
+}
+
+function resetView() {
+  if (isKnowledgePointLevel.value) {
+    graphRef3D.value?.resetView()
+  } else {
+    graphRef2D.value?.resetView()
+  }
+}
 
 function onGraphSelect(graphId: number) {
   drillPath.value = []  // 切换图谱时重置钻取路径

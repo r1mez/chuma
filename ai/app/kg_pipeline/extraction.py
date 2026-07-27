@@ -6,7 +6,7 @@ import os
 import re
 from typing import Optional
 
-from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph, KGNode, KGEdge
+from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph3D, KGNode, KGEdge
 from app.engines.llm.client import LLMClient
 from app.engines.llm.profiles import ModelProfile, remote_profile
 from app.config import settings
@@ -259,14 +259,13 @@ class KGExtractor:
             logger.warning(f"Retry with feedback also failed: {e}")
             return None
 
-    async def extract_from_chunk(self, chunk: DocumentChunk) -> KnowledgeGraph:
-        """从单个切片提取知识图谱
-
+    async def extract_from_chunk(self, chunk: DocumentChunk) -> KnowledgeGraph3D:
+        """从单个切片提取知识图谱"""
         Args:
             chunk: 文档切片
-
+            
         Returns:
-            KnowledgeGraph 包含抽取的节点和边
+            KnowledgeGraph3D 包含抽取的节点和边
 
         Raises:
             LlmExtractionError: LLM 返回格式无法解析（含重试后仍失败）
@@ -334,4 +333,4 @@ class KGExtractor:
         except (KeyError, TypeError) as e:
             raise LlmExtractionError(f"Field validation failed: {e}") from e
 
-        return KnowledgeGraph(nodes=nodes, edges=edges)
+        return KnowledgeGraph3D(nodes=nodes, edges=edges)

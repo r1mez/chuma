@@ -3,9 +3,16 @@
     <div class="practice-layout">
       <!-- 左侧面板：题目与答案 (同一个大框，内部独立滚动) -->
       <div class="left-panel glass-card">
-        <!-- 上半部分：题干与答题区 -->
+        <!-- 上半部分：题目与答题区 -->
         <div class="section-container">
-          <h3 class="title-red">题目题干：</h3>
+          <div class="question-header">
+            <h3 class="title-red">题目：</h3>
+            <div class="question-actions">
+              <el-button size="small" type="danger" plain @click="prevQuestion">上一题</el-button>
+              <el-button size="small" type="danger" plain @click="nextQuestion">下一题</el-button>
+              <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
+            </div>
+          </div>
           <div class="scroll-area">
             <div class="stem-content">{{ question.stem }}</div>
             
@@ -57,9 +64,9 @@
         <!-- 红色分割线 -->
         <div class="divider"></div>
 
-        <!-- 下半部分：正确答案与解释 -->
+        <!-- 下半部分：答案与解释 -->
         <div class="section-container">
-          <h3 class="title-red">正确答案与解释</h3>
+          <h3 class="title-red">答案与解释</h3>
           <div class="scroll-area">
             <div class="explanation-content">
               <p><strong>正确答案：</strong> {{ question.correctAnswer }}</p>
@@ -112,7 +119,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+
+const router = useRouter()
 
 // -----------------
 // Mock 业务数据
@@ -141,6 +152,19 @@ const similarQuestions = ref([
 
 const userAnswer = ref('')
 const userAnswerArray = ref([])
+
+// 题目切换逻辑
+const prevQuestion = () => {
+  ElMessage.success('已切换至上一题')
+}
+
+const nextQuestion = () => {
+  ElMessage.success('已切换至下一题')
+}
+
+const goBack = () => {
+  router.back()
+}
 
 // 仅用于测试前端独立滚动条是否生效的超长文本
 const mockLongText = '这是一段用于测试独立滚动条是否生效的超长占位文本。'.repeat(30)
@@ -227,6 +251,24 @@ h3 {
 
 .title-green {
   color: #27ae60;
+}
+
+/* --- 题干头部样式 --- */
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.question-header h3 {
+  margin-bottom: 0;
+}
+
+.question-actions {
+  display: flex;
+  gap: 12px;
 }
 
 /* --- 滚动区域通用样式 (完全独立，互不影响) --- */

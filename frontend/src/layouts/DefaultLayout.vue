@@ -35,10 +35,14 @@
             @click="handleNav(item.path)"
             class="bento-card group"
           >
-            <div class="bento-card-inner">
+            <div class="bento-card-inner relative">
               <span class="text-2xl font-bold text-gray-800 tracking-wider group-hover:text-blue-600 transition-colors">
                 {{ item.name }}
               </span>
+              <!-- 消息提醒红点徽标 -->
+              <div v-if="item.name === '消息提醒' && unreadCount > 0" class="absolute top-4 right-4 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-md">
+                {{ unreadCount }}
+              </div>
             </div>
           </div>
         </div>
@@ -52,6 +56,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { LayoutGrid } from 'lucide-vue-next'
 import FloatingLines from '@/components/FloatingLines.vue'
+import { unreadCount } from '@/store/messages'
 
 const router = useRouter()
 const route = useRoute()
@@ -75,8 +80,8 @@ const menuItems = [
   { name: '做题记录', path: '/student/exercise-records' },
   { name: 'AI 助教', path: '/student/chat' },
   { name: '学习计划', path: '/student/plan' },
-  { name: '文档解析', path: '/student/ocr' },
-  { name: '图谱构建', path: '/student/kg-pipeline' }
+  { name: '互动专区', path: '/student/interactive' },
+  { name: '消息提醒', path: '/student/messages' }
 ]
 
 // 导航跳转逻辑

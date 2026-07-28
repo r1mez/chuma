@@ -154,7 +154,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
-import { fetchQuestions, type Question } from '@/api/practice'
+import { fetchQuestions, fetchQuestionById, submitExerciseRecord, type Question } from '@/api/practice'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,17 +179,31 @@ const userAnswerArray = ref([])
 
 onMounted(async () => {
   const courseIdStr = route.query.module as string
+  const questionIdStr = route.query.questionId as string
   const courseId = courseIdStr ? parseInt(courseIdStr, 10) : undefined
-  
-  if (!courseId) {
-    ElMessage.warning('未选择学科')
+  const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
+
+  if (!courseId && !questionId) {
+    ElMessage.warning('未选择学科或题目')
     loading.value = false
     return
   }
-  
+
   try {
-    const data = await fetchQuestions(courseId)
-    questions.value = data || []
+    if (questionId) {
+      // 通过 questionId 加载指定题目（从做题记录双击跳转）
+      const question = await fetchQuestionById(questionId)
+      if (question) {
+        questions.value = [question]
+        currentIndex.value = 0
+      } else {
+        ElMessage.error('未找到该题目')
+      }
+    } else if (courseId) {
+      // 通过 courseId 加载该学科下所有题目（正常进入练习）
+      const data = await fetchQuestions(courseId)
+      questions.value = data || []
+    }
   } catch (error) {
     console.error('Failed to fetch questions:', error)
     ElMessage.error('获取题目失败')
@@ -219,9 +233,29 @@ const nextQuestion = () => {
   }
 }
 
-const submitAnswer = () => {
-  isAnswerSubmitted.value = true
-  ElMessage.success('答案已提交')
+const submitAnswer = async () => {
+  if (!currentQuestion.value) return
+
+  // 构造学生答案字符串
+  const answerStr = userAnswerArray.value.length > 0
+    ? userAnswerArray.value.sort().join(',')
+    : userAnswer.value
+
+  try {
+    await submitExerciseRecord({
+      question_id: currentQuestion.value.question_id,
+      course_id: currentQuestion.value.course_id,
+      kg_node_name: currentQuestion.value.kg_node_name || undefined,
+      question_type: currentQuestion.value.question_type,
+      question_difficulty: currentQuestion.value.question_difficulty,
+      do_stu_answer: answerStr,
+    })
+    isAnswerSubmitted.value = true
+    ElMessage.success('答案已提交')
+  } catch (error) {
+    console.error('提交答案失败:', error)
+    ElMessage.error('提交答案失败，请重试')
+  }
 }
 
 const triggerAiAnalysis = () => {

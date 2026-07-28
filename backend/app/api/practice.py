@@ -4,18 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user_optional
-from app.schemas.practice import QuestionCreate, QuestionResponse, ExerciseRecordCreate, ExerciseRecordResponse
+from app.schemas.practice import (
+    QuestionCreate,
+    QuestionResponse,
+    ExerciseRecordCreate,
+    ExerciseRecordResponse,
+    ExerciseRecordListResponse,
+)
 from app.schemas.course import CourseResponse
 from app.services.practice_service import PracticeService
 from app.services.course_service import CourseService
 
 router = APIRouter()
 
+
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses(db: AsyncSession = Depends(get_db)):
     service = CourseService()
     return await service.list_courses(db)
-
 
 
 @router.get("/questions", response_model=list[QuestionResponse])
@@ -46,17 +52,48 @@ async def submit_answer(
 ):
     stu_id = current_user.get("id")
     service = PracticeService()
-    return await service.submit_exercise(stu_id, data, db)
+    try:
+        return await service.submit_exercise(stu_id, data, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/exercise-records", response_model=list[ExerciseRecordResponse])
+@router.get("/exercise-records", response_model=list[ExerciseRecordListResponse])
 async def get_exercise_records(
+    course_id: Optional[int] = Query(None),
+    wrong_only: Optional[bool] = Query(False),
     current_user: dict = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
+    """获取当前学生的做题记录。
+
+    - 不传 course_id：获取所有记录
+    - 传 course_id：获取指定学科下的记录
+    - wrong_only=true：仅获取错题记录（需同时传 course_id）
+    """
     stu_id = current_user.get("id")
     service = PracticeService()
-    return await service.get_student_exercise_records(stu_id, db)
+
+    if course_id is not None and wrong_only:
+        return await service.get_student_wrong_records_by_course(stu_id, course_id, db)
+    elif course_id is not None:
+        return await service.get_student_exercise_records_by_course(stu_id, course_id, db)
+    else:
+        return await service.get_student_exercise_records(stu_id, db)
+
+
+@router.get("/wrong-records/grouped")
+async def get_wrong_records_grouped(
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取当前学生按学科分组的错题记录。
+
+    返回格式：{ course_id: { course_name, records: [...] } }
+    """
+    stu_id = current_user.get("id")
+    service = PracticeService()
+    return await service.get_student_wrong_records_grouped(stu_id, db)
 
 
 @router.get("/exercise-records/analytics")

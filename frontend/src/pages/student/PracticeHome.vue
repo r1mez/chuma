@@ -1,7 +1,7 @@
 <template>
   <BorderGlow class="practice-home-page" background-color="transparent">
     <div class="glass-card page-container">
-      <h2 class="page-title">题目练习功能</h2>
+      <h2 class="page-title">题目练习</h2>
       
       <div class="grid-container">
         <div 

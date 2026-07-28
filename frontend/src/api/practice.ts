@@ -23,6 +23,43 @@ export interface Question {
   updated_at: string;
 }
 
+export interface ExerciseRecordCreate {
+  question_id: number;
+  course_id: number;
+  kg_node_name?: string;
+  question_type: string;
+  question_difficulty: number;
+  do_stu_answer: string;
+}
+
+export interface ExerciseRecord {
+  do_id: number;
+  question_id: number;
+  stu_id: number;
+  course_id?: number;
+  kg_node_name?: string;
+  question_type?: string;
+  question_difficulty?: number;
+  do_stu_answer: string;
+  do_score?: number | null;
+  do_isTrue?: boolean | null;
+  created_at: string;
+}
+
+export interface ExerciseRecordListItem {
+  do_id: number;
+  question_id: number;
+  question_description: string;
+  course_name?: string;
+  question_type?: string;
+  question_difficulty?: number;
+  do_stu_answer: string;
+  do_score?: number | null;
+  do_isTrue?: boolean | null;
+  kg_node_name?: string;
+  created_at: string;
+}
+
 // practice API 调用封装
 export const fetchCourses = (): Promise<Course[]> => {
   return request.get<Course[]>('/practice/courses')
@@ -38,3 +75,24 @@ export const fetchQuestionById = (questionId: number): Promise<Question> => {
   return request.get<Question>(`/practice/questions/${questionId}`)
 }
 
+/** 提交答案并存储做题记录 */
+export const submitExerciseRecord = (data: ExerciseRecordCreate): Promise<ExerciseRecord> => {
+  return request.post<ExerciseRecord>('/practice/submit', data)
+}
+
+/** 获取做题记录
+ *  @param courseId 可选，按学科筛选
+ *  @param wrongOnly 可选，仅获取错题
+ */
+export const fetchExerciseRecords = (courseId?: number, wrongOnly?: boolean): Promise<ExerciseRecordListItem[]> => {
+  return request.get<ExerciseRecordListItem[]>('/practice/exercise-records', {
+    params: { course_id: courseId, wrong_only: wrongOnly }
+  })
+}
+
+/** 获取按学科分组的错题记录
+ *  返回格式：{ [course_id]: { course_name, records: [...] } }
+ */
+export const fetchWrongRecordsGrouped = (): Promise<Record<number, { course_name: string; records: ExerciseRecordListItem[] }>> => {
+  return request.get<Record<number, { course_name: string; records: ExerciseRecordListItem[] }>>('/practice/wrong-records/grouped')
+}

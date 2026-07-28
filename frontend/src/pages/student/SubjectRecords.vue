@@ -22,24 +22,25 @@
         <div class="records-list">
           <div 
             v-for="record in pagedRecords" 
-            :key="record.id" 
+            :key="record.do_id" 
             class="record-item"
-            :class="record.isCorrect ? 'correct-item' : 'incorrect-item'"
-            @dblclick="goToPracticePanel(record.id)"
+            :class="getRecordClass(record)"
+            @dblclick="goToPracticePanel(record.question_id, courseId)"
           >
-            <div class="record-stem text-truncate" :title="record.stem">
-              {{ record.stem }}
+            <div class="record-stem text-truncate" :title="record.question_description">
+              {{ record.question_description }}
             </div>
             
             <div class="record-meta">
-              <div class="tags">
-                <span v-for="(tag, idx) in record.tags" :key="idx" class="tag">
-                  {{ tag }}
-                </span>
-              </div>
-              <div class="date">{{ record.date }}</div>
+              <span class="subject-tag">【{{ record.course_name || subjectName }}】</span>
+              <span v-if="record.kg_node_name" class="tag">{{ record.kg_node_name }}</span>
+              <span class="date">{{ formatDate(record.created_at) }}</span>
             </div>
           </div>
+          <div v-if="records.length === 0 && !loading" class="empty-tip">
+            暂无做题记录
+          </div>
+          <div v-if="loading" class="empty-tip">加载中...</div>
         </div>
         <div class="spacer"></div>
       </div>
@@ -59,10 +60,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+import { fetchCourses, fetchExerciseRecords, type Course, type ExerciseRecordListItem } from '@/api/practice'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,41 +79,72 @@ const handleSearch = () => {
 }
 
 const moduleId = route.query.module as string
+const courseId = moduleId ? parseInt(moduleId, 10) : 0
 
-// 根据 moduleId 获取学科名称
-const subjectMap: Record<string, string> = {
-  'ds': '数据结构',
-  'co': '计算机组成原理',
-  'os': '操作系统',
-  'net': '计算机网络'
-}
-const subjectName = computed(() => subjectMap[moduleId] || '学科')
+const subjectName = ref('学科')
+const records = ref<ExerciseRecordListItem[]>([])
+const loading = ref(true)
 
-// 模拟学科的做题记录（包含对错状态）
-const mockRecords = Array.from({ length: 45 }).map((_, index) => {
-  return {
-    id: 2000 + index,
-    stem: `题目... 这是一道${subjectName.value}的占位题目记录 ${index + 1}`,
-    tags: ['知识点1', '知识点2'],
-    date: '2026-07-20 10:00',
-    isCorrect: index % 3 !== 0 // 模拟对错，部分错误，部分正确
+onMounted(async () => {
+  if (!courseId) {
+    ElMessage.warning('未指定学科')
+    loading.value = false
+    return
+  }
+
+  try {
+    // 获取学科名称
+    const courses = await fetchCourses()
+    const course = courses?.find((c: Course) => c.course_id === courseId)
+    subjectName.value = course?.course_name || '学科'
+
+    // 获取该学科下的做题记录
+    const data = await fetchExerciseRecords(courseId)
+    records.value = data || []
+  } catch (error) {
+    console.error('获取做题记录失败:', error)
+    ElMessage.error('获取做题记录失败')
+  } finally {
+    loading.value = false
   }
 })
 
+// 根据记录的对错状态返回样式类
+const getRecordClass = (record: ExerciseRecordListItem) => {
+  if (record.do_isTrue === true) return 'correct-item'
+  if (record.do_isTrue === false) return 'incorrect-item'
+  // 主观题：do_isTrue 为 null，根据 do_score 判断
+  if (record.do_score !== null && record.do_score !== undefined) {
+    return record.do_score >= 10.0 ? 'correct-item' : 'incorrect-item'
+  }
+  return ''
+}
+
+// 格式化日期
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const currentPage = ref(1)
 const pageSize = ref(10)
-const totalRecords = ref(mockRecords.length)
+const totalRecords = computed(() => records.value.length)
 
 const pagedRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return mockRecords.slice(start, start + pageSize.value)
+  return records.value.slice(start, start + pageSize.value)
 })
 
-// 双击跳转到错题练习面板
-const goToPracticePanel = (questionId: number) => {
+// 双击跳转到练习面板（携带学科 ID 和题目 ID）
+const goToPracticePanel = (questionId: number, courseId: number) => {
   router.push({
     path: '/student/practice/panel',
-    query: { questionId: questionId }
+    query: {
+      questionId: String(questionId),
+      module: String(courseId),
+    }
   })
 }
 </script>
@@ -187,7 +220,7 @@ const goToPracticePanel = (questionId: number) => {
 
 .scroll-area {
   overflow-y: auto;
-  padding: 0 40px; /* 列表左右留白，符合线框图居中感 */
+  padding: 0 40px;
 }
 
 /* 自定义滚动条 */
@@ -274,6 +307,12 @@ const goToPracticePanel = (questionId: number) => {
   gap: 8px;
 }
 
+.subject-tag {
+  font-size: 0.9rem;
+  color: #2980b9;
+  font-weight: 500;
+}
+
 .tag {
   font-size: 0.9rem;
   color: #666;
@@ -284,6 +323,13 @@ const goToPracticePanel = (questionId: number) => {
   color: #666;
   width: 140px;
   text-align: right;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 0.95rem;
 }
 
 .spacer {

@@ -12,6 +12,15 @@
       <LayoutGrid class="w-6 h-6 text-gray-700 group-hover:text-blue-500 transition-colors" />
     </button>
 
+    <!-- 右上角退出登录按钮 -->
+    <button
+      @click="handleLogout"
+      class="fixed top-6 right-6 z-50 p-3 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/50 shadow-lg hover:bg-red-50 hover:scale-105 transition-all cursor-pointer flex items-center justify-center group"
+      title="退出登录"
+    >
+      <LogOut class="w-6 h-6 text-gray-500 group-hover:text-red-500 transition-colors" />
+    </button>
+
     <!-- 主内容区（子页面渲染处） -->
     <div class="relative z-10 w-full h-full overflow-auto pt-24 px-8 pb-8">
       <router-view />
@@ -54,12 +63,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { LayoutGrid } from 'lucide-vue-next'
+import { LayoutGrid, LogOut } from 'lucide-vue-next'
 import FloatingLines from '@/components/FloatingLines.vue'
+import { useAuthStore } from '@/stores/auth'
 import { unreadCount } from '@/store/messages'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 // 控制面板是否打开的响应式状态
 const isMenuOpen = ref(true)
@@ -93,6 +104,11 @@ const handleNav = (path: string) => {
 // 切换菜单显示/隐藏
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
+}
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
 }
 
 // Magic Bento 鼠标跟踪发光特效逻辑

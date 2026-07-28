@@ -11,11 +11,16 @@ export interface ChatChunk {
 }
 
 export interface AgentSSEEvent {
-  type: 'tool_used' | 'tool_result' | 'content' | 'done' | 'error'
+  type: 'tool_used' | 'tool_result' | 'content' | 'done' | 'error' | 'kg_hit'
   tool?: string
   query?: string
   preview?: string
   content?: string
+  // kg_hit fields
+  node_id?: string
+  node_name?: string
+  node_type?: string
+  graph_name?: string
 }
 
 /**

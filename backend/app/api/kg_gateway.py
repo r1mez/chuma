@@ -111,6 +111,8 @@ async def start_kg_build(
         r = aioredis.from_url(settings.REDIS_URL)
         try:
             await r.set(f"kg:task_map:{task_id}", str(kg_record.id), ex=86400)
+            # 反向映射：kg_graph_id -> task_id（供 list_graphs 对账使用）
+            await r.set(f"kg:graph_task:{kg_record.id}", task_id, ex=86400)
         finally:
             await r.aclose()
 

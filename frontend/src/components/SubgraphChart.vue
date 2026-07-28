@@ -8,12 +8,17 @@ import * as echarts from 'echarts'
 import type { GraphNode, GraphEdge } from '@/api/knowledge'
 import { TYPE_COLORS, HIT_NODE_COLOR } from '@/constants/knowledgeColors'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   nodes: GraphNode[]
   edges: GraphEdge[]
   hitNodeId: string
   direction: 'upstream' | 'downstream'
-}>()
+  roam?: boolean
+  fullscreen?: boolean
+}>(), {
+  roam: false,
+  fullscreen: false,
+})
 
 const emit = defineEmits<{
   nodeClick: [node: GraphNode]
@@ -22,6 +27,10 @@ const emit = defineEmits<{
 const chartRef = ref<HTMLElement>()
 const chartInstance = shallowRef<echarts.ECharts>()
 let resizeObserver: ResizeObserver | null = null
+
+// Size scaling based on fullscreen mode
+const sizeScale = props.fullscreen ? 1.5 : 1
+const fontScale = props.fullscreen ? 1.2 : 1
 
 function getHopLevel(nodeId: string): number {
   if (nodeId === props.hitNodeId) return 0
@@ -89,18 +98,20 @@ function updateChart() {
     let opacity: number
 
     if (hop === 0) {
-      symbolSize = 40
+      symbolSize = 40 * sizeScale
       color = HIT_NODE_COLOR
       opacity = 1
     } else if (hop === 1) {
-      symbolSize = 28
+      symbolSize = 28 * sizeScale
       color = TYPE_COLORS[n.type] || '#94A3B8'
       opacity = 1
     } else {
-      symbolSize = 18
+      symbolSize = 18 * sizeScale
       color = TYPE_COLORS[n.type] || '#94A3B8'
       opacity = 0.6
     }
+
+    const baseFontSize = hop === 0 ? 13 : hop === 1 ? 11 : 9
 
     return {
       id: n.id,
@@ -118,7 +129,7 @@ function updateChart() {
         show: true,
         position: 'bottom' as const,
         color: hop === 0 ? HIT_NODE_COLOR : '#666',
-        fontSize: hop === 0 ? 13 : hop === 1 ? 11 : 9,
+        fontSize: baseFontSize * fontScale,
         fontWeight: hop === 0 ? 'bold' : 'normal',
       },
       rawNode: n,
@@ -129,14 +140,19 @@ function updateChart() {
     source: e.source,
     target: e.target,
     lineStyle: {
-      width: 1.5,
+      width: props.fullscreen ? 2 : 1.5,
       color: '#94A3B8',
       opacity: 0.5,
       curveness: 0.1,
     },
     symbol: ['none', 'arrow'],
-    symbolSize: 8,
+    symbolSize: props.fullscreen ? 10 : 8,
   }))
+
+  // Force layout params vary between sidebar and fullscreen
+  const forceParams = props.fullscreen
+    ? { repulsion: 600, edgeLength: 150, gravity: 0.08 }
+    : { repulsion: 300, edgeLength: 100, gravity: 0.15 }
 
   const option = {
     backgroundColor: 'transparent',
@@ -155,12 +171,8 @@ function updateChart() {
       layout: 'force',
       nodes: echartsNodes,
       links: echartsLinks,
-      roam: false,
-      force: {
-        repulsion: 300,
-        edgeLength: 100,
-        gravity: 0.15,
-      },
+      roam: props.roam,
+      force: forceParams,
       emphasis: {
         focus: 'adjacency',
         lineStyle: { width: 3 },
@@ -171,7 +183,7 @@ function updateChart() {
   chartInstance.value.setOption(option, true)
 }
 
-watch(() => [props.nodes, props.edges, props.hitNodeId, props.direction], () => {
+watch(() => [props.nodes, props.edges, props.hitNodeId, props.direction, props.roam, props.fullscreen], () => {
   updateChart()
 }, { deep: true })
 

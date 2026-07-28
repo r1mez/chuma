@@ -1,6 +1,6 @@
 """Practice 业务逻辑层 — 题库与做题记录"""
 from typing import Optional
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.question import Question
 from app.models.exercise_record import ExerciseRecord
@@ -272,3 +272,78 @@ class PracticeService:
                 )
             )
         return grouped
+
+    async def get_random_new_question(
+        self, stu_id: int, course_id: int, db: AsyncSession
+    ) -> Optional[QuestionResponse]:
+        """获取指定学科下、不在学生做题记录中的随机一道题（用于仪表盘"跳转练习"）"""
+        # 子查询：该学生已做过的题目 ID
+        subquery = (
+            select(ExerciseRecord.question_id)
+            .where(ExerciseRecord.stu_id == stu_id)
+            .subquery()
+        )
+        result = await db.execute(
+            select(Question)
+            .where(
+                and_(
+                    Question.course_id == course_id,
+                    Question.question_id.notin_(subquery),
+                )
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        question = result.scalar_one_or_none()
+        if question is None:
+            return None
+        return QuestionResponse.model_validate(question)
+
+    async def get_random_record_question(
+        self, stu_id: int, course_id: int, db: AsyncSession
+    ) -> Optional[QuestionResponse]:
+        """获取指定学科下、学生做题记录中的随机一道题（用于仪表盘"做题记录"）"""
+        result = await db.execute(
+            select(Question)
+            .join(ExerciseRecord, Question.question_id == ExerciseRecord.question_id)
+            .where(
+                and_(
+                    ExerciseRecord.stu_id == stu_id,
+                    Question.course_id == course_id,
+                )
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        question = result.scalar_one_or_none()
+        if question is None:
+            return None
+        return QuestionResponse.model_validate(question)
+
+    async def get_question_ids_by_course(
+        self, course_id: int, db: AsyncSession
+    ) -> list[int]:
+        """获取指定学科下所有题目的 ID 列表（用于仪表盘跳转后前后切换）"""
+        result = await db.execute(
+            select(Question.question_id)
+            .where(Question.course_id == course_id)
+            .order_by(Question.question_id)
+        )
+        return [row[0] for row in result.all()]
+
+    async def get_record_question_ids_by_course(
+        self, stu_id: int, course_id: int, db: AsyncSession
+    ) -> list[int]:
+        """获取指定学科下学生做题记录中所有题目的 ID 列表（用于仪表盘做题记录跳转后前后切换）"""
+        result = await db.execute(
+            select(Question.question_id)
+            .join(ExerciseRecord, Question.question_id == ExerciseRecord.question_id)
+            .where(
+                and_(
+                    ExerciseRecord.stu_id == stu_id,
+                    Question.course_id == course_id,
+                )
+            )
+            .order_by(Question.question_id)
+        )
+        return [row[0] for row in result.all()]

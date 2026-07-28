@@ -24,6 +24,7 @@ export const fetchCurrentUser = (): Promise<{
   name: string
   email: string | null
   gender: string | null
+  stu_level: string | null
 }> => {
   return request.get('/auth/me')
 }

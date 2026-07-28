@@ -15,6 +15,10 @@
               <p><strong>姓名：</strong>{{ userName }}</p>
               <p><strong>Email：</strong>{{ userEmail }}</p>
               <p><strong>座右铭：</strong>{{ motto || '还没有设置座右铭' }}</p>
+              <p v-if="stuLevel" class="rating-row">
+                <strong>评级：</strong>
+                <span class="rating-badge" :style="{ color: ratingColor }">{{ stuLevel }}</span>
+              </p>
             </div>
           </div>
         </div>
@@ -57,13 +61,13 @@
           <div class="action-list">
             <div class="action-item">
               <span class="action-desc text-truncate">{{ subject.latestMsg }}</span>
-              <!-- 跳转到 题目练习面板 -->
-              <el-button size="small" type="primary" plain @click="navigateTo('/student/practice/panel', subject.id)">跳转练习</el-button>
+              <!-- 跳转到 题目练习面板（携带随机题目 ID 和题目列表） -->
+              <el-button size="small" type="primary" plain @click="navigateToPractice(subject, 'new')" :disabled="!subject.newQuestionId">跳转练习</el-button>
             </div>
             <div class="action-item">
               <span class="action-desc text-truncate">{{ subject.recordMsg }}</span>
-              <!-- 跳转到 做题记录 -->
-              <el-button size="small" type="warning" plain @click="navigateTo('/student/exercise-records', subject.id)">做题记录</el-button>
+              <!-- 跳转到 题目练习面板（携带做题记录中的随机题目 ID 和题目列表） -->
+              <el-button size="small" type="warning" plain @click="navigateToPractice(subject, 'record')" :disabled="!subject.recordQuestionId">做题记录</el-button>
             </div>
           </div>
 
@@ -127,7 +131,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
-import { fetchCourses, type Course } from '@/api/practice'
+import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, type Course, type Question } from '@/api/practice'
 import { fetchCurrentUser, updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 
@@ -138,6 +142,7 @@ const authStore = useAuthStore()
 const userName = ref('加载中...')
 const userEmail = ref('')
 const userGender = ref<string | null>(null)
+const stuLevel = ref<string | null>(null)
 
 // 座右铭仅存前端 localStorage，不从数据库获取
 const MOTTO_KEY = 'chuma_user_motto'
@@ -148,6 +153,20 @@ const genderAvatar = computed(() => {
   if (userGender.value === '女') return '👩'
   if (userGender.value === '男') return '👨'
   return '🧑'
+})
+
+// 评级颜色映射：A-绿色、B-蓝色、C-黄色、D-红色、E-黑色
+const ratingColorMap: Record<string, string> = {
+  A: '#67c23a',
+  B: '#409eff',
+  C: '#e6a23c',
+  D: '#f56c6c',
+  E: '#303133',
+}
+const ratingColor = computed(() => {
+  if (!stuLevel.value) return '#303133'
+  const key = stuLevel.value.toUpperCase()
+  return ratingColorMap[key] || '#303133'
 })
 
 /** 加载当前用户信息 */
@@ -166,12 +185,14 @@ const loadUserInfo = async () => {
     userName.value = me.name || '未知用户'
     userEmail.value = me.email || ''
     userGender.value = me.gender || null
+    stuLevel.value = me.stu_level || null
     // 同步到 Store
     authStore.setUser({
       id: me.id,
       name: me.name,
       email: me.email,
       gender: me.gender,
+      stu_level: me.stu_level,
       role: me.user_type as 'student' | 'teacher',
     })
   } catch {
@@ -180,6 +201,7 @@ const loadUserInfo = async () => {
       userName.value = authStore.user.name
       userEmail.value = authStore.user.email || ''
       userGender.value = authStore.user.gender
+      stuLevel.value = authStore.user.stu_level
     }
   }
 }
@@ -266,6 +288,12 @@ const subjects = ref<Array<{
   progress: number
   latestMsg: string
   recordMsg: string
+  newQuestionId: number | null
+  recordQuestionId: number | null
+  newRandomIndex: number
+  recordRandomIndex: number
+  newIdList: number[]
+  recordIdList: number[]
 }>>([])
 
 // Mock 数据映射：按学科名称匹配进度与消息（后端尚未实现真实数据接口）
@@ -276,6 +304,12 @@ const mockSubjectData: Record<string, { progress: number; latestMsg: string; rec
   '计算机网络':       { progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
 }
 
+/** 截断题目描述，保留前 maxLen 个字符 */
+const truncateDesc = (desc: string, maxLen: number = 40): string => {
+  if (!desc) return '暂无记录'
+  return desc.length > maxLen ? desc.slice(0, maxLen) + '...' : desc
+}
+
 onMounted(async () => {
   // 并行加载用户信息和学科列表
   await loadUserInfo()
@@ -283,22 +317,65 @@ onMounted(async () => {
   try {
     const courses = await fetchCourses()
     if (courses && courses.length > 0) {
-      subjects.value = courses.map((course: Course) => {
+      // 先构建基础学科列表
+      const baseSubjects = courses.map((course: Course) => {
         const mock = mockSubjectData[course.course_name] || { progress: 0, latestMsg: '暂无记录', recordMsg: '暂无记录' }
         return {
           id: course.course_id,
           name: course.course_name,
           progress: mock.progress,
           latestMsg: mock.latestMsg,
-          recordMsg: mock.recordMsg
+          recordMsg: mock.recordMsg,
+          newQuestionId: null as number | null,
+          recordQuestionId: null as number | null,
+          newRandomIndex: -1,
+          recordRandomIndex: -1,
+          newIdList: [] as number[],
+          recordIdList: [] as number[],
         }
       })
+      subjects.value = baseSubjects
+
+      // 并行获取每个学科的随机题目
+      const promises = baseSubjects.map(async (s) => {
+        try {
+          const [newRes, recordRes] = await Promise.all([
+            fetchDashboardNewQuestion(s.id),
+            fetchDashboardRecordQuestion(s.id),
+          ])
+          if (newRes.question) {
+            s.newQuestionId = newRes.question.question_id
+            s.newRandomIndex = newRes.random_index
+            s.newIdList = newRes.id_list
+            s.latestMsg = '【最新】' + truncateDesc(newRes.question.question_description)
+          } else {
+            s.latestMsg = '【最新】暂无新题'
+          }
+          if (recordRes.question) {
+            s.recordQuestionId = recordRes.question.question_id
+            s.recordRandomIndex = recordRes.random_index
+            s.recordIdList = recordRes.id_list
+            s.recordMsg = '【巩固】' + truncateDesc(recordRes.question.question_description)
+          } else {
+            s.recordMsg = '【巩固】暂无记录'
+          }
+        } catch (e) {
+          console.error(`获取学科 ${s.name} 的题目失败:`, e)
+        }
+      })
+      await Promise.all(promises)
     } else {
       // 无数据时回退到静态 Mock
       subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
         id: index + 1,
         name,
-        ...data
+        ...data,
+        newQuestionId: null,
+        recordQuestionId: null,
+        newRandomIndex: -1,
+        recordRandomIndex: -1,
+        newIdList: [],
+        recordIdList: [],
       }))
     }
   } catch (error) {
@@ -308,7 +385,13 @@ onMounted(async () => {
     subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
       id: index + 1,
       name,
-      ...data
+      ...data,
+      newQuestionId: null,
+      recordQuestionId: null,
+      newRandomIndex: -1,
+      recordRandomIndex: -1,
+      newIdList: [],
+      recordIdList: [],
     }))
   }
 })
@@ -318,6 +401,26 @@ const navigateTo = (path: string, subjectId?: number | string) => {
   router.push({
     path,
     query: subjectId ? { module: subjectId.toString() } : undefined
+  })
+}
+
+/** 跳转到练习面板，携带随机题目 ID、随机索引和全量 ID 列表 */
+const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
+  const questionId = mode === 'new' ? subject.newQuestionId : subject.recordQuestionId
+  const randomIndex = mode === 'new' ? subject.newRandomIndex : subject.recordRandomIndex
+  const idList = mode === 'new' ? subject.newIdList : subject.recordIdList
+  if (!questionId) {
+    ElMessage.warning('暂无可用题目')
+    return
+  }
+  router.push({
+    path: '/student/practice/panel',
+    query: {
+      questionId: String(questionId),
+      module: String(subject.id),
+      randomIndex: String(randomIndex),
+      idList: idList.join(','),
+    }
   })
 }
 </script>
@@ -382,6 +485,18 @@ const navigateTo = (path: string, subjectId?: number | string) => {
 .info-text p {
   margin: 8px 0;
   font-size: 0.95rem;
+}
+
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rating-badge {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .suggestions {

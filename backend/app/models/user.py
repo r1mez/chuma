@@ -11,6 +11,7 @@ class Student(Base):
     stu_gender = Column(String(4), nullable=True)
     stu_email = Column(String(128), nullable=True, unique=True)
     stu_pwd = Column(String(256), nullable=True)
+    stu_level = Column(String(32), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

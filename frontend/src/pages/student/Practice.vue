@@ -6,10 +6,10 @@
         <!-- 上半部分：题目与答题区 -->
         <div class="section-container" v-if="currentQuestion">
           <div class="question-header">
-            <h3 class="title-red">题目 ({{ currentIndex + 1 }} / {{ questions.length }})：</h3>
+            <h3 class="title-red">题目 ({{ cachedIdList.length > 0 ? cachedIndex + 1 : currentIndex + 1 }} / {{ cachedIdList.length > 0 ? cachedIdList.length : questions.length }})：</h3>
             <div class="question-actions">
-              <el-button size="small" type="danger" plain @click="prevQuestion" :disabled="currentIndex === 0">上一题</el-button>
-              <el-button size="small" type="danger" plain @click="nextQuestion" :disabled="currentIndex === questions.length - 1">下一题</el-button>
+              <el-button size="small" type="danger" plain @click="prevQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === 0 : currentIndex === 0">上一题</el-button>
+              <el-button size="small" type="danger" plain @click="nextQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === cachedIdList.length - 1 : currentIndex === questions.length - 1">下一题</el-button>
               <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
             </div>
           </div>
@@ -166,6 +166,10 @@ const isAnswerSubmitted = ref(false)
 const showAiAnalysis = ref(false)
 const showSimilarQuestions = ref(false)
 
+// 全量 ID 数组缓存（用于仪表盘跳转后的前后切换）
+const cachedIdList = ref<number[]>([])
+const cachedIndex = ref(0)
+
 const currentQuestion = computed(() => {
   return questions.value[currentIndex.value] || null
 })
@@ -180,6 +184,8 @@ const userAnswerArray = ref([])
 onMounted(async () => {
   const courseIdStr = route.query.module as string
   const questionIdStr = route.query.questionId as string
+  const idListStr = route.query.idList as string
+  const randomIndexStr = route.query.randomIndex as string
   const courseId = courseIdStr ? parseInt(courseIdStr, 10) : undefined
   const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
 
@@ -190,7 +196,36 @@ onMounted(async () => {
   }
 
   try {
-    if (questionId) {
+    if (idListStr) {
+      // 从仪表盘跳转：携带了全量 ID 列表和随机索引（全量 ID 数组缓存法）
+      const idList = idListStr.split(',').map(Number).filter(id => !isNaN(id))
+      const randomIndex = randomIndexStr ? parseInt(randomIndexStr, 10) : 0
+
+      if (idList.length === 0) {
+        ElMessage.error('题目列表参数无效')
+        loading.value = false
+        return
+      }
+
+      // 只加载当前索引对应的题目（按需加载，而非全量加载）
+      const targetId = idList[randomIndex]
+      if (!targetId) {
+        ElMessage.error('目标题目索引无效')
+        loading.value = false
+        return
+      }
+
+      const question = await fetchQuestionById(targetId)
+      if (question) {
+        questions.value = [question]
+        currentIndex.value = 0
+        // 保存 ID 列表和当前索引到组件状态，供前后切换使用
+        cachedIdList.value = idList
+        cachedIndex.value = randomIndex
+      } else {
+        ElMessage.error('未找到该题目')
+      }
+    } else if (questionId) {
       // 通过 questionId 加载指定题目（从做题记录双击跳转）
       const question = await fetchQuestionById(questionId)
       if (question) {
@@ -213,8 +248,16 @@ onMounted(async () => {
 })
 
 // 题目切换逻辑
-const prevQuestion = () => {
-  if (currentIndex.value > 0) {
+const prevQuestion = async () => {
+  if (cachedIdList.value.length > 0) {
+    // 全量 ID 缓存模式：通过索引切换
+    if (cachedIndex.value > 0) {
+      cachedIndex.value--
+      await loadQuestionByCachedIndex()
+    } else {
+      ElMessage.warning('已经是第一题了')
+    }
+  } else if (currentIndex.value > 0) {
     currentIndex.value--
     resetAnswer()
     ElMessage.success('已切换至上一题')
@@ -223,13 +266,39 @@ const prevQuestion = () => {
   }
 }
 
-const nextQuestion = () => {
-  if (currentIndex.value < questions.value.length - 1) {
+const nextQuestion = async () => {
+  if (cachedIdList.value.length > 0) {
+    // 全量 ID 缓存模式：通过索引切换
+    if (cachedIndex.value < cachedIdList.value.length - 1) {
+      cachedIndex.value++
+      await loadQuestionByCachedIndex()
+    } else {
+      ElMessage.warning('已经是最后一题了')
+    }
+  } else if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value++
     resetAnswer()
     ElMessage.success('已切换至下一题')
   } else {
     ElMessage.warning('已经是最后一题了')
+  }
+}
+
+/** 根据 cachedIndex 从 cachedIdList 中加载对应题目 */
+const loadQuestionByCachedIndex = async () => {
+  const targetId = cachedIdList.value[cachedIndex.value]
+  if (!targetId) return
+  try {
+    const question = await fetchQuestionById(targetId)
+    if (question) {
+      questions.value = [question]
+      currentIndex.value = 0
+      resetAnswer()
+      ElMessage.success(`已切换至第 ${cachedIndex.value + 1} 题`)
+    }
+  } catch (error) {
+    console.error('切换题目失败:', error)
+    ElMessage.error('切换题目失败')
   }
 }
 

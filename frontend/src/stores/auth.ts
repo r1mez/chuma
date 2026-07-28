@@ -6,6 +6,7 @@ export interface UserInfo {
   name: string
   email: string | null
   gender: string | null
+  stu_level: string | null
   role: 'student' | 'teacher'
 }
 

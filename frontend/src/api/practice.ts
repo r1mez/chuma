@@ -96,3 +96,21 @@ export const fetchExerciseRecords = (courseId?: number, wrongOnly?: boolean): Pr
 export const fetchWrongRecordsGrouped = (): Promise<Record<number, { course_name: string; records: ExerciseRecordListItem[] }>> => {
   return request.get<Record<number, { course_name: string; records: ExerciseRecordListItem[] }>>('/practice/wrong-records/grouped')
 }
+
+/** 仪表盘 - 获取学科下不在做题记录中的随机题目（跳转练习用）
+ *  返回：{ question: Question | null, random_index: number, id_list: number[] }
+ */
+export const fetchDashboardNewQuestion = (courseId: number): Promise<{ question: Question | null; random_index: number; id_list: number[] }> => {
+  return request.get('/practice/dashboard/new-question', {
+    params: { course_id: courseId }
+  })
+}
+
+/** 仪表盘 - 获取学科下做题记录中的随机题目（做题记录用）
+ *  返回：{ question: Question | null, random_index: number, id_list: number[] }
+ */
+export const fetchDashboardRecordQuestion = (courseId: number): Promise<{ question: Question | null; random_index: number; id_list: number[] }> => {
+  return request.get('/practice/dashboard/record-question', {
+    params: { course_id: courseId }
+  })
+}

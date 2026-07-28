@@ -28,6 +28,7 @@ class StudentResponse(BaseModel):
     stu_name: str
     stu_gender: Optional[str] = None
     stu_email: Optional[str] = None
+    stu_level: Optional[str] = None
     created_at: datetime
     class Config:
         from_attributes = True

@@ -96,6 +96,62 @@ async def get_wrong_records_grouped(
     return await service.get_student_wrong_records_grouped(stu_id, db)
 
 
+@router.get("/dashboard/new-question")
+async def get_dashboard_new_question(
+    course_id: int = Query(...),
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取指定学科下、不在学生做题记录中的随机一道题（仪表盘"跳转练习"用）
+
+    返回：
+    - question: 随机抽取的题目详情
+    - random_index: 该题目在 id_list 中的索引
+    - id_list: 该学科下所有题目的 ID 数组（全量 ID 缓存，供前端前后切换）
+    """
+    stu_id = current_user.get("id")
+    service = PracticeService()
+    question = await service.get_random_new_question(stu_id, course_id, db)
+    if question is None:
+        return {"question": None, "random_index": -1, "id_list": []}
+    # 获取该学科下所有题目 ID 列表（全量 ID 缓存）
+    id_list = await service.get_question_ids_by_course(course_id, db)
+    # 找到随机题目的索引
+    try:
+        random_index = id_list.index(question.question_id)
+    except ValueError:
+        random_index = 0
+    return {"question": question.model_dump(), "random_index": random_index, "id_list": id_list}
+
+
+@router.get("/dashboard/record-question")
+async def get_dashboard_record_question(
+    course_id: int = Query(...),
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取指定学科下、学生做题记录中的随机一道题（仪表盘"做题记录"用）
+
+    返回：
+    - question: 随机抽取的题目详情
+    - random_index: 该题目在 id_list 中的索引
+    - id_list: 该学科做题记录中所有题目的 ID 数组（全量 ID 缓存，供前端前后切换）
+    """
+    stu_id = current_user.get("id")
+    service = PracticeService()
+    question = await service.get_random_record_question(stu_id, course_id, db)
+    if question is None:
+        return {"question": None, "random_index": -1, "id_list": []}
+    # 获取该学科做题记录中所有题目 ID 列表（全量 ID 缓存）
+    id_list = await service.get_record_question_ids_by_course(stu_id, course_id, db)
+    # 找到随机题目的索引
+    try:
+        random_index = id_list.index(question.question_id)
+    except ValueError:
+        random_index = 0
+    return {"question": question.model_dump(), "random_index": random_index, "id_list": id_list}
+
+
 @router.get("/exercise-records/analytics")
 async def get_exercise_records_analytics():
     return {"message": "analytics endpoint - not in scope"}

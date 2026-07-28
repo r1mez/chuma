@@ -49,6 +49,7 @@ async def get_current_user(
             "name": user.stu_name,
             "email": user.stu_email,
             "gender": user.stu_gender,
+            "stu_level": user.stu_level,
         }
     elif user_type == "teacher":
         user = await auth_service.get_teacher_by_id(user_id_int, db)

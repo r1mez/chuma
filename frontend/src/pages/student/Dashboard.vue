@@ -242,7 +242,17 @@ const handleSaveProfile = async () => {
     editDialogVisible.value = false
     ElMessage.success('个人信息已保存')
   } catch (err: any) {
-    const msg = err?.response?.data?.detail || '保存失败，请重试'
+    console.error('保存个人信息失败:', err)
+    // FastAPI 校验错误 detail 可能是数组，统一提取为可读消息
+    let msg = '保存失败，请重试'
+    const detail = err?.response?.data?.detail
+    if (typeof detail === 'string') {
+      msg = detail
+    } else if (Array.isArray(detail) && detail.length > 0) {
+      msg = detail.map((d: any) => d.msg || JSON.stringify(d)).join('；')
+    } else if (err?.message) {
+      msg = err.message
+    }
     ElMessage.error(msg)
   } finally {
     saving.value = false

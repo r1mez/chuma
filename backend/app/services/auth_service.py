@@ -96,7 +96,7 @@ class AuthService:
             student.stu_name = data.stu_name
         if data.stu_email is not None:
             student.stu_email = data.stu_email
-        if data.stu_pwd is not None:
+        if data.stu_pwd is not None and data.stu_pwd != "":
             student.stu_pwd = hash_password(data.stu_pwd)
         if data.stu_gender is not None:
             student.stu_gender = data.stu_gender

@@ -260,10 +260,11 @@ class KGExtractor:
             return None
 
     async def extract_from_chunk(self, chunk: DocumentChunk) -> KnowledgeGraph3D:
-        """从单个切片提取知识图谱"""
+        """从单个切片提取知识图谱
+
         Args:
             chunk: 文档切片
-            
+
         Returns:
             KnowledgeGraph3D 包含抽取的节点和边
 

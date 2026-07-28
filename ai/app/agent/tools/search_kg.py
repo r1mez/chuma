@@ -57,7 +57,7 @@ async def search_kg(user_id: int, query: str, top_k: int = 10) -> str:
 
         for node in limited:
             output_lines.append(
-                f"- {node['name']} [{node.get('type', 'Concept')}]: {node.get('description', '无描述')}"
+                f"- {node['name']} [{node.get('type', 'Concept')}] (id:{node['id']}): {node.get('description', '无描述')}"
             )
 
         return "\n".join(output_lines)

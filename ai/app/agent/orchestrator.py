@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 
 from app.agent.tool_registry import ToolRegistry
@@ -15,6 +16,36 @@ MAX_TURNS = 10
 TOOL_TIMEOUT = 10.0
 
 
+def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict | None:
+    """Parse the first node from search_kg output text.
+
+    Expected format: "- {name} [{type}] (id:{id}): {description}"
+    Returns dict with id, name, type, graph_name or None if parsing fails.
+    """
+    # Match the first node line: "- 红黑树 [Concept] (id:abc123): 一种自平衡..."
+    pattern = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^)]+)\):\s+(.*)'
+    match = re.search(pattern, tool_result_text)
+    if not match:
+        # Fallback: try without id (old format) — shouldn't happen after Task 1
+        pattern_old = r'-\s+(.+?)\s+\[(\w+)\]:\s+(.*)'
+        match_old = re.search(pattern_old, tool_result_text)
+        if match_old:
+            return {
+                "id": "",  # Unknown id — kg_hit will still work with name
+                "name": match_old.group(1),
+                "type": match_old.group(2),
+                "graph_name": graph_names[0] if graph_names else "",
+            }
+        return None
+
+    return {
+        "id": match.group(3),
+        "name": match.group(1),
+        "type": match.group(2),
+        "graph_name": graph_names[0] if graph_names else "",
+    }
+
+
 class AgentOrchestrator:
     """Agent 编排器 — 核心能力：多步推理 + 工具调用
 
@@ -22,7 +53,7 @@ class AgentOrchestrator:
         llm = LLMClient(default_profile=quick_profile())
         agent = AgentOrchestrator(user_id=1, llm_client=llm)
         async for chunk in agent.run("帮我复习红黑树", history=[]):
-            # SSE event dicts: {"type": "tool_used"|"tool_result"|"content"|"done"}
+            # SSE event dicts: {"type": "tool_used"|"tool_result"|"kg_hit"|"content"|"done"}
     """
 
     def __init__(self, user_id: int, llm_client: LLMClient):
@@ -66,7 +97,6 @@ class AgentOrchestrator:
         if kg_ids and g_names:
             lines.append("## 当前教材范围")
             lines.append("以下教材已被用户选中，请优先基于这些教材的知识图谱和文档内容回答：")
-            import re
             for gid, gname in zip(kg_ids, g_names):
                 # 从 graph_name 提取可读名称（去除 kg_xxx_ 前缀）
                 readable = gname
@@ -128,6 +158,7 @@ class AgentOrchestrator:
         Yields:
             {"type": "tool_used", "tool": str, "query": str}
             {"type": "tool_result", "tool": str, "preview": str}
+            {"type": "kg_hit", "node_id": str, "node_name": str, "node_type": str, "graph_name": str}
             {"type": "content", "content": str}
             {"type": "done"}
             {"type": "error", "content": str}
@@ -206,6 +237,19 @@ class AgentOrchestrator:
                             "tool": tc.name,
                             "preview": preview.replace("\n", " "),
                         }
+
+                        # Emit kg_hit event when search_kg returns results
+                        if tc.name == "search_kg" and not result.startswith("未在知识图谱中找到"):
+                            g_names = current_graph_names.get()
+                            hit_node = _parse_first_kg_node(result, g_names)
+                            if hit_node:
+                                yield {
+                                    "type": "kg_hit",
+                                    "node_id": hit_node["id"],
+                                    "node_name": hit_node["name"],
+                                    "node_type": hit_node["type"],
+                                    "graph_name": hit_node["graph_name"],
+                                }
 
                         # Append tool result
                         messages.append({

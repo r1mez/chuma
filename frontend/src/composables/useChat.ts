@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { sendQuickMessage, sendDeepMessage, sendAgentMessage, type ChatHistoryItem, type ChatChunk, type AgentSSEEvent } from '@/api/ai'
+import { useSubgraph } from '@/composables/useSubgraph'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -17,6 +18,13 @@ export interface ToolCallStatus {
 
 export type ChatMode = 'quick' | 'deep' | 'agent'
 
+export interface KgHitNode {
+  nodeId: string
+  nodeName: string
+  nodeType: string
+  graphName: string
+}
+
 export function useChat() {
   const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
@@ -24,6 +32,10 @@ export function useChat() {
   const streamingReasoning = ref('')
   const chatMode = ref<ChatMode>('quick')
   const kgGraphIds = ref<number[]>([])
+  const kgHitNode = ref<KgHitNode | null>(null)
+  const subgraphPanelVisible = ref(false)
+  const subgraphManuallyClosed = ref(false)
+  const { subgraphs, subgraphLoading, subgraphError, extractSubgraphs, clearSubgraphs } = useSubgraph()
 
   async function sendMessage(content: string) {
     messages.value.push({ role: 'user', content })
@@ -63,6 +75,19 @@ export function useChat() {
             messages.value[assistantIdx].content = streamingContent.value
           } else if (event.type === 'error') {
             messages.value[assistantIdx].content = `⚠️ 出错了：${event.content}`
+          } else if (event.type === 'kg_hit') {
+            // New subgraph hit — update panel unless user manually closed it this conversation
+            if (!subgraphManuallyClosed.value) {
+              kgHitNode.value = {
+                nodeId: event.node_id!,
+                nodeName: event.node_name!,
+                nodeType: event.node_type!,
+                graphName: event.graph_name!,
+              }
+              subgraphPanelVisible.value = true
+              // Trigger subgraph extraction (async, doesn't block SSE)
+              extractSubgraphs(kgHitNode.value)
+            }
           }
         },
         () => {
@@ -109,9 +134,18 @@ export function useChat() {
     )
   }
 
-  function clearMessages() {
-    messages.value = []
+  function closeSubgraphPanel() {
+    subgraphPanelVisible.value = false
+    subgraphManuallyClosed.value = true
   }
 
-  return { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds }
+  function clearMessages() {
+    messages.value = []
+    kgHitNode.value = null
+    subgraphPanelVisible.value = false
+    subgraphManuallyClosed.value = false  // Reset for new conversation
+    clearSubgraphs()
+  }
+
+  return { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds, kgHitNode, subgraphPanelVisible, closeSubgraphPanel, subgraphs, subgraphLoading, subgraphError, extractSubgraphs }
 }

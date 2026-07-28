@@ -24,17 +24,17 @@ export interface Question {
 }
 
 // practice API 调用封装
-export const fetchCourses = () => {
+export const fetchCourses = (): Promise<Course[]> => {
   return request.get<Course[]>('/practice/courses')
 }
 
-export const fetchQuestions = (courseId?: number, kgNodeName?: string, difficulty?: number) => {
+export const fetchQuestions = (courseId?: number, kgNodeName?: string, difficulty?: number): Promise<Question[]> => {
   return request.get<Question[]>('/practice/questions', {
     params: { course_id: courseId, kg_node_name: kgNodeName, difficulty }
   })
 }
 
-export const fetchQuestionById = (questionId: number) => {
+export const fetchQuestionById = (questionId: number): Promise<Question> => {
   return request.get<Question>(`/practice/questions/${questionId}`)
 }
 

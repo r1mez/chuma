@@ -5,13 +5,16 @@
       <div class="left-panel">
         <!-- 个人信息 -->
         <div class="glass-card personal-info">
-          <h3 class="card-title">个人信息</h3>
+          <div class="card-header-row">
+            <h3 class="card-title">个人信息</h3>
+            <el-button type="primary" size="small" :icon="Edit" @click="openEditDialog">编辑个人信息</el-button>
+          </div>
           <div class="info-content">
-            <div class="avatar-placeholder">🧑</div>
+            <div class="avatar-placeholder">{{ genderAvatar }}</div>
             <div class="info-text">
-              <p><strong>姓名：</strong>秦诗浩</p>
-              <p><strong>学号：</strong>S240231118</p>
-              <p><strong>目标：</strong>计算机知识学习</p>
+              <p><strong>姓名：</strong>{{ userName }}</p>
+              <p><strong>Email：</strong>{{ userEmail }}</p>
+              <p><strong>座右铭：</strong>{{ motto || '还没有设置座右铭' }}</p>
             </div>
           </div>
         </div>
@@ -71,29 +74,240 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑个人信息弹窗 -->
+    <el-dialog
+      v-model="editDialogVisible"
+      title="编辑个人信息"
+      width="480px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <el-form :model="editForm" label-width="80px" class="edit-form">
+        <el-form-item label="姓名">
+          <el-input v-model="editForm.stu_name" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="editForm.stu_email" placeholder="请输入邮箱" />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-select v-model="editForm.stu_gender" placeholder="请选择性别" style="width: 100%">
+            <el-option label="男" value="男" />
+            <el-option label="女" value="女" />
+            <el-option label="保密" value="保密" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input v-model="editForm.stu_pwd" type="password" placeholder="留空则不修改密码" show-password />
+        </el-form-item>
+        <el-form-item label="座右铭">
+          <el-input
+            v-model="editForm.motto"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入您的座右铭"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="editDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="handleSaveProfile">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </BorderGlow>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
+import { fetchCourses, type Course } from '@/api/practice'
+import { fetchCurrentUser, updateProfile } from '@/api/auth'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
-// Mock：四个学科的数据，供前端布局展示使用。ID 使用与 PracticeHome 一致的字符串 ID
-const subjects = ref([
-  { id: 'ds', name: '数据结构', progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
-  { id: 'co', name: '计算机组成原理', progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
-  { id: 'os', name: '操作系统', progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
-  { id: 'net', name: '计算机网络', progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
-])
+// ========== 个人信息（从数据库/Store 获取） ==========
+const userName = ref('加载中...')
+const userEmail = ref('')
+const userGender = ref<string | null>(null)
+
+// 座右铭仅存前端 localStorage，不从数据库获取
+const MOTTO_KEY = 'chuma_user_motto'
+const motto = ref(localStorage.getItem(MOTTO_KEY) || '')
+
+// 头像根据性别显示
+const genderAvatar = computed(() => {
+  if (userGender.value === '女') return '👩'
+  if (userGender.value === '男') return '👨'
+  return '🧑'
+})
+
+/** 加载当前用户信息 */
+const loadUserInfo = async () => {
+  // 优先使用 Store 中已缓存的信息
+  if (authStore.user && authStore.user.name) {
+    userName.value = authStore.user.name
+    userEmail.value = authStore.user.email || ''
+    userGender.value = authStore.user.gender
+    return
+  }
+
+  // Store 无数据则从服务端获取
+  try {
+    const me = await fetchCurrentUser()
+    userName.value = me.name || '未知用户'
+    userEmail.value = me.email || ''
+    userGender.value = me.gender || null
+    // 同步到 Store
+    authStore.setUser({
+      id: me.id,
+      name: me.name,
+      email: me.email,
+      gender: me.gender,
+      role: me.user_type as 'student' | 'teacher',
+    })
+  } catch {
+    // 降级使用 Store 中的已有信息
+    if (authStore.user) {
+      userName.value = authStore.user.name
+      userEmail.value = authStore.user.email || ''
+      userGender.value = authStore.user.gender
+    }
+  }
+}
+
+// ========== 编辑弹窗 ==========
+const editDialogVisible = ref(false)
+const saving = ref(false)
+
+const editForm = ref({
+  stu_name: '',
+  stu_email: '',
+  stu_gender: '',
+  stu_pwd: '',
+  motto: '',
+})
+
+const openEditDialog = () => {
+  editForm.value = {
+    stu_name: userName.value === '加载中...' ? '' : userName.value,
+    stu_email: userEmail.value,
+    stu_gender: userGender.value || '',
+    stu_pwd: '',
+    motto: motto.value,
+  }
+  editDialogVisible.value = true
+}
+
+const handleSaveProfile = async () => {
+  saving.value = true
+  try {
+    // 1. 保存数据库字段（姓名、邮箱、性别、密码）到后端
+    const updateData: Record<string, string> = {}
+    if (editForm.value.stu_name) updateData.stu_name = editForm.value.stu_name
+    if (editForm.value.stu_email) updateData.stu_email = editForm.value.stu_email
+    if (editForm.value.stu_gender) updateData.stu_gender = editForm.value.stu_gender
+    if (editForm.value.stu_pwd) updateData.stu_pwd = editForm.value.stu_pwd
+
+    if (Object.keys(updateData).length > 0) {
+      await updateProfile(updateData)
+    }
+
+    // 2. 保存座右铭到 localStorage（仅前端）
+    localStorage.setItem(MOTTO_KEY, editForm.value.motto)
+    motto.value = editForm.value.motto
+
+    // 3. 更新页面显示和 Store
+    userName.value = editForm.value.stu_name || userName.value
+    userEmail.value = editForm.value.stu_email || userEmail.value
+    userGender.value = editForm.value.stu_gender || userGender.value
+
+    if (authStore.user) {
+      authStore.setUser({
+        ...authStore.user,
+        name: userName.value,
+        email: userEmail.value,
+        gender: userGender.value,
+      })
+    }
+
+    editDialogVisible.value = false
+    ElMessage.success('个人信息已保存')
+  } catch (err: any) {
+    const msg = err?.response?.data?.detail || '保存失败，请重试'
+    ElMessage.error(msg)
+  } finally {
+    saving.value = false
+  }
+}
+
+// ========== 学科卡片数据 ==========
+const subjects = ref<Array<{
+  id: number
+  name: string
+  progress: number
+  latestMsg: string
+  recordMsg: string
+}>>([])
+
+// Mock 数据映射：按学科名称匹配进度与消息（后端尚未实现真实数据接口）
+const mockSubjectData: Record<string, { progress: number; latestMsg: string; recordMsg: string }> = {
+  '数据结构':         { progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
+  '计算机组成原理':   { progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
+  '操作系统':         { progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
+  '计算机网络':       { progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
+}
+
+onMounted(async () => {
+  // 并行加载用户信息和学科列表
+  await loadUserInfo()
+
+  try {
+    const courses = await fetchCourses()
+    if (courses && courses.length > 0) {
+      subjects.value = courses.map((course: Course) => {
+        const mock = mockSubjectData[course.course_name] || { progress: 0, latestMsg: '暂无记录', recordMsg: '暂无记录' }
+        return {
+          id: course.course_id,
+          name: course.course_name,
+          progress: mock.progress,
+          latestMsg: mock.latestMsg,
+          recordMsg: mock.recordMsg
+        }
+      })
+    } else {
+      // 无数据时回退到静态 Mock
+      subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
+        id: index + 1,
+        name,
+        ...data
+      }))
+    }
+  } catch (error) {
+    console.error('获取学科列表失败:', error)
+    ElMessage.error('获取学科列表失败，使用本地数据')
+    // 接口失败时回退到静态 Mock
+    subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
+      id: index + 1,
+      name,
+      ...data
+    }))
+  }
+})
 
 // 路由跳转逻辑
-const navigateTo = (path: string, subjectId?: string) => {
+const navigateTo = (path: string, subjectId?: number | string) => {
   router.push({
     path,
-    query: subjectId ? { module: subjectId } : undefined
+    query: subjectId ? { module: subjectId.toString() } : undefined
   })
 }
 </script>
@@ -290,5 +504,28 @@ const navigateTo = (path: string, subjectId?: string) => {
 .full-width-btn {
   width: 100%;
   margin-top: auto;
+}
+
+/* --- 个人信息卡片标题行 --- */
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-header-row .card-title {
+  margin: 0;
+}
+
+/* --- 编辑弹窗表单 --- */
+.edit-form {
+  padding-top: 8px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 </style>

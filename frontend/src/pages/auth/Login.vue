@@ -78,13 +78,15 @@ const handleLogin = async () => {
 
     console.log('Login response:', res)
 
-    // 保存 token 和用户信息
+    // 保存 token 和用户完整信息（包括从后端返回的姓名和邮箱）
     authStore.setToken(res.access_token)
-    authStore.user = {
+    authStore.setUser({
       id: res.user_id,
-      name: email.value.split('@')[0],
+      name: res.user_name || email.value.split('@')[0],
+      email: res.user_email || email.value,
+      gender: null,
       role: role.value,
-    }
+    })
 
     ElMessage.success(`Logged in as ${role.value}`)
 

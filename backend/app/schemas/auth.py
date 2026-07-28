@@ -47,3 +47,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user_type: str
     user_id: int
+    user_name: str
+    user_email: Optional[str] = None
+
+
+class StudentUpdateRequest(BaseModel):
+    """学生个人信息更新请求——所有字段可选，只更新传入的字段"""
+    stu_name: Optional[str] = None
+    stu_email: Optional[str] = None
+    stu_pwd: Optional[str] = None
+    stu_gender: Optional[str] = None

@@ -70,6 +70,17 @@ const router = createRouter({
 
     // ==================== Root ====================
     {
+      path: '/admin',
+      component: () => import('@/layouts/LayoutAdmin.vue'),
+      children: [
+        { path: '', redirect: '/admin/ocr' },
+        { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },
+        { path: 'kg-pipeline', component: () => import('@/pages/student/KgPipeline.vue') },
+        { path: 'students', component: () => import('@/pages/teacher/StudentManage.vue') },
+        { path: 'alerts', component: () => import('@/pages/teacher/Alert.vue') },
+      ],
+    },
+    {
       path: '/',
       redirect: '/login',
     },

@@ -12,10 +12,12 @@ router = APIRouter()
 
 @router.get("/graphs", response_model=list[KgGraphResponse])
 async def list_graphs(current_user: dict = Depends(get_current_user_optional)):
-    """获取所有知识图谱列表"""
+    """获取所有知识图谱列表（含 pending 状态自动对账）"""
     kg_service = KgGraphService()
     async with async_session() as db:
         graphs = await kg_service.list_graphs(db)
+        # 对账：将 Redis 中已完成但 PostgreSQL 还卡在 pending 的图谱状态同步过来
+        graphs = await kg_service.reconcile_pending_graphs(graphs, db)
     return graphs
 
 

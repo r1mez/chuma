@@ -7,12 +7,12 @@ import { ref, onMounted, onUnmounted, watch, shallowRef } from 'vue'
 import * as echarts from 'echarts'
 import type { GraphNode, GraphEdge } from '@/api/knowledge'
 import { TYPE_COLORS, HIT_NODE_COLOR } from '@/constants/knowledgeColors'
+import type { SubgraphNode } from '@/composables/useSubgraph'
 
 const props = withDefaults(defineProps<{
-  nodes: GraphNode[]
+  nodes: SubgraphNode[]
   edges: GraphEdge[]
   hitNodeId: string
-  direction: 'upstream' | 'downstream'
   roam?: boolean
   fullscreen?: boolean
 }>(), {
@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  nodeClick: [node: GraphNode]
+  nodeClick: [node: SubgraphNode]
 }>()
 
 const chartRef = ref<HTMLElement>()
@@ -32,26 +32,17 @@ let resizeObserver: ResizeObserver | null = null
 const sizeScale = props.fullscreen ? 1.5 : 1
 const fontScale = props.fullscreen ? 1.2 : 1
 
-function getHopLevel(nodeId: string): number {
-  if (nodeId === props.hitNodeId) return 0
+// Colors for relation directions
+const UPSTREAM_COLOR = '#7c3aed'   // purple
+const DOWNSTREAM_COLOR = '#059669' // green
+const BOTH_COLOR = '#0ea5e9'       // cyan
 
-  const isUpstream = props.direction === 'upstream'
-  for (const edge of props.edges) {
-    if (isUpstream && edge.target === props.hitNodeId && edge.source === nodeId) return 1
-    if (!isUpstream && edge.source === props.hitNodeId && edge.target === nodeId) return 1
-  }
-
-  const oneHopIds = new Set<string>()
-  for (const edge of props.edges) {
-    if (isUpstream && edge.target === props.hitNodeId) oneHopIds.add(edge.source)
-    if (!isUpstream && edge.source === props.hitNodeId) oneHopIds.add(edge.target)
-  }
-  for (const edge of props.edges) {
-    if (isUpstream && oneHopIds.has(edge.target) && edge.source === nodeId) return 2
-    if (!isUpstream && oneHopIds.has(edge.source) && edge.target === nodeId) return 2
-  }
-
-  return 2
+function getNodeColor(node: SubgraphNode): string {
+  if (node.relation === 'hit') return HIT_NODE_COLOR
+  if (node.relation === 'upstream') return UPSTREAM_COLOR
+  if (node.relation === 'downstream') return DOWNSTREAM_COLOR
+  if (node.relation === 'both') return BOTH_COLOR
+  return TYPE_COLORS[node.type] || '#94A3B8'
 }
 
 function initChart() {
@@ -71,46 +62,51 @@ function updateChart() {
   if (!chartInstance.value) return
   if (!props.nodes.length && !props.edges.length) return
 
-  const allNodeIds = new Set([props.hitNodeId, ...props.nodes.map(n => n.id)])
-  const relevantEdges = props.edges.filter(e => allNodeIds.has(e.source) && allNodeIds.has(e.target))
-
-  const allNodes: GraphNode[] = []
-  const nodeById = new Map(props.nodes.map(n => [n.id, n]))
-
-  if (!nodeById.has(props.hitNodeId)) {
-    allNodes.push({
-      id: props.hitNodeId,
-      name: props.hitNodeId,
-      type: 'Concept',
-      description: '',
-      degree: 0,
-    })
+  // Build node set including hit node
+  const hitNodePlaceholder: SubgraphNode = {
+    id: props.hitNodeId,
+    name: props.hitNodeId,
+    type: 'Concept',
+    description: '',
+    degree: 0,
+    relation: 'hit',
+    hop: 0,
   }
+
+  const allNodes: SubgraphNode[] = [hitNodePlaceholder]
+  const seen = new Set([props.hitNodeId])
+
   for (const n of props.nodes) {
-    if (!allNodeIds.has(n.id)) continue
-    allNodes.push(n)
+    if (!seen.has(n.id)) {
+      seen.add(n.id)
+      allNodes.push(n)
+    }
   }
+
+  // Filter edges to only include nodes in our set
+  const relevantEdges = props.edges.filter(
+    e => seen.has(e.source) && seen.has(e.target)
+  )
 
   const echartsNodes = allNodes.map(n => {
-    const hop = getHopLevel(n.id)
+    const isHit = n.relation === 'hit'
+    const hop = n.hop
+
     let symbolSize: number
-    let color: string
     let opacity: number
 
     if (hop === 0) {
       symbolSize = 40 * sizeScale
-      color = HIT_NODE_COLOR
       opacity = 1
     } else if (hop === 1) {
       symbolSize = 28 * sizeScale
-      color = TYPE_COLORS[n.type] || '#94A3B8'
       opacity = 1
     } else {
       symbolSize = 18 * sizeScale
-      color = TYPE_COLORS[n.type] || '#94A3B8'
       opacity = 0.6
     }
 
+    const color = getNodeColor(n)
     const baseFontSize = hop === 0 ? 13 : hop === 1 ? 11 : 9
 
     return {
@@ -119,18 +115,18 @@ function updateChart() {
       symbolSize,
       itemStyle: {
         color,
-        borderColor: hop === 0 ? '#fff' : 'transparent',
-        borderWidth: hop === 0 ? 3 : 0,
+        borderColor: isHit ? '#fff' : 'transparent',
+        borderWidth: isHit ? 3 : 0,
         opacity,
-        shadowBlur: hop === 0 ? 12 : 0,
-        shadowColor: hop === 0 ? 'rgba(255, 140, 0, 0.6)' : 'transparent',
+        shadowBlur: isHit ? 12 : 0,
+        shadowColor: isHit ? 'rgba(255, 140, 0, 0.6)' : 'transparent',
       },
       label: {
         show: true,
         position: 'bottom' as const,
-        color: hop === 0 ? HIT_NODE_COLOR : '#666',
+        color: isHit ? HIT_NODE_COLOR : '#444',
         fontSize: baseFontSize * fontScale,
-        fontWeight: hop === 0 ? 'bold' : 'normal',
+        fontWeight: isHit ? 'bold' : 'normal',
       },
       rawNode: n,
     }
@@ -149,7 +145,6 @@ function updateChart() {
     symbolSize: props.fullscreen ? 10 : 8,
   }))
 
-  // Force layout params vary between sidebar and fullscreen
   const forceParams = props.fullscreen
     ? { repulsion: 600, edgeLength: 150, gravity: 0.08 }
     : { repulsion: 300, edgeLength: 100, gravity: 0.15 }
@@ -161,7 +156,14 @@ function updateChart() {
       formatter: (params: any) => {
         if (params.dataType === 'node') {
           const node = params.data.rawNode
-          return `${node.name} (${node.type})`
+          const relationLabel: Record<string, string> = {
+            hit: '🎯 命中节点',
+            upstream: '⬆ 前置知识',
+            downstream: '⬇ 后继知识',
+            both: '↔ 双向关联',
+          }
+          const rel = relationLabel[node.relation] || ''
+          return `${node.name} (${node.type})<br/>${rel}`
         }
         return ''
       },
@@ -183,13 +185,12 @@ function updateChart() {
   chartInstance.value.setOption(option, true)
 }
 
-watch(() => [props.nodes, props.edges, props.hitNodeId, props.direction, props.roam, props.fullscreen], () => {
+watch(() => [props.nodes, props.edges, props.hitNodeId, props.roam, props.fullscreen], () => {
   updateChart()
 }, { deep: true })
 
 onMounted(() => {
   initChart()
-  // Observe container resize (especially for panel slide transition)
   if (chartRef.value) {
     resizeObserver = new ResizeObserver(() => {
       chartInstance.value?.resize()

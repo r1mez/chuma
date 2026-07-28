@@ -3,53 +3,55 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 import type { GraphNode, GraphEdge } from '@/api/knowledge'
 import type { KgHitNode } from '@/composables/useChat'
 
+export interface SubgraphNode extends GraphNode {
+  /** 节点相对于命中节点的关系方向 */
+  relation: 'upstream' | 'downstream' | 'both' | 'hit'
+  /** BFS 跳数（0=命中节点, 1=直接相邻, 2=两跳） */
+  hop: number
+}
+
 export interface SubgraphData {
-  nodes: GraphNode[]
+  hitNode: SubgraphNode
+  nodes: SubgraphNode[]
   edges: GraphEdge[]
 }
 
-export interface DirectionalSubgraphs {
-  hitNode: GraphNode
-  upstream: SubgraphData
-  downstream: SubgraphData
-}
-
 const MAX_HOP_NODES = 8
+const MAX_HOPS = 2
 
-function bfsDirectional(
+function bfsBidirectional(
   hitNodeId: string,
   allNodes: GraphNode[],
   allEdges: GraphEdge[],
-  direction: 'upstream' | 'downstream',
-  maxHops: number = 2,
-): SubgraphData {
-  // upstream: follow edges where target === current node (incoming edges)
-  // downstream: follow edges where source === current node (outgoing edges)
-  const isUpstream = direction === 'upstream'
-
-  const collectedNodes: GraphNode[] = []
-  const collectedEdges: GraphEdge[] = []
+): { nodes: SubgraphNode[]; edges: GraphEdge[] } {
   const nodeById = new Map(allNodes.map(n => [n.id, n]))
+  const collectedEdges: GraphEdge[] = []
+  const relationMap = new Map<string, { relation: Set<'upstream' | 'downstream'>; hop: number }>()
+
+  // Initialize with hit node
+  relationMap.set(hitNodeId, { relation: new Set(['hit'] as any), hop: 0 })
 
   let currentIds = new Set([hitNodeId])
   const visited = new Set([hitNodeId])
 
-  for (let hop = 1; hop <= maxHops; hop++) {
+  for (let hop = 1; hop <= MAX_HOPS; hop++) {
     const nextIds = new Set<string>()
+    const candidates: { edge: GraphEdge; neighborId: string; dir: 'upstream' | 'downstream' }[] = []
 
-    // For each current node, find connected edges in the direction
-    const candidates: { edge: GraphEdge; neighborId: string }[] = []
     for (const cid of currentIds) {
       for (const edge of allEdges) {
-        if (isUpstream && edge.target === cid && !visited.has(edge.source)) {
-          candidates.push({ edge, neighborId: edge.source })
-        } else if (!isUpstream && edge.source === cid && !visited.has(edge.target)) {
-          candidates.push({ edge, neighborId: edge.target })
+        // Upstream: edge.target === cid (incoming to current node)
+        if (edge.target === cid && !visited.has(edge.source)) {
+          candidates.push({ edge, neighborId: edge.source, dir: 'upstream' })
+        }
+        // Downstream: edge.source === cid (outgoing from current node)
+        if (edge.source === cid && !visited.has(edge.target)) {
+          candidates.push({ edge, neighborId: edge.target, dir: 'downstream' })
         }
       }
     }
 
-    // Sort by degree (high degree = important), limit to MAX_HOP_NODES
+    // Sort by degree (high degree = important), limit per hop
     candidates.sort((a, b) => {
       const aNode = nodeById.get(a.neighborId)
       const bNode = nodeById.get(b.neighborId)
@@ -57,27 +59,57 @@ function bfsDirectional(
     })
     const selected = candidates.slice(0, MAX_HOP_NODES)
 
-    for (const { edge, neighborId } of selected) {
+    for (const { edge, neighborId, dir } of selected) {
       if (!visited.has(neighborId)) {
         visited.add(neighborId)
         nextIds.add(neighborId)
-        const node = nodeById.get(neighborId)
-        if (node) collectedNodes.push(node)
-        collectedEdges.push(edge)
+
+        // Track relation direction (may accumulate if reached from both sides)
+        const existing = relationMap.get(neighborId)
+        if (existing) {
+          existing.relation.add(dir)
+          existing.hop = Math.min(existing.hop, hop)
+        } else {
+          relationMap.set(neighborId, { relation: new Set([dir]), hop })
+        }
+
+        // Avoid duplicate edges
+        if (!collectedEdges.some(e => e.source === edge.source && e.target === edge.target)) {
+          collectedEdges.push(edge)
+        }
       }
     }
 
     currentIds = nextIds
-    if (currentIds.size === 0) break  // No more nodes to explore
+    if (currentIds.size === 0) break
   }
 
-  return { nodes: collectedNodes, edges: collectedEdges }
+  // Build node list
+  const nodes: SubgraphNode[] = []
+  for (const [nid, info] of relationMap) {
+    if (nid === hitNodeId) continue // hit node handled separately
+    const raw = nodeById.get(nid)
+    if (!raw) continue
+
+    let relation: SubgraphNode['relation']
+    if (info.relation.has('upstream') && info.relation.has('downstream')) {
+      relation = 'both'
+    } else if (info.relation.has('upstream')) {
+      relation = 'upstream'
+    } else {
+      relation = 'downstream'
+    }
+
+    nodes.push({ ...raw, relation, hop: info.hop })
+  }
+
+  return { nodes, edges: collectedEdges }
 }
 
 export function useSubgraph() {
   const knowledgeStore = useKnowledgeStore()
 
-  const subgraphs = ref<DirectionalSubgraphs | null>(null)
+  const subgraphs = ref<SubgraphData | null>(null)
   const subgraphLoading = ref(false)
   const subgraphError = ref<string | null>(null)
 
@@ -86,7 +118,6 @@ export function useSubgraph() {
     subgraphError.value = null
 
     try {
-      // Load full graph data (uses cache if already loaded for this graph)
       await knowledgeStore.loadGraphData(hitNode.graphName)
 
       const graphData = knowledgeStore.graphData
@@ -96,37 +127,27 @@ export function useSubgraph() {
         return
       }
 
-      // Find the hit node in the full graph data (by id, fallback to name)
-      let effectiveHitNode = graphData.nodes.find(n => n.id === hitNode.nodeId)
-      if (!effectiveHitNode) {
-        effectiveHitNode = graphData.nodes.find(n => n.name === hitNode.nodeName)
+      // Find the hit node in the full graph data
+      let rawHitNode = graphData.nodes.find(n => n.id === hitNode.nodeId)
+      if (!rawHitNode) {
+        rawHitNode = graphData.nodes.find(n => n.name === hitNode.nodeName)
       }
-      if (!effectiveHitNode) {
+      if (!rawHitNode) {
         subgraphError.value = `未找到知识点 "${hitNode.nodeName}" 的图谱数据`
         subgraphLoading.value = false
         return
       }
 
-      const upstream = bfsDirectional(
-        effectiveHitNode.id,
+      const { nodes, edges } = bfsBidirectional(
+        rawHitNode.id,
         graphData.nodes,
         graphData.edges,
-        'upstream',
-        2,
-      )
-
-      const downstream = bfsDirectional(
-        effectiveHitNode.id,
-        graphData.nodes,
-        graphData.edges,
-        'downstream',
-        2,
       )
 
       subgraphs.value = {
-        hitNode: effectiveHitNode,
-        upstream,
-        downstream,
+        hitNode: { ...rawHitNode, relation: 'hit', hop: 0 },
+        nodes,
+        edges,
       }
     } catch (e: any) {
       subgraphError.value = e.message || '子图提取失败'

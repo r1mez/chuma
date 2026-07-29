@@ -96,6 +96,25 @@ async def agent_chat(request: Request):
     )
 
 
+@router.post("/analysis/stu_analysis")
+async def stu_analysis(request: Request):
+    """学生 AI 学习分析 — 转发到 ai/ 服务"""
+    body = await request.json()
+    user = getattr(request.state, "user", None)
+    stu_id = body.get("stu_id") or (user.get("id") if user else None)
+    if not stu_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "缺少 stu_id 参数"}, status_code=400)
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            f"{settings.AI_SERVICE_URL}/analysis/stu_analysis",
+            headers=_ai_headers(),
+            params={"stu_id": stu_id},
+        )
+        return resp.json()
+
+
 @router.post("/recommend")
 async def recommend_questions():
     """GNN 题目推荐 — 转发到 ai/ 服务"""

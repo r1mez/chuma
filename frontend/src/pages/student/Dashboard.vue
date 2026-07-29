@@ -23,16 +23,116 @@
           </div>
         </div>
 
-        <!-- 建议与评估 -->
-        <div class="glass-card suggestions">
-          <div class="ai-suggestion">
-            <h3 class="card-title">AI 助手建议</h3>
-            <p class="suggestion-text">当前数据结构进度较好，但计算机组成原理的复习进度稍有落后，建议本周增加对指令系统章节的练习时间。</p>
+        <!-- AI 助学建议面板 -->
+        <div class="glass-card ai-analysis-panel">
+          <div class="card-header-row">
+            <h3 class="card-title ai-suggest-title">AI 助学建议</h3>
           </div>
-          <div class="divider"></div>
-          <div class="teacher-evaluation">
-            <h3 class="card-title">老师建议与评估</h3>
-            <p class="suggestion-text">基础概念掌握扎实，但在综合应用题上丢分较多，注意知识点之间的串联。</p>
+
+          <div class="analysis-scroll-area">
+            <!-- 未分析状态：显示按钮 -->
+            <div v-if="!analysisResult && !analysisLoading" class="analysis-idle">
+              <p class="analysis-desc">基于你的知识图谱掌握度、错题记录和个人评级，AI 将生成个性化的学习分析报告。</p>
+              <el-button
+                type="primary"
+                size="large"
+                class="analysis-trigger-btn"
+                :icon="Aim"
+                @click="triggerAnalysis"
+              >
+                开始 AI 分析
+              </el-button>
+            </div>
+
+            <!-- 加载状态：旋转加载特效 -->
+            <div v-if="analysisLoading" class="analysis-loading">
+              <div class="spinner-container">
+                <div class="analysis-spinner"></div>
+                <div class="spinner-ring spinner-ring-1"></div>
+                <div class="spinner-ring spinner-ring-2"></div>
+              </div>
+              <p class="loading-text">AI 正在分析你的学习数据...</p>
+              <p class="loading-subtext">正在综合评估知识图谱、错题记录与个人评级</p>
+            </div>
+
+            <!-- 分析完成状态：展示结果 -->
+            <div v-if="analysisResult && !analysisLoading" class="analysis-result">
+              <!-- 综合评级 -->
+              <div class="result-rating-row">
+                <span class="result-label">综合评级</span>
+                <span
+                  class="result-rating-badge"
+                  :style="{ color: getRatingColor(analysisResult.analysis?.comprehensive_rating || '') }"
+                >
+                  {{ analysisResult.analysis?.comprehensive_rating || 'N/A' }}
+                </span>
+              </div>
+
+              <!-- 维度可用性指示 -->
+              <div class="dimension-indicators">
+                <span
+                  v-for="dim in dimensionLabels"
+                  :key="dim.key"
+                  class="dimension-tag"
+                  :class="dim.available ? 'dim-available' : 'dim-missing'"
+                >
+                  {{ dim.label }}
+                </span>
+              </div>
+
+              <!-- 分析内容 -->
+              <div class="analysis-content" v-if="analysisResult.analysis">
+                <div class="analysis-section">
+                  <h4 class="section-title">总体概述</h4>
+                  <p class="section-text">{{ analysisResult.analysis.summary }}</p>
+                </div>
+                <div class="analysis-section">
+                  <h4 class="section-title">薄弱环节</h4>
+                  <p class="section-text">{{ analysisResult.analysis.weakness_analysis }}</p>
+                </div>
+                <div class="analysis-section">
+                  <h4 class="section-title">改进建议</h4>
+                  <p class="section-text">{{ analysisResult.analysis.improvement_suggestions }}</p>
+                </div>
+                <div class="analysis-section" v-if="analysisResult.analysis.priority_focus?.length">
+                  <h4 class="section-title">优先攻克知识点</h4>
+                  <div class="priority-list">
+                    <span
+                      v-for="(item, idx) in analysisResult.analysis.priority_focus"
+                      :key="idx"
+                      class="priority-chip"
+                    >
+                      {{ idx + 1 }}. {{ item }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 重新分析按钮 -->
+              <el-button
+                type="primary"
+                size="small"
+                plain
+                class="reanalyze-btn"
+                :icon="Refresh"
+                @click="triggerAnalysis"
+              >
+                重新分析
+              </el-button>
+            </div>
+
+            <!-- 分析出错状态 -->
+            <div v-if="analysisError && !analysisLoading" class="analysis-error">
+              <p class="error-text">{{ analysisError }}</p>
+              <el-button type="primary" size="small" @click="triggerAnalysis">重试</el-button>
+            </div>
+
+            <!-- 老师建议与评估（功能开发中） -->
+            <div class="teacher-section">
+              <div class="section-divider"></div>
+              <h4 class="teacher-title">老师建议与评估</h4>
+              <p class="teacher-placeholder">功能开发中，敬请期待...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -129,11 +229,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Edit } from '@element-plus/icons-vue'
+import { Edit, Aim, Refresh } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
 import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, type Course, type Question } from '@/api/practice'
 import { fetchCurrentUser, updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { fetchStuAnalysis, type StuAnalysisResult } from '@/api/analysis'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -169,17 +270,63 @@ const ratingColor = computed(() => {
   return ratingColorMap[key] || '#303133'
 })
 
-/** 加载当前用户信息 */
-const loadUserInfo = async () => {
-  // 优先使用 Store 中已缓存的信息
-  if (authStore.user && authStore.user.name) {
-    userName.value = authStore.user.name
-    userEmail.value = authStore.user.email || ''
-    userGender.value = authStore.user.gender
+// ========== AI 学习分析 ==========
+const analysisLoading = ref(false)
+const analysisResult = ref<StuAnalysisResult | null>(null)
+const analysisError = ref('')
+
+/** 评级颜色映射（复用） */
+const getRatingColor = (rating: string): string => {
+  const key = rating.toUpperCase()
+  return ratingColorMap[key] || '#303133'
+}
+
+/** 维度标签与可用性 */
+const dimensionLabels = computed(() => {
+  const detail = analysisResult.value?.dimensions_detail
+  return [
+    { key: 'level', label: '个人评级', available: !!detail?.level?.available },
+    { key: 'mastery', label: '知识图谱', available: !!detail?.mastery?.available },
+    { key: 'wrong', label: '错题记录', available: !!detail?.wrong_exercises?.available },
+  ]
+})
+
+/** 触发 AI 分析 */
+const triggerAnalysis = async () => {
+  const userId = authStore.user?.id
+  if (!userId) {
+    ElMessage.warning('无法获取用户信息，请重新登录')
     return
   }
 
-  // Store 无数据则从服务端获取
+  analysisLoading.value = true
+  analysisResult.value = null
+  analysisError.value = ''
+
+  try {
+    const result = await fetchStuAnalysis(userId)
+    if (result.error) {
+      analysisError.value = result.error
+    } else {
+      analysisResult.value = result
+    }
+  } catch (err: any) {
+    console.error('AI 分析失败:', err)
+    let msg = 'AI 分析请求失败，请稍后重试'
+    const detail = err?.response?.data?.detail
+    if (typeof detail === 'string') {
+      msg = detail
+    } else if (err?.message) {
+      msg = err.message
+    }
+    analysisError.value = msg
+  } finally {
+    analysisLoading.value = false
+  }
+}
+
+/** 加载当前用户信息 */
+const loadUserInfo = async () => {
   try {
     const me = await fetchCurrentUser()
     userName.value = me.name || '未知用户'
@@ -196,12 +343,12 @@ const loadUserInfo = async () => {
       role: me.user_type as 'student' | 'teacher',
     })
   } catch {
-    // 降级使用 Store 中的已有信息
+    // 接口失败时降级使用 Store 中的已有信息
     if (authStore.user) {
       userName.value = authStore.user.name
       userEmail.value = authStore.user.email || ''
       userGender.value = authStore.user.gender
-      stuLevel.value = authStore.user.stu_level
+      stuLevel.value = authStore.user.stu_level || null
     }
   }
 }
@@ -305,7 +452,7 @@ const mockSubjectData: Record<string, { progress: number; latestMsg: string; rec
 }
 
 /** 截断题目描述，保留前 maxLen 个字符 */
-const truncateDesc = (desc: string, maxLen: number = 40): string => {
+const truncateDesc = (desc: string, maxLen: number = 30): string => {
   if (!desc) return '暂无记录'
   return desc.length > maxLen ? desc.slice(0, maxLen) + '...' : desc
 }
@@ -428,7 +575,7 @@ const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
 <style scoped>
 .dashboard-page {
   color: #000;
-  min-height: calc(100vh - 170px);
+  height: calc(100vh - 170px);
   margin: 20px;
 }
 
@@ -499,21 +646,31 @@ const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
   line-height: 1;
 }
 
-.suggestions {
+/* --- AI 学习分析面板（替换原建议与评估） --- */
+.ai-analysis-panel {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.suggestion-text {
-  font-size: 0.9rem;
-  line-height: 1.6;
-  color: #444;
-  margin: 0;
+.analysis-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
 }
 
-.divider {
-  height: 1px;
+.analysis-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.analysis-scroll-area::-webkit-scrollbar-thumb {
   background: #c0c5bd;
-  margin: 20px 0;
+  border-radius: 2px;
+}
+
+.analysis-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* --- 右侧面板 --- */
@@ -617,6 +774,7 @@ const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
   font-size: 0.9rem;
   color: #555;
   flex: 1;
+  min-width: 0;
   margin-right: 12px;
 }
 
@@ -652,5 +810,244 @@ const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.analysis-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.analysis-desc {
+  font-size: 0.9rem;
+  color: #555;
+  line-height: 1.6;
+  margin: 0;
+  text-align: center;
+}
+
+.analysis-trigger-btn {
+  width: 100%;
+  font-size: 1rem;
+  padding: 14px 0;
+  border-radius: 10px;
+  letter-spacing: 1px;
+}
+
+/* --- 旋转加载特效 --- */
+.analysis-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+
+.spinner-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid #c0c5bd;
+  border-top-color: #409eff;
+  animation: spin 0.8s linear infinite;
+  z-index: 2;
+}
+
+.spinner-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  animation: spin 1.2s linear infinite;
+}
+
+.spinner-ring-1 {
+  width: 48px;
+  height: 48px;
+  border-top-color: #67c23a;
+  border-right-color: #67c23a;
+  animation-duration: 1.5s;
+  animation-direction: reverse;
+}
+
+.spinner-ring-2 {
+  width: 60px;
+  height: 60px;
+  border-bottom-color: #e6a23c;
+  border-left-color: #e6a23c;
+  animation-duration: 2s;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 500;
+  margin: 0;
+}
+
+.loading-subtext {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0;
+}
+
+/* --- 分析结果展示 --- */
+.analysis-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.result-rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.result-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.result-rating-badge {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.dimension-indicators {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.dimension-tag {
+  font-size: 0.75rem;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.dim-available {
+  background: #e1f3d8;
+  color: #67c23a;
+  border: 1px solid #b3e19d;
+}
+
+.dim-missing {
+  background: #f5f5f5;
+  color: #aaa;
+  border: 1px solid #e0e0e0;
+}
+
+.analysis-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysis-section {
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.section-title {
+  margin: 0 0 6px 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.section-text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #444;
+}
+
+.priority-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.priority-chip {
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #d9ecff;
+}
+
+.reanalyze-btn {
+  align-self: center;
+  margin-top: 4px;
+}
+
+/* --- 分析出错状态 --- */
+.analysis-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.error-text {
+  font-size: 0.85rem;
+  color: #f56c6c;
+  margin: 0;
+  text-align: center;
+}
+
+/* --- 老师建议与评估 --- */
+.teacher-section {
+  margin-top: 8px;
+}
+
+.section-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 12px 0;
+}
+
+.teacher-title {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e6a23c;
+}
+
+.ai-suggest-title {
+  font-size: 1rem;
+  color: #e6a23c;
+}
+
+.teacher-placeholder {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #999;
+  font-style: italic;
 }
 </style>

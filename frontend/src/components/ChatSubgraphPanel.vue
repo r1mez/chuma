@@ -41,42 +41,23 @@
         <el-button size="small" @click="$emit('retry')">重试</el-button>
       </div>
 
-      <!-- Subgraphs content -->
+      <!-- Subgraph content -->
       <div v-else-if="subgraphs" class="panel-body">
-        <!-- Upstream subgraph -->
-        <div class="subgraph-section">
-          <h4 class="section-title">前置知识（上游）</h4>
-          <div v-if="subgraphs.upstream.nodes.length > 0" class="chart-container">
-            <SubgraphChart
-              :nodes="subgraphs.upstream.nodes"
-              :edges="subgraphs.upstream.edges"
-              :hit-node-id="subgraphs.hitNode.id"
-              direction="upstream"
-              @node-click="onNodeClick"
-            />
-          </div>
-          <div v-else class="empty-subgraph">
-            <el-icon :size="20" color="#c0c4cc"><InfoFilled /></el-icon>
-            <span>暂无前置知识</span>
-          </div>
+        <div class="chart-container">
+          <SubgraphChart
+            :nodes="subgraphs.nodes"
+            :edges="subgraphs.edges"
+            :hit-node-id="subgraphs.hitNode.id"
+            @node-click="onNodeClick"
+          />
         </div>
 
-        <!-- Downstream subgraph -->
-        <div class="subgraph-section">
-          <h4 class="section-title">后继知识（下游）</h4>
-          <div v-if="subgraphs.downstream.nodes.length > 0" class="chart-container">
-            <SubgraphChart
-              :nodes="subgraphs.downstream.nodes"
-              :edges="subgraphs.downstream.edges"
-              :hit-node-id="subgraphs.hitNode.id"
-              direction="downstream"
-              @node-click="onNodeClick"
-            />
-          </div>
-          <div v-else class="empty-subgraph">
-            <el-icon :size="20" color="#c0c4cc"><InfoFilled /></el-icon>
-            <span>暂无后继知识</span>
-          </div>
+        <!-- Legend -->
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot hit-dot" />命中</span>
+          <span class="legend-item"><span class="legend-dot upstream-dot" />前置</span>
+          <span class="legend-item"><span class="legend-dot downstream-dot" />后继</span>
+          <span class="legend-item"><span class="legend-dot both-dot" />双向</span>
         </div>
 
         <!-- Node detail -->
@@ -116,47 +97,26 @@
         />
       </div>
 
-      <!-- Body: 左右两栏 -->
+      <!-- Body: single centered chart -->
       <div v-if="subgraphs" class="fullscreen-body">
-        <!-- 上游子图 -->
-        <div class="fullscreen-chart-section">
-          <h4 class="fullscreen-section-title">前置知识（上游）</h4>
-          <div v-if="subgraphs.upstream.nodes.length > 0" class="fullscreen-chart-container">
-            <SubgraphChart
-              :nodes="subgraphs.upstream.nodes"
-              :edges="subgraphs.upstream.edges"
-              :hit-node-id="subgraphs.hitNode.id"
-              direction="upstream"
-              :roam="true"
-              :fullscreen="true"
-              @node-click="onNodeClick"
-            />
-          </div>
-          <div v-else class="empty-subgraph fullscreen-empty">
-            <el-icon :size="24" color="#c0c4cc"><InfoFilled /></el-icon>
-            <span>暂无前置知识</span>
-          </div>
+        <div class="fullscreen-chart-container">
+          <SubgraphChart
+            :nodes="subgraphs.nodes"
+            :edges="subgraphs.edges"
+            :hit-node-id="subgraphs.hitNode.id"
+            :roam="true"
+            :fullscreen="true"
+            @node-click="onNodeClick"
+          />
         </div>
+      </div>
 
-        <!-- 下游子图 -->
-        <div class="fullscreen-chart-section">
-          <h4 class="fullscreen-section-title">后继知识（下游）</h4>
-          <div v-if="subgraphs.downstream.nodes.length > 0" class="fullscreen-chart-container">
-            <SubgraphChart
-              :nodes="subgraphs.downstream.nodes"
-              :edges="subgraphs.downstream.edges"
-              :hit-node-id="subgraphs.hitNode.id"
-              direction="downstream"
-              :roam="true"
-              :fullscreen="true"
-              @node-click="onNodeClick"
-            />
-          </div>
-          <div v-else class="empty-subgraph fullscreen-empty">
-            <el-icon :size="24" color="#c0c4cc"><InfoFilled /></el-icon>
-            <span>暂无后继知识</span>
-          </div>
-        </div>
+      <!-- Legend -->
+      <div class="fullscreen-legend">
+        <span class="legend-item"><span class="legend-dot hit-dot" />命中节点</span>
+        <span class="legend-item"><span class="legend-dot upstream-dot" />前置知识（上游）</span>
+        <span class="legend-item"><span class="legend-dot downstream-dot" />后继知识（下游）</span>
+        <span class="legend-item"><span class="legend-dot both-dot" />双向关联</span>
       </div>
 
       <!-- Footer: 节点详情 -->
@@ -172,17 +132,16 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Close, WarningFilled, InfoFilled, FullScreen } from '@element-plus/icons-vue'
+import { Close, WarningFilled, FullScreen } from '@element-plus/icons-vue'
 import SubgraphChart from '@/components/SubgraphChart.vue'
-import type { DirectionalSubgraphs } from '@/composables/useSubgraph'
-import type { GraphNode } from '@/api/knowledge'
+import type { SubgraphData, SubgraphNode } from '@/composables/useSubgraph'
 import { TYPE_COLORS } from '@/constants/knowledgeColors'
 
 const props = defineProps<{
   visible: boolean
   hitNodeName: string
   hitNodeType: string
-  subgraphs: DirectionalSubgraphs | null
+  subgraphs: SubgraphData | null
   loading: boolean
   error: string | null
 }>()
@@ -192,12 +151,12 @@ defineEmits<{
   retry: []
 }>()
 
-const selectedDetail = ref<GraphNode | null>(null)
+const selectedDetail = ref<SubgraphNode | null>(null)
 const fullscreenDialogVisible = ref(false)
 
 const typeColor = computed(() => TYPE_COLORS[props.hitNodeType] || '#94A3B8')
 
-function onNodeClick(node: GraphNode) {
+function onNodeClick(node: SubgraphNode) {
   selectedDetail.value = node
 }
 
@@ -276,8 +235,44 @@ watch(() => props.subgraphs, (sg) => {
   text-align: center;
 }
 
-.subgraph-section {
-  margin-bottom: 12px;
+.chart-container {
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.hit-dot { background: #FF8C00; }
+.upstream-dot { background: #7c3aed; }
+.downstream-dot { background: #059669; }
+.both-dot { background: #0ea5e9; }
+
+.detail-section {
+  margin-top: 8px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
 }
 
 .section-title {
@@ -285,33 +280,6 @@ watch(() => props.subgraphs, (sg) => {
   font-weight: 600;
   color: #374151;
   margin: 0 0 8px 0;
-}
-
-.chart-container {
-  height: 40%;
-  min-height: 160px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.empty-subgraph {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #9ca3af;
-  font-size: 13px;
-  padding: 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.detail-section {
-  margin-top: 8px;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 8px;
 }
 
 .detail-desc {
@@ -363,17 +331,16 @@ watch(() => props.subgraphs, (sg) => {
 .fullscreen-body {
   flex: 1;
   display: flex;
-  flex-direction: row;
-  gap: 16px;
   padding: 16px 0;
   min-height: 0;
 }
 
-.fullscreen-chart-section {
+.fullscreen-chart-container {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  min-height: 400px;
 }
 
 .fullscreen-section-title {
@@ -383,23 +350,13 @@ watch(() => props.subgraphs, (sg) => {
   margin: 0 0 12px 0;
 }
 
-.fullscreen-chart-container {
-  flex: 1;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  min-height: 300px;
-}
-
-.fullscreen-empty {
-  flex: 1;
+.fullscreen-legend {
   display: flex;
-  align-items: center;
+  gap: 20px;
+  padding: 10px 0;
+  font-size: 13px;
+  color: #a0a0a0;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  font-size: 15px;
 }
 
 .fullscreen-detail {

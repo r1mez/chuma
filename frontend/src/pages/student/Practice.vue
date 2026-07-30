@@ -4,42 +4,52 @@
       <!-- 左侧面板：题目与答案 (同一个大框，内部独立滚动) -->
       <div class="left-panel glass-card">
         <!-- 上半部分：题目与答题区 -->
-        <div class="section-container">
+        <div class="section-container" v-if="currentQuestion">
           <div class="question-header">
-            <h3 class="title-red">题目：</h3>
+            <h3 class="title-red">题目 ({{ cachedIdList.length > 0 ? cachedIndex + 1 : currentIndex + 1 }} / {{ cachedIdList.length > 0 ? cachedIdList.length : questions.length }})：</h3>
             <div class="question-actions">
-              <el-button size="small" type="danger" plain @click="prevQuestion">上一题</el-button>
-              <el-button size="small" type="danger" plain @click="nextQuestion">下一题</el-button>
+              <el-button size="small" type="danger" plain @click="prevQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === 0 : currentIndex === 0">上一题</el-button>
+              <el-button size="small" type="danger" plain @click="nextQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === cachedIdList.length - 1 : currentIndex === questions.length - 1">下一题</el-button>
               <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
             </div>
           </div>
-          <div class="scroll-area">
-            <div class="stem-content">{{ question.stem }}</div>
+          <div class="scroll-area relative-area">
+            <div class="stem-content">{{ currentQuestion.question_description }}</div>
             
             <div class="answer-area">
-              <h4 class="title-red answer-title">答题区：</h4>
+              <div class="flex justify-between items-center mb-3">
+                <h4 class="title-red answer-title mb-0">答题区：</h4>
+                <el-button 
+                  type="danger" 
+                  size="small" 
+                  @click="submitAnswer" 
+                  :disabled="isAnswerSubmitted || (!userAnswer && userAnswerArray.length === 0)"
+                >
+                  {{ isAnswerSubmitted ? '已提交' : '提交答案' }}
+                </el-button>
+              </div>
               
               <!-- 单选题 -->
-              <div v-if="question.type === 'single_choice'">
-                <el-radio-group v-model="userAnswer" class="custom-radio-group">
-                  <el-radio v-for="opt in question.options" :key="opt.label" :value="opt.label">
+              <div v-if="currentQuestion.question_type === 'single_choice' || currentQuestion.question_type === 'choice'">
+                <el-radio-group v-model="userAnswer" class="custom-radio-group" :disabled="isAnswerSubmitted">
+                  <el-radio v-for="opt in parsedOptions" :key="opt.label" :value="opt.label">
                     {{ opt.label }}. {{ opt.text }}
                   </el-radio>
                 </el-radio-group>
               </div>
               
               <!-- 多选题 -->
-              <div v-else-if="question.type === 'multiple_choice'">
-                <el-checkbox-group v-model="userAnswerArray" class="custom-checkbox-group">
-                  <el-checkbox v-for="opt in question.options" :key="opt.label" :value="opt.label">
+              <div v-else-if="currentQuestion.question_type === 'multiple_choice'">
+                <el-checkbox-group v-model="userAnswerArray" class="custom-checkbox-group" :disabled="isAnswerSubmitted">
+                  <el-checkbox v-for="opt in parsedOptions" :key="opt.label" :value="opt.label">
                     {{ opt.label }}. {{ opt.text }}
                   </el-checkbox>
                 </el-checkbox-group>
               </div>
               
               <!-- 判断题 -->
-              <div v-else-if="question.type === 'true_false'">
-                <el-radio-group v-model="userAnswer">
+              <div v-else-if="currentQuestion.question_type === 'true_false'">
+                <el-radio-group v-model="userAnswer" :disabled="isAnswerSubmitted">
                   <el-radio value="true">正确</el-radio>
                   <el-radio value="false">错误</el-radio>
                 </el-radio-group>
@@ -53,6 +63,7 @@
                   :rows="4"
                   placeholder="请在此输入你的答案（解答题留白区）..."
                   resize="none"
+                  :disabled="isAnswerSubmitted"
                 />
               </div>
             </div>
@@ -60,35 +71,51 @@
             <div class="spacer"></div>
           </div>
         </div>
+        
+        <!-- 暂无题目 -->
+        <div class="section-container" v-else-if="!loading">
+           <div class="question-header">
+            <h3 class="title-red">暂无题目</h3>
+            <div class="question-actions">
+              <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
+            </div>
+          </div>
+        </div>
 
         <!-- 红色分割线 -->
-        <div class="divider"></div>
+        <div class="divider" v-if="currentQuestion"></div>
 
         <!-- 下半部分：答案与解释 -->
-        <div class="section-container">
+        <div class="section-container" v-if="currentQuestion">
           <h3 class="title-red">答案与解释</h3>
           <div class="scroll-area">
-            <div class="explanation-content">
-              <p><strong>正确答案：</strong> {{ question.correctAnswer }}</p>
-              <p class="mt-2">{{ question.explanation }}</p>
-              
-              <!-- Mock 大量文本测试独立滚动条 -->
-              <p class="mock-text">(以下为测试滚动的占位长文本) <br/> {{ mockLongText }}</p>
+            <div class="explanation-content" v-if="isAnswerSubmitted">
+              <p><strong>正确答案：</strong> {{ currentQuestion.question_answer }}</p>
+              <p class="mt-2" v-if="currentQuestion.question_explanation">{{ currentQuestion.question_explanation }}</p>
+            </div>
+            <div class="unsubmitted-notice" v-else>
+              <el-icon class="mr-2"><Warning /></el-icon>
+              <span>需要作答后方可查看答案与解析</span>
             </div>
             <div class="spacer"></div>
           </div>
         </div>
       </div>
 
-      <!-- 右侧面板 -->
+        <!-- 右侧面板 -->
       <div class="right-panel">
         <!-- 上半部分：AI 分析与解惑 -->
         <div class="glass-card flex-card">
           <h3 class="title-blue">ai分析与解惑</h3>
           <div class="scroll-area">
-            <div class="ai-content">{{ aiAnalysis }}</div>
-            <!-- Mock 测试滚动 -->
-            <p class="mock-text">{{ mockLongText }}</p>
+            <div class="ai-content" v-if="showAiAnalysis">
+              （AI 题目解析功能尚未实现，暂时留白）
+            </div>
+            <div class="flex items-center justify-center h-full" v-else>
+              <el-button type="primary" plain @click="triggerAiAnalysis" :disabled="!isAnswerSubmitted">
+                {{ isAnswerSubmitted ? '获取 AI 分析' : '请先提交答案' }}
+              </el-button>
+            </div>
             <div class="spacer"></div>
           </div>
         </div>
@@ -97,18 +124,23 @@
         <div class="glass-card flex-card">
           <h3 class="title-green">同类型题型列举</h3>
           <div class="scroll-area">
-            <ul class="similar-list">
-              <li v-for="sim in similarQuestions" :key="sim.id" class="similar-item">
-                <span class="dot"></span>
-                <span class="text">{{ sim.title }}</span>
-                <el-button size="small" type="success" plain class="go-btn">去练习</el-button>
-              </li>
-              <!-- Mock 测试滚动 -->
-              <li v-for="i in 8" :key="'mock-'+i" class="similar-item mock-item">
-                <span class="dot"></span>
-                <span class="text">占位同类拓展题目 {{ i }} ...</span>
-              </li>
-            </ul>
+            <div v-if="showSimilarQuestions">
+              <ul class="similar-list" v-if="similarQuestions.length > 0">
+                <li v-for="sim in similarQuestions" :key="sim.id" class="similar-item">
+                  <span class="dot"></span>
+                  <span class="text">{{ sim.title }}</span>
+                  <el-button size="small" type="success" plain class="go-btn">去练习</el-button>
+                </li>
+              </ul>
+              <div v-else style="font-size: 0.9rem; color: #7f8c8d; margin-top: 8px;">
+                （同类题型推荐功能尚未实现，暂时留白）
+              </div>
+            </div>
+            <div class="flex items-center justify-center h-full" v-else>
+              <el-button type="success" plain @click="triggerSimilarQuestions" :disabled="!isAnswerSubmitted">
+                {{ isAnswerSubmitted ? '举一反三' : '请先提交答案' }}
+              </el-button>
+            </div>
             <div class="spacer"></div>
           </div>
         </div>
@@ -118,56 +150,222 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+import { fetchQuestions, fetchQuestionById, submitExerciseRecord, type Question } from '@/api/practice'
 
+const route = useRoute()
 const router = useRouter()
 
-// -----------------
-// Mock 业务数据
-// -----------------
-const question = ref({
-  type: 'single_choice', // 可切换为: 'multiple_choice', 'true_false', 'essay'
-  stem: '在操作系统中，下列哪一种调度算法可能会导致“饥饿”现象？\n\nA. 先来先服务（FCFS）\nB. 时间片轮转（RR）\nC. 最短作业优先（SJF）\nD. 多级反馈队列',
-  options: [
-    { label: 'A', text: '先来先服务（FCFS）' },
-    { label: 'B', text: '时间片轮转（RR）' },
-    { label: 'C', text: '最短作业优先（SJF）' },
-    { label: 'D', text: '多级反馈队列' }
-  ],
-  correctAnswer: 'C',
-  explanation: '最短作业优先（SJF）算法会优先调度执行时间最短的进程。如果系统中不断有短作业到达，长作业将永远得不到调度，从而产生“饥饿”现象。FCFS、RR、多级反馈队列通常不会导致长作业饥饿。'
+const questions = ref<Question[]>([])
+const currentIndex = ref(0)
+const loading = ref(true)
+const isAnswerSubmitted = ref(false)
+const showAiAnalysis = ref(false)
+const showSimilarQuestions = ref(false)
+
+// 全量 ID 数组缓存（用于仪表盘跳转后的前后切换）
+const cachedIdList = ref<number[]>([])
+const cachedIndex = ref(0)
+
+const currentQuestion = computed(() => {
+  return questions.value[currentIndex.value] || null
 })
 
-const aiAnalysis = ref('根据你的做题历史，你在“进程调度算法”这一知识点上经常混淆各个算法的优缺点。\n\nSJF的特点是平均等待时间最短，但致命缺点就是可能导致长作业饥饿。建议结合【操作系统-进程调度】知识图谱，对比记忆FCFS、SJF、RR和多级反馈队列的特点。\n\nAI 分析认为你的基础概念还算清晰，但在处理带有边界条件的综合题时容易忽略“饥饿”这一特殊情况。接下来可以多做一些带有“老化机制”考点的题目。')
-
-const similarQuestions = ref([
-  { id: 101, title: '下列哪种调度算法最适合分时操作系统？' },
-  { id: 102, title: '关于多级反馈队列调度算法的描述，错误的是？' },
-  { id: 103, title: '简述进程调度中“死锁”与“饥饿”的区别。' },
-  { id: 104, title: '什么是高响应比优先调度算法？' }
-])
+// Mock AI 分析与解惑 (由于后端未实现，暂时留白)
+const aiAnalysis = ref('（AI 题目解析功能尚未实现，暂时留白）')
+const similarQuestions = ref<any[]>([])
 
 const userAnswer = ref('')
 const userAnswerArray = ref([])
 
+onMounted(async () => {
+  const courseIdStr = route.query.module as string
+  const questionIdStr = route.query.questionId as string
+  const idListStr = route.query.idList as string
+  const randomIndexStr = route.query.randomIndex as string
+  const courseId = courseIdStr ? parseInt(courseIdStr, 10) : undefined
+  const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
+
+  if (!courseId && !questionId) {
+    ElMessage.warning('未选择学科或题目')
+    loading.value = false
+    return
+  }
+
+  try {
+    if (idListStr) {
+      // 从仪表盘跳转：携带了全量 ID 列表和随机索引（全量 ID 数组缓存法）
+      const idList = idListStr.split(',').map(Number).filter(id => !isNaN(id))
+      const randomIndex = randomIndexStr ? parseInt(randomIndexStr, 10) : 0
+
+      if (idList.length === 0) {
+        ElMessage.error('题目列表参数无效')
+        loading.value = false
+        return
+      }
+
+      // 只加载当前索引对应的题目（按需加载，而非全量加载）
+      const targetId = idList[randomIndex]
+      if (!targetId) {
+        ElMessage.error('目标题目索引无效')
+        loading.value = false
+        return
+      }
+
+      const question = await fetchQuestionById(targetId)
+      if (question) {
+        questions.value = [question]
+        currentIndex.value = 0
+        // 保存 ID 列表和当前索引到组件状态，供前后切换使用
+        cachedIdList.value = idList
+        cachedIndex.value = randomIndex
+      } else {
+        ElMessage.error('未找到该题目')
+      }
+    } else if (questionId) {
+      // 通过 questionId 加载指定题目（从做题记录双击跳转）
+      const question = await fetchQuestionById(questionId)
+      if (question) {
+        questions.value = [question]
+        currentIndex.value = 0
+      } else {
+        ElMessage.error('未找到该题目')
+      }
+    } else if (courseId) {
+      // 通过 courseId 加载该学科下所有题目（正常进入练习）
+      const data = await fetchQuestions(courseId)
+      questions.value = data || []
+    }
+  } catch (error) {
+    console.error('Failed to fetch questions:', error)
+    ElMessage.error('获取题目失败')
+  } finally {
+    loading.value = false
+  }
+})
+
 // 题目切换逻辑
-const prevQuestion = () => {
-  ElMessage.success('已切换至上一题')
+const prevQuestion = async () => {
+  if (cachedIdList.value.length > 0) {
+    // 全量 ID 缓存模式：通过索引切换
+    if (cachedIndex.value > 0) {
+      cachedIndex.value--
+      await loadQuestionByCachedIndex()
+    } else {
+      ElMessage.warning('已经是第一题了')
+    }
+  } else if (currentIndex.value > 0) {
+    currentIndex.value--
+    resetAnswer()
+    ElMessage.success('已切换至上一题')
+  } else {
+    ElMessage.warning('已经是第一题了')
+  }
 }
 
-const nextQuestion = () => {
-  ElMessage.success('已切换至下一题')
+const nextQuestion = async () => {
+  if (cachedIdList.value.length > 0) {
+    // 全量 ID 缓存模式：通过索引切换
+    if (cachedIndex.value < cachedIdList.value.length - 1) {
+      cachedIndex.value++
+      await loadQuestionByCachedIndex()
+    } else {
+      ElMessage.warning('已经是最后一题了')
+    }
+  } else if (currentIndex.value < questions.value.length - 1) {
+    currentIndex.value++
+    resetAnswer()
+    ElMessage.success('已切换至下一题')
+  } else {
+    ElMessage.warning('已经是最后一题了')
+  }
+}
+
+/** 根据 cachedIndex 从 cachedIdList 中加载对应题目 */
+const loadQuestionByCachedIndex = async () => {
+  const targetId = cachedIdList.value[cachedIndex.value]
+  if (!targetId) return
+  try {
+    const question = await fetchQuestionById(targetId)
+    if (question) {
+      questions.value = [question]
+      currentIndex.value = 0
+      resetAnswer()
+      ElMessage.success(`已切换至第 ${cachedIndex.value + 1} 题`)
+    }
+  } catch (error) {
+    console.error('切换题目失败:', error)
+    ElMessage.error('切换题目失败')
+  }
+}
+
+const submitAnswer = async () => {
+  if (!currentQuestion.value) return
+
+  // 构造学生答案字符串
+  const answerStr = userAnswerArray.value.length > 0
+    ? userAnswerArray.value.sort().join(',')
+    : userAnswer.value
+
+  try {
+    await submitExerciseRecord({
+      question_id: currentQuestion.value.question_id,
+      course_id: currentQuestion.value.course_id,
+      kg_node_name: currentQuestion.value.kg_node_name || undefined,
+      question_type: currentQuestion.value.question_type,
+      question_difficulty: currentQuestion.value.question_difficulty,
+      do_stu_answer: answerStr,
+    })
+    isAnswerSubmitted.value = true
+    ElMessage.success('答案已提交')
+  } catch (error) {
+    console.error('提交答案失败:', error)
+    ElMessage.error('提交答案失败，请重试')
+  }
+}
+
+const triggerAiAnalysis = () => {
+  showAiAnalysis.value = true
+}
+
+const triggerSimilarQuestions = () => {
+  showSimilarQuestions.value = true
+}
+
+const resetAnswer = () => {
+  userAnswer.value = ''
+  userAnswerArray.value = []
+  isAnswerSubmitted.value = false
+  showAiAnalysis.value = false
+  showSimilarQuestions.value = false
 }
 
 const goBack = () => {
   router.back()
 }
 
-// 仅用于测试前端独立滚动条是否生效的超长文本
-const mockLongText = '这是一段用于测试独立滚动条是否生效的超长占位文本。'.repeat(30)
+// 解析选项
+const parsedOptions = computed(() => {
+  if (!currentQuestion.value || !currentQuestion.value.question_options) return []
+  const opts = currentQuestion.value.question_options
+  // 假设后端返回的 json 是 { "A": "选项A内容", "B": "选项B内容" } 或者数组
+  if (Array.isArray(opts)) {
+    if (opts.length > 0 && typeof opts[0] === 'string') {
+      const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+      return opts.map((text, index) => ({
+        label: labels[index] || String(index),
+        text: text
+      }))
+    }
+    return opts
+  } else if (typeof opts === 'object') {
+    return Object.entries(opts).map(([key, value]) => ({ label: key, text: value }))
+  }
+  return []
+})
 </script>
 
 <style scoped>
@@ -338,6 +536,18 @@ h3 {
   font-size: 0.85rem;
   color: #7f8c8d;
   line-height: 1.5;
+}
+
+.unsubmitted-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(243, 156, 18, 0.1);
+  color: #d35400;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin-top: 16px;
 }
 
 /* --- 相似题目列表 --- */

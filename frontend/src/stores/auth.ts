@@ -1,25 +1,32 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+export interface UserInfo {
+  id: number
+  name: string
+  email: string | null
+  gender: string | null
+  stu_level: string | null
+  role: 'student' | 'teacher'
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('token'))
-  const user = ref<{ id: number; name: string; role: 'student' | 'teacher' | 'admin' } | null>(null)
+  const user = ref<UserInfo | null>(null)
 
   function setToken(newToken: string) {
     token.value = newToken
     localStorage.setItem('token', newToken)
   }
 
-  function setUser(newUser: { id: number; name: string; role: 'student' | 'teacher' | 'admin' }) {
-    user.value = newUser
-    localStorage.setItem('userRole', newUser.role)
+  function setUser(userInfo: UserInfo) {
+    user.value = userInfo
   }
 
   function logout() {
     token.value = null
     user.value = null
     localStorage.removeItem('token')
-    localStorage.removeItem('userRole')
   }
 
   return { token, user, setToken, setUser, logout }

@@ -7,6 +7,7 @@ from app.models.user import Student, Teacher
 from app.schemas.auth import (
     StudentRegisterRequest, TeacherRegisterRequest,
     StudentResponse, TeacherResponse, TokenResponse,
+    StudentUpdateRequest,
 )
 
 
@@ -40,21 +41,35 @@ class AuthService:
         if user_type == "student":
             result = await db.execute(select(Student).where(Student.stu_email == email))
             user = result.scalar_one_or_none()
-            user_id = user.stu_id if user else None
-            stored_hash = user.stu_pwd if user else None
+            if user is None or user.stu_pwd is None:
+                return None
+            if not verify_password(password, user.stu_pwd):
+                return None
+            token = create_access_token(data={"sub": str(user.stu_id), "user_type": user_type})
+            return TokenResponse(
+                access_token=token,
+                user_type=user_type,
+                user_id=user.stu_id,
+                user_name=user.stu_name,
+                user_email=user.stu_email,
+            )
         elif user_type == "teacher":
             result = await db.execute(select(Teacher).where(Teacher.tea_email == email))
             user = result.scalar_one_or_none()
-            user_id = user.tea_id if user else None
-            stored_hash = user.tea_pwd if user else None
+            if user is None or user.tea_pwd is None:
+                return None
+            if not verify_password(password, user.tea_pwd):
+                return None
+            token = create_access_token(data={"sub": str(user.tea_id), "user_type": user_type})
+            return TokenResponse(
+                access_token=token,
+                user_type=user_type,
+                user_id=user.tea_id,
+                user_name=user.tea_name,
+                user_email=user.tea_email,
+            )
         else:
             return None
-        if user is None or stored_hash is None:
-            return None
-        if not verify_password(password, stored_hash):
-            return None
-        token = create_access_token(data={"sub": str(user_id), "user_type": user_type})
-        return TokenResponse(access_token=token, user_type=user_type, user_id=user_id)
 
     async def get_student_by_id(self, stu_id: int, db: AsyncSession) -> Optional[StudentResponse]:
         result = await db.execute(select(Student).where(Student.stu_id == stu_id))
@@ -69,3 +84,23 @@ class AuthService:
         if teacher is None:
             return None
         return TeacherResponse.model_validate(teacher)
+
+    async def update_student(self, stu_id: int, data: StudentUpdateRequest, db: AsyncSession) -> Optional[StudentResponse]:
+        """更新学生个人信息，只更新传入的非空字段"""
+        result = await db.execute(select(Student).where(Student.stu_id == stu_id))
+        student = result.scalar_one_or_none()
+        if student is None:
+            return None
+
+        if data.stu_name is not None:
+            student.stu_name = data.stu_name
+        if data.stu_email is not None:
+            student.stu_email = data.stu_email
+        if data.stu_pwd is not None and data.stu_pwd != "":
+            student.stu_pwd = hash_password(data.stu_pwd)
+        if data.stu_gender is not None:
+            student.stu_gender = data.stu_gender
+
+        await db.commit()
+        await db.refresh(student)
+        return StudentResponse.model_validate(student)

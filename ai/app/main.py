@@ -4,14 +4,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", force=True)
-
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI
 
-from app.api import chat, gnn, kg
-from app.agent import router as agent_router
-import app.agent.tools  #触发built-in工具注册
+from app.api import analysis, chat, gnn, kg
 from app.config import settings
 from app.dependencies import verify_service_token
 from app.tasks.scheduler import start_scheduler, stop_scheduler
@@ -67,7 +63,9 @@ auth_dep = [Depends(verify_service_token)]
 app.include_router(chat.router, prefix="/rag", tags=["AI Chat"], dependencies=auth_dep)
 app.include_router(gnn.router, prefix="/gnn", tags=["GNN"], dependencies=auth_dep)
 app.include_router(kg.router, prefix="/kg", tags=["Knowledge Graph"], dependencies=auth_dep)
-app.include_router(agent_router.router, prefix="/agent", tags=["Agent"], dependencies=auth_dep)
+
+# 学生 AI 学习分析路由
+app.include_router(analysis.router, prefix="/analysis", tags=["AI 学习分析"], dependencies=auth_dep)
 
 # OCR 路由 — 无需认证
 app.include_router(ocr_router, prefix="/ocr", tags=["OCR 文档解析"])

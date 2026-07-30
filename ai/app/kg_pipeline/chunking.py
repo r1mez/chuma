@@ -116,15 +116,19 @@ def _estimate_token_count(text: str) -> int:
 
 def _chunk_section(
     section: str,
-    max_chunk_size: int = 0,  # kept for backward compat, ignored
+    max_chunk_size: int,
     base_index: int = 0,
     heading_path: Optional[list[str]] = None,
     heading_levels: Optional[list[int]] = None,
 ) -> list[DocumentChunk]:
-    """一个 section 直接作为一个大切片（不再按 token 聚合）
+    """将一个 section 按段落/句子切分为 chunks
 
-    每个 heading section 是完整的语义块，LLM 抽取需要有完整的上下文。
-    向量检索使用时，由 DocIngestion.split_sub_chunks() 二次分割为段落级子切片。
+    Args:
+        section: section 文本
+        max_chunk_size: 最大 chunk token 数
+        base_index: 起始 chunk index
+        heading_path: 标题路径
+        heading_levels: 标题级别列表
     """
     if heading_path is None:
         heading_path = []
@@ -134,14 +138,69 @@ def _chunk_section(
     if not section:
         return []
 
-    return [DocumentChunk(
-        id=str(uuid.uuid4()),
-        text=section.strip(),
-        chunk_index=base_index,
-        chunk_size=_estimate_token_count(section),
-        heading_path=heading_path,
-        heading_levels=heading_levels,
-    )]
+    chunks = []
+    current_text = ""
+    current_size = 0
+    chunk_index = base_index
+
+    paragraphs = re.split(r'\n\s*\n', section)
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        para_size = _estimate_token_count(para)
+
+        if current_size > 0 and current_size + para_size > max_chunk_size:
+            chunks.append(DocumentChunk(
+                id=str(uuid.uuid4()),
+                text=current_text.strip(),
+                chunk_index=chunk_index,
+                chunk_size=current_size,
+                heading_path=heading_path,
+                heading_levels=heading_levels,
+            ))
+            chunk_index += 1
+            current_text = ""
+            current_size = 0
+
+        if para_size > max_chunk_size:
+            sentences = re.split(r'(?<=[。！？；;.!?])\s*', para)
+            for sent in sentences:
+                sent = sent.strip()
+                if not sent:
+                    continue
+                sent_size = _estimate_token_count(sent)
+                if current_size + sent_size > max_chunk_size and current_size > 0:
+                    chunks.append(DocumentChunk(
+                        id=str(uuid.uuid4()),
+                        text=current_text.strip(),
+                        chunk_index=chunk_index,
+                        chunk_size=current_size,
+                        heading_path=heading_path,
+                        heading_levels=heading_levels,
+                    ))
+                    chunk_index += 1
+                    current_text = ""
+                    current_size = 0
+                current_text += sent + " "
+                current_size += sent_size
+        else:
+            current_text += para + "\n\n"
+            current_size += para_size
+
+    if current_text.strip():
+        chunks.append(DocumentChunk(
+            id=str(uuid.uuid4()),
+            text=current_text.strip(),
+            chunk_index=chunk_index,
+            chunk_size=current_size,
+            heading_path=heading_path,
+            heading_levels=heading_levels,
+        ))
+
+    return chunks
 
 
 class MarkdownChunker:

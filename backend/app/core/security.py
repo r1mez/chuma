@@ -15,6 +15,9 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # 兼容数据库中的明文密码（开发阶段）
+    if hashed_password == plain_password:
+        return True
     return pwd_context.verify(plain_password, hashed_password)
 
 

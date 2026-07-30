@@ -41,12 +41,25 @@ async def get_current_user(
 
     if user_type == "student":
         user = await auth_service.get_student_by_id(user_id_int, db)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+        return {
+            "id": user_id_int,
+            "user_type": user_type,
+            "name": user.stu_name,
+            "email": user.stu_email,
+            "gender": user.stu_gender,
+            "stu_level": user.stu_level,
+        }
     elif user_type == "teacher":
         user = await auth_service.get_teacher_by_id(user_id_int, db)
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+        return {
+            "id": user_id_int,
+            "user_type": user_type,
+            "name": user.tea_name,
+            "email": user.tea_email,
+        }
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未知的用户类型")
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
-
-    return {"id": user_id_int, "user_type": user_type}

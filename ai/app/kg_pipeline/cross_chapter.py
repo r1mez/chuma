@@ -159,7 +159,6 @@ class CrossChapterExtractor:
                     ],
                     temperature=0.1,
                     profile=self.profile,
-                    response_format={"type": "json_object"},
                 )
                 raw = resp.content or ""
                 data = _parse_llm_json_response(raw)

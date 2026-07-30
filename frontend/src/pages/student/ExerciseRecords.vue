@@ -6,61 +6,44 @@
         <div class="grid-container">
           <div 
             v-for="subject in subjects" 
-            :key="subject.id" 
+            :key="subject.course_id" 
             class="glass-card subject-card"
-            @click="enterSubjectDetail(subject.id)"
+            @click="enterSubjectDetail(subject.course_id)"
           >
-            <span class="subject-name">{{ subject.name }}做题记录</span>
+            <span class="subject-name">{{ subject.course_name }}做题记录</span>
           </div>
         </div>
       </div>
 
-      <!-- 右侧：错题记录列表 -->
+      <!-- 右侧：按学科分组的错题记录 -->
       <div class="right-panel glass-card">
         <div class="right-header">
           <h3 class="panel-title">错题记录</h3>
-          <div class="search-box">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜索错题..."
-              clearable
-            >
-              <template #append>
-                <el-button @click="handleSearch">搜索</el-button>
-              </template>
-            </el-input>
-          </div>
         </div>
         <div class="records-list scroll-area">
-          <div 
-            v-for="record in pagedWrongRecords" 
-            :key="record.id" 
-            class="record-item"
-            @dblclick="goToPracticePanel(record.id)"
-          >
-            <div class="record-stem text-truncate" :title="record.stem">
-              {{ record.stem }}
-            </div>
-            <div class="record-meta">
-              <div class="tags">
-                <span v-for="(tag, idx) in record.tags" :key="idx" class="tag">
-                  {{ tag }}
-                </span>
+          <!-- 按学科分组遍历 -->
+          <div v-for="(group, cid) in groupedWrongRecords" :key="cid" class="group-section">
+            <div class="group-header">{{ group.course_name }}</div>
+            <div
+              v-for="record in group.records"
+              :key="record.do_id"
+              class="record-item"
+              @dblclick="goToPracticePanel(record.question_id, Number(cid))"
+            >
+              <div class="record-stem text-truncate" :title="record.question_description">
+                {{ record.question_description }}
               </div>
-              <div class="date">{{ record.date }}</div>
+              <div class="record-meta">
+                <span class="subject-tag">【{{ record.course_name || group.course_name }}】</span>
+                <span v-if="record.kg_node_name" class="tag">{{ record.kg_node_name }}</span>
+                <span class="date">{{ formatDate(record.created_at) }}</span>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <!-- 分页 -->
-        <div class="pagination-container">
-          <el-pagination
-            v-model:current-page="currentPage"
-            :page-size="pageSize"
-            :total="wrongRecords.length"
-            layout="total, prev, pager, next"
-            class="custom-pagination"
-          />
+          <div v-if="hasNoRecords && !loading" class="empty-tip">
+            暂无错题记录
+          </div>
+          <div v-if="loading" class="empty-tip">加载中...</div>
         </div>
       </div>
     </div>
@@ -68,60 +51,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
+import { fetchCourses, fetchWrongRecordsGrouped, type Course, type ExerciseRecordListItem } from '@/api/practice'
+
+interface WrongGroup {
+  course_name: string
+  records: ExerciseRecordListItem[]
+}
 
 const router = useRouter()
 
-const searchQuery = ref('')
-const handleSearch = () => {
-  ElMessage.success(`搜索错题：${searchQuery.value}`)
-}
+const subjects = ref<Course[]>([])
+const groupedWrongRecords = ref<Record<number, WrongGroup>>({})
+const loading = ref(true)
 
-// 跳转到具体学科做题记录
-const enterSubjectDetail = (subjectId: string) => {
-  router.push({
-    path: '/student/subject-records',
-    query: { module: subjectId }
-  })
-}
+const hasNoRecords = computed(() => {
+  return Object.keys(groupedWrongRecords.value).length === 0
+})
 
-// 双击跳转到错题练习面板
-const goToPracticePanel = (questionId: number) => {
-  router.push({
-    path: '/student/practice/panel',
-    query: { questionId: questionId }
-  })
-}
-
-// 学科数据
-const subjects = [
-  { id: 'ds', name: '数据结构' },
-  { id: 'co', name: '计算机组成原理' },
-  { id: 'os', name: '操作系统' },
-  { id: 'net', name: '计算机网络' }
-]
-
-// 模拟所有学科的错题集合
-const wrongRecords = Array.from({ length: 45 }).map((_, index) => {
-  return {
-    id: 1000 + index,
-    stem: `题目... 占位错题内容 ${index + 1}`,
-    tags: ['知识点1', '知识点2'],
-    date: '时间'
+onMounted(async () => {
+  try {
+    // 并行获取学科列表和分组错题
+    const [courses, grouped] = await Promise.all([
+      fetchCourses(),
+      fetchWrongRecordsGrouped(),
+    ])
+    subjects.value = courses || []
+    groupedWrongRecords.value = grouped || {}
+  } catch (error) {
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取数据失败')
+  } finally {
+    loading.value = false
   }
 })
 
-// 分页逻辑
-const currentPage = ref(1)
-const pageSize = ref(10)
+// 跳转到具体学科做题记录
+const enterSubjectDetail = (courseId: number) => {
+  router.push({
+    path: '/student/subject-records',
+    query: { module: String(courseId) }
+  })
+}
 
-const pagedWrongRecords = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return wrongRecords.slice(start, start + pageSize.value)
-})
+// 双击跳转到错题练习面板（携带学科 ID 和题目 ID）
+const goToPracticePanel = (questionId: number, courseId: number) => {
+  router.push({
+    path: '/student/practice/panel',
+    query: {
+      questionId: String(questionId),
+      module: String(courseId),
+    }
+  })
+}
+
+// 格式化日期
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 </script>
 
 <style scoped>
@@ -193,42 +186,23 @@ const pagedWrongRecords = computed(() => {
 
 .right-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   margin-bottom: 16px;
   flex-shrink: 0;
-  position: relative;
 }
 
 .panel-title {
   margin: 0;
   font-size: 1.2rem;
   font-weight: bold;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.search-box {
-  width: 200px;
-  margin-left: auto; /* push to right if absolute center doesn't push it */
-}
-:deep(.search-box .el-input__wrapper) {
-  background: transparent;
-  box-shadow: 0 0 0 1px #666 inset;
-}
-:deep(.search-box .el-input-group__append) {
-  background: transparent;
-  border: 1px solid #666;
-  border-left: none;
-  color: #333;
 }
 
 .records-list {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 /* 滚动区域通用样式 */
@@ -252,12 +226,28 @@ const pagedWrongRecords = computed(() => {
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* 学科分组 */
+.group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-header {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2980b9;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  margin-bottom: 4px;
+}
+
 /* 记录项 */
 .record-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: rgba(255, 255, 255, 0.5);
   border-radius: 8px;
   cursor: pointer;
@@ -283,13 +273,14 @@ const pagedWrongRecords = computed(() => {
 .record-meta {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.tags {
-  display: flex;
-  gap: 8px;
+.subject-tag {
+  font-size: 0.85rem;
+  color: #2980b9;
+  font-weight: 500;
 }
 
 .tag {
@@ -300,25 +291,14 @@ const pagedWrongRecords = computed(() => {
 .date {
   font-size: 0.85rem;
   color: #666;
+  width: 130px;
+  text-align: right;
 }
 
-.pagination-container {
-  margin-top: 16px;
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-:deep(.custom-pagination .el-pager li) {
-  background: transparent;
-  color: #000;
-}
-:deep(.custom-pagination .el-pager li.is-active) {
-  font-weight: bold;
-  color: #2980b9;
-}
-:deep(.custom-pagination button) {
-  background: transparent !important;
-  color: #000;
+.empty-tip {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 0.95rem;
 }
 </style>

@@ -9,11 +9,14 @@
         <h2 class="title">智教慧学Agent平台</h2>
         
         <!-- Role Selector -->
-        <el-radio-group v-model="role" class="role-selector">
-          <el-radio-button value="student">学生</el-radio-button>
-          <el-radio-button value="teacher">教师</el-radio-button>
-          <el-radio-button value="admin">管理员</el-radio-button>
-        </el-radio-group>
+        <div class="role-selector">
+          <label class="radio-label">
+            <input type="radio" v-model="role" value="student" /> Student
+          </label>
+          <label class="radio-label">
+            <input type="radio" v-model="role" value="teacher" /> Teacher
+          </label>
+        </div>
 
         <span class="input-span">
           <label for="email" class="label">Email</label>
@@ -35,9 +38,9 @@
             required 
           />
         </span>
-        <span class="span"><span class="forgot-password-text">Forgot password?</span></span>
-        <input class="submit" type="submit" value="Log in" />
-        <span class="span">Don't have an account? <router-link to="/register">Sign up</router-link></span>
+        <span class="span"><a href="#">Forgot password?</a></span>
+        <input class="submit" type="submit" value="Log in" :disabled="loading" />
+        <span class="span">Don't have an account? <a href="#">Sign up</a></span>
       </form>
     </div>
   </div>
@@ -49,42 +52,56 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import LetterGlitch from '@/components/LetterGlitch.vue'
+import request from '@/utils/request'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
-const role = ref<'student' | 'teacher' | 'admin'>('student')
+const role = ref<'student' | 'teacher'>('student')
+const loading = ref(false)
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!email.value || !password.value) {
     ElMessage.warning('Email and Password cannot be empty')
     return
   }
 
-  // Mock login — admin detection by email prefix
-  let effectiveRole: 'student' | 'teacher' | 'admin' = role.value
-  if (email.value.startsWith('admin')) {
-    effectiveRole = 'admin'
-  }
+  loading.value = true
+  try {
+    const res: any = await request.post('/auth/login', {
+      email: email.value,
+      password: password.value,
+      user_type: role.value,
+    })
 
-  authStore.setToken('mock-token-for-development')
-  authStore.setUser({
-    id: 1,
-    name: email.value.split('@')[0],
-    role: effectiveRole
-  })
+    console.log('Login response:', res)
 
-  ElMessage.success(`Logged in as ${effectiveRole}`)
+    // 保存 token 和用户完整信息（包括从后端返回的姓名和邮箱）
+    authStore.setToken(res.access_token)
+    authStore.setUser({
+      id: res.user_id,
+      name: res.user_name || email.value.split('@')[0],
+      email: res.user_email || email.value,
+      gender: null,
+      // stu_level: res.stu_level || null,
+      role: role.value,
+    })
 
-  // Redirect by role
-  if (effectiveRole === 'student') {
-    router.push('/student/dashboard')
-  } else if (effectiveRole === 'teacher') {
-    router.push('/teacher/dashboard')
-  } else {
-    router.push('/admin/ocr')
+    ElMessage.success(`Logged in as ${role.value}`)
+
+    // 根据角色跳转到不同的主页面
+    if (role.value === 'student') {
+      await router.push('/student/dashboard')
+    } else {
+      await router.push('/teacher/dashboard')
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.detail || '邮箱或密码错误'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
   }
 }
 </script>
@@ -134,6 +151,16 @@ const handleLogin = () => {
   justify-content: center;
   gap: 1.5rem;
   margin-bottom:1rem;
+}
+
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #555;
+  font-size: 1.5rem;
 }
 
 /* 引入 template.txt 的样式 */

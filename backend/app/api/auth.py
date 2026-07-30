@@ -6,6 +6,7 @@ from app.core.deps import get_current_user
 from app.schemas.auth import (
     StudentRegisterRequest, TeacherRegisterRequest,
     LoginRequest, StudentResponse, TeacherResponse, TokenResponse,
+    StudentUpdateRequest,
 )
 from app.services.auth_service import AuthService
 
@@ -35,4 +36,21 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    """获取当前登录用户的完整信息（姓名、邮箱、性别等）"""
     return current_user
+
+
+@router.put("/profile", response_model=StudentResponse)
+async def update_profile(
+    data: StudentUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新当前登录学生的个人信息（姓名、邮箱、密码、性别）"""
+    if current_user["user_type"] != "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅学生用户可以编辑个人信息")
+    service = AuthService()
+    updated = await service.update_student(current_user["id"], data, db)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    return updated

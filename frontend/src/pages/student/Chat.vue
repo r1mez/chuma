@@ -2,28 +2,10 @@
   <div class="chat-page">
     <!-- 顶部栏 -->
     <div class="chat-header">
-      <h3>AI 助教</h3>
+      <h3>AI 助学</h3>
       <div class="header-actions">
-        <el-select
-          v-model="selectedGraphIds"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          placeholder="全部教材"
-          clearable
-          size="small"
-          style="width: 240px"
-          @change="onGraphSelectionChange"
-        >
-          <el-option
-            v-for="g in knowledgeStore.graphList"
-            :key="g.id"
-            :label="g.original_filename"
-            :value="g.id"
-          />
-        </el-select>
         <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
-          <GooeyNav
+          <GooeyNav 
             :items="navItems"
             v-model="chatMode"
             :particle-count="15"
@@ -42,80 +24,43 @@
       </div>
     </div>
 
-    <!-- 双栏布局：聊天 + 子图面板 -->
-    <div class="chat-body">
-      <!-- 左侧聊天区域 -->
-      <div class="chat-main">
-        <div class="chat-messages" ref="messagesRef">
-          <div v-if="messages.length === 0" class="empty-state">
-            <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-            <p>开始向 AI 助教提问吧！</p>
-            <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
-          </div>
-          <ChatMessage
-            v-for="(msg, i) in messages"
-            :key="i"
-            :message="msg"
-            :loading="loading && i === messages.length - 1"
-          />
-        </div>
-        <ChatInput :loading="loading" @send="sendMessage" />
+    <!-- 消息列表 -->
+    <div class="chat-messages" ref="messagesRef">
+      <div v-if="messages.length === 0" class="empty-state">
+        <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
+        <p>开始向 AI 助学提问吧！</p>
+        <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
       </div>
-
-      <!-- 右侧子图面板 -->
-      <ChatSubgraphPanel
-        :visible="subgraphPanelVisible"
-        :hit-node-name="kgHitNode?.nodeName ?? ''"
-        :hit-node-type="kgHitNode?.nodeType ?? ''"
-        :subgraphs="subgraphs"
-        :loading="subgraphLoading"
-        :error="subgraphError"
-        @close="closeSubgraphPanel"
-        @retry="retrySubgraph"
+      <ChatMessage
+        v-for="(msg, i) in messages"
+        :key="i"
+        :message="msg"
+        :loading="loading && i === messages.length - 1"
       />
     </div>
+
+    <!-- 输入框 -->
+    <ChatInput :loading="loading" @send="sendMessage" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
-import { useKnowledgeStore } from '@/stores/knowledge'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
-import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
 import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
 
-const {
-  messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds,
-  kgHitNode, subgraphPanelVisible, closeSubgraphPanel,
-  subgraphs, subgraphLoading, subgraphError, extractSubgraphs,
-} = useChat()
+const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
 const messagesRef = ref<HTMLElement>()
-
-const knowledgeStore = useKnowledgeStore()
-const selectedGraphIds = ref<number[]>([])
-
-onMounted(() => {
-  knowledgeStore.loadGraphList()
-})
-
-function onGraphSelectionChange(ids: number[]) {
-  kgGraphIds.value = ids
-}
-
-function retrySubgraph() {
-  if (kgHitNode.value) {
-    extractSubgraphs(kgHitNode.value)
-  }
-}
 
 const navItems = [
   { label: '快速回答', value: 'quick' },
   { label: '深度思考', value: 'deep' },
-  { label: '智能体模式', value: 'agent' }
+  { label: '智能管家', value: 'agent' },
+  { label: '规划模式 (开发中)', value: 'plan', disabled: true }
 ]
 
 // 自动滚动到底部
@@ -128,6 +73,7 @@ watch(
     }
   },
 )
+// 流式输出时也要滚动
 watch(
   () => messages.value[messages.value.length - 1]?.content,
   async () => {
@@ -175,27 +121,13 @@ watch(
 }
 .nav-wrapper :deep(.inner-content) {
   background: #e5e8e4;
-  border-radius: 9999px;
+  border-radius: 9999px; /* 让边框适配胶囊形状 */
 }
 .nav-wrapper {
-  border-radius: 9999px;
+  border-radius: 9999px; /* 外层也改为胶囊状 */
 }
 .clear-btn-wrapper :deep(.inner-content) {
   background: #e5e8e4;
-}
-
-/* 双栏布局 */
-.chat-body {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
-}
-.chat-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 .chat-messages {
   flex: 1;
@@ -207,14 +139,17 @@ watch(
 .chat-messages::-webkit-scrollbar {
   width: 8px;
 }
+
 .chat-messages::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.02);
   border-radius: 4px;
 }
+
 .chat-messages::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.15);
   border-radius: 4px;
 }
+
 .chat-messages::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
 }

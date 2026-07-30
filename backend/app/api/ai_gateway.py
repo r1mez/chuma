@@ -68,12 +68,37 @@ async def deep_chat(request: Request):
 
 @router.post("/agent/chat")
 async def agent_chat(request: Request):
-    """智能管家对话 — SSE 透传到 AI 引擎 Agent 路由"""
+    """智能体模式对话 — SSE 透传到 AI 引擎 Agent 路由"""
     body = await request.json()
     # Inject current user ID from auth context
     user = getattr(request.state, "user", None)
     if user and "user_id" not in body:
         body["user_id"] = user.get("id", 1)
+
+    # Resolve kg_graph_ids → graph_names
+    kg_graph_ids: list[int] = body.get("kg_graph_ids", [])
+    graph_names: list[str] = []
+    if kg_graph_ids:
+        from app.core.database import async_session
+        from app.services.kg_graph_service import KgGraphService
+        kg_service = KgGraphService()
+        async with async_session() as db:
+            for gid in kg_graph_ids:
+                graph = await kg_service.get_graph_by_id(gid, db)
+                if graph and graph.graph_name:
+                    graph_names.append(graph.graph_name)
+    else:
+        # 未选教材 → 查询全部图谱
+        from app.core.database import async_session
+        from app.services.kg_graph_service import KgGraphService
+        kg_service = KgGraphService()
+        async with async_session() as db:
+            all_graphs = await kg_service.list_graphs(db)
+            graph_names = [g.graph_name for g in all_graphs]
+            kg_graph_ids = [g.id for g in all_graphs]
+
+    body["kg_graph_ids"] = kg_graph_ids
+    body["graph_names"] = graph_names
 
     async def proxy_stream():
         try:

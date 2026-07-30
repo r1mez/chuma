@@ -94,6 +94,7 @@ def get_full_graph(graph_name: Optional[str] = None) -> dict[str, Any]:
 def search_nodes(query: str, graph_name: Optional[str] = None) -> list[dict]:
     """按名称搜索实体，自动去重"""
     storage = AgeStorage(graph_name=graph_name)
+    effective_graph_name = storage._graph_name  # Use the resolved graph name from AgeStorage
     try:
         conn = storage._get_conn()
     except AgeConnectionError as e:
@@ -124,7 +125,8 @@ def search_nodes(query: str, graph_name: Optional[str] = None) -> list[dict]:
             continue
         seen.add(nid)
         results.append({"id": nid, "name": _strip_agtype(r[1]),
-                        "type": _strip_agtype(r[2]), "description": _strip_agtype(r[3])})
+                        "type": _strip_agtype(r[2]), "description": _strip_agtype(r[3]),
+                        "graph_name": effective_graph_name})
     return results
 
 

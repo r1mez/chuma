@@ -47,6 +47,20 @@ export interface KgGraphInfo {
   created_at: string
 }
 
+export interface DeleteGraphStats {
+  graph_id: number
+  graph_name: string
+  original_filename: string
+  node_count: number
+  edge_count: number
+  chunk_count: number
+  status: string
+}
+
+export async function fetchGraphStats(graphId: number): Promise<DeleteGraphStats> {
+  return request.get(`/knowledge/graphs/${graphId}/stats`)
+}
+
 export async function fetchGraphList(): Promise<KgGraphInfo[]> {
   return request.get('/knowledge/graphs')
 }

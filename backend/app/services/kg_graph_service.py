@@ -1,15 +1,21 @@
 """KgGraphService -- 知识图谱元数据管理"""
 
+import json
+import logging
 import os
 import re
 from typing import Optional
 from uuid import uuid4
 
+import redis.asyncio as aioredis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.kg_graph import KgGraph
 from app.schemas.kg_graph import KgGraphResponse
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_filename(filename: str) -> str:
@@ -97,6 +103,66 @@ class KgGraphService:
             kg_graph.chunk_count = chunk_count
             kg_graph.status = status
             await db.commit()
+
+    async def reconcile_pending_graphs(
+        self,
+        graphs: list[KgGraphResponse],
+        db: AsyncSession,
+    ) -> list[KgGraphResponse]:
+        """对账：检查 pending 状态的图谱在 Redis 中的真实状态并更新 PostgreSQL
+
+        当用户在构建完成前关闭了 KgPipeline 页面，前端轮询中断，
+        PostgreSQL 中的状态会一直卡在 pending。此方法在 list_graphs
+        时自动检查 Redis 中的构建结果，完成状态同步。
+        """
+        pending = [g for g in graphs if g.status == "pending"]
+        if not pending:
+            return graphs
+
+        r = aioredis.from_url(settings.REDIS_URL)
+        try:
+            for g in pending:
+                task_id_raw = await r.get(f"kg:graph_task:{g.id}")
+                if not task_id_raw:
+                    continue
+                task_id = task_id_raw.decode() if isinstance(task_id_raw, bytes) else task_id_raw
+
+                result_raw = await r.get(f"kg:result:{task_id}")
+                if not result_raw:
+                    continue
+
+                result = json.loads(result_raw) if isinstance(result_raw, bytes) else json.loads(result_raw)
+                status = result.get("status")
+                if status in ("completed", "failed"):
+                    if status == "completed":
+                        await self.update_graph_stats(
+                            graph_id=g.id,
+                            node_count=result.get("nodes", 0),
+                            edge_count=result.get("edges", 0),
+                            chunk_count=result.get("chunks", 0),
+                            status="completed",
+                            db=db,
+                        )
+                        g.node_count = result.get("nodes", 0)
+                        g.edge_count = result.get("edges", 0)
+                        g.chunk_count = result.get("chunks", 0)
+                        g.status = "completed"
+                        logger.info(f"Reconciled kg_graph {g.id}: pending → completed")
+                    else:
+                        await self.update_graph_stats(
+                            graph_id=g.id,
+                            node_count=0,
+                            edge_count=0,
+                            chunk_count=0,
+                            status="failed",
+                            db=db,
+                        )
+                        g.status = "failed"
+                        logger.info(f"Reconciled kg_graph {g.id}: pending → failed")
+        finally:
+            await r.aclose()
+
+        return graphs
 
     async def delete_graph(
         self,

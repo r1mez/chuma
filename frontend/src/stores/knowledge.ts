@@ -46,6 +46,10 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   }
 
   async function loadGraphData(graphName?: string) {
+    // Cache guard: skip re-fetch if the same graph is already loaded
+    if (graphName === currentGraphName.value && graphData.value && !error.value) {
+      return
+    }
     loading.value = true
     error.value = null
     try {

@@ -67,8 +67,14 @@ class LLMClient:
         temperature: float = 0.7,
         profile: ModelProfile | None = None,
         tools: list[dict] | None = None,
+        response_format: dict | None = None,
     ) -> ChatResponse:
-        """发送对话请求，返回 ChatResponse（含 tool_calls 或 content）"""
+        """发送对话请求，返回 ChatResponse（含 tool_calls 或 content）
+
+        Args:
+            response_format: OpenAI 兼容的 response_format 参数，
+                例如 {'type': 'json_object'} 强制 JSON 输出。
+        """
         p = self._get_profile(profile)
         for attempt in range(p.max_retries + 1):
             try:
@@ -81,6 +87,8 @@ class LLMClient:
                     if tools:
                         payload["tools"] = tools
                         payload["tool_choice"] = "auto"
+                    if response_format:
+                        payload["response_format"] = response_format
 
                     response = await client.post(
                         f"{p.base_url}/chat/completions",

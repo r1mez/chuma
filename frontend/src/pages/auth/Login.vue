@@ -85,6 +85,7 @@ const handleLogin = async () => {
       name: res.user_name || email.value.split('@')[0],
       email: res.user_email || email.value,
       gender: null,
+      // stu_level: res.stu_level || null,
       role: role.value,
     })
 

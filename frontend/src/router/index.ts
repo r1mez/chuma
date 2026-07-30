@@ -1,19 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { setupGuards } from './guards'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // ==================== Auth ====================
     {
       path: '/login',
       component: () => import('@/pages/auth/Login.vue'),
+      meta: { public: true },
     },
     {
       path: '/register',
       component: () => import('@/pages/auth/Register.vue'),
+      meta: { public: true },
     },
+
+    // ==================== Student ====================
     {
       path: '/student',
-      component: () => import('@/layouts/DefaultLayout.vue'),
+      component: () => import('@/layouts/LayoutStudent.vue'),
+      meta: { role: 'student' },
       children: [
         { path: 'dashboard', component: () => import('@/pages/student/Dashboard.vue') },
         { path: 'knowledge', component: () => import('@/pages/student/KnowledgeExplore.vue') },
@@ -30,9 +37,12 @@ const router = createRouter({
         { path: 'messages', component: () => import('@/pages/student/MessageNotifications.vue') },
       ],
     },
+
+    // ==================== Teacher ====================
     {
       path: '/teacher',
-      component: () => import('@/layouts/TeacherLayout.vue'),
+      component: () => import('@/layouts/LayoutTeacher.vue'),
+      meta: { role: 'teacher' },
       children: [
         { path: 'dashboard', component: () => import('@/pages/teacher/Analytics.vue') },
         { path: 'chat', component: () => import('@/pages/teacher/Chat.vue') },
@@ -44,7 +54,14 @@ const router = createRouter({
       path: '/',
       redirect: '/login',
     },
+    {
+      path: '/:pathMatch(.*)*',
+      component: () => import('@/pages/misc/404.vue'),
+      meta: { public: true },
+    },
   ],
 })
+
+setupGuards(router)
 
 export default router

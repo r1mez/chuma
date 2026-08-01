@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI
 
-from app.api import analysis, chat, gnn, kg
+from app.api import analysis, chat, gnn, kg, learning_plan
 from app.agent.router import router as agent_router
 from app.config import settings
 from app.dependencies import verify_service_token
@@ -67,6 +67,9 @@ app.include_router(kg.router, prefix="/kg", tags=["Knowledge Graph"], dependenci
 
 # 学生 AI 学习分析路由
 app.include_router(analysis.router, prefix="/analysis", tags=["AI 学习分析"], dependencies=auth_dep)
+
+# 学习规划路由（按学科分别制定）
+app.include_router(learning_plan.router, prefix="/analysis", tags=["学习规划"], dependencies=auth_dep)
 
 # OCR 路由 — 无需认证
 app.include_router(ocr_router, prefix="/ocr", tags=["OCR 文档解析"])

@@ -123,7 +123,7 @@ async def agent_chat(request: Request):
 
 @router.post("/analysis/stu_analysis")
 async def stu_analysis(request: Request):
-    """学生 AI 学习分析 — 转发到 ai/ 服务"""
+    """学生 AI 学习分析 — 转发到 ai/ 服务，并将分析结果写入评价分析表"""
     body = await request.json()
     user = getattr(request.state, "user", None)
     stu_id = body.get("stu_id") or (user.get("id") if user else None)
@@ -134,6 +134,51 @@ async def stu_analysis(request: Request):
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             f"{settings.AI_SERVICE_URL}/analysis/stu_analysis",
+            headers=_ai_headers(),
+            params={"stu_id": stu_id},
+        )
+        result = resp.json()
+
+    # ── AI 分析完成后写入评价分析表 ──
+    # 仅当分析成功（analysis 非空）时才落库
+    analysis = result.get("analysis")
+    if analysis:
+        try:
+            import json as _json
+            from app.core.database import async_session
+            from app.services.evaluation_service import EvaluationAnalysisService
+
+            ea_description = _json.dumps(analysis, ensure_ascii=False)
+            async with async_session() as db:
+                await EvaluationAnalysisService().upsert_ai_analysis(
+                    stu_id=stu_id,
+                    ea_description=ea_description,
+                    db=db,
+                )
+        except Exception as e:
+            # 落库失败不应阻断分析结果返回，仅记录日志
+            import logging
+            logging.getLogger(__name__).error(
+                f"[AI Gateway] 写入评价分析表失败 stu_id={stu_id}: {e}",
+                exc_info=True,
+            )
+
+    return result
+
+
+@router.post("/analysis/learning_plan")
+async def learning_plan(request: Request):
+    """学习规划 — 转发到 ai/ 服务（按学科分别制定）"""
+    body = await request.json()
+    user = getattr(request.state, "user", None)
+    stu_id = body.get("stu_id") or (user.get("id") if user else None)
+    if not stu_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "缺少 stu_id 参数"}, status_code=400)
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        resp = await client.post(
+            f"{settings.AI_SERVICE_URL}/analysis/learning_plan",
             headers=_ai_headers(),
             params={"stu_id": stu_id},
         )

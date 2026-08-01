@@ -11,7 +11,7 @@
           <el-icon :size="64"><DocumentAdd /></el-icon>
         </div>
         <div class="text-center">
-          <h2 class="text-2xl font-bold text-gray-800 mb-2">题库 CRUD</h2>
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">题库管理</h2>
           <p class="text-sm text-gray-500 max-w-[250px]">
             点击进入上传新题界面，可用于题库更新。确保答案正确后可扩充题库、删除、查题目等。
           </p>
@@ -27,7 +27,7 @@
           <el-icon :size="64"><Connection /></el-icon>
         </div>
         <div class="text-center">
-          <h2 class="text-2xl font-bold text-gray-800 mb-2">编辑学科知识图谱</h2>
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">学科知识图谱管理</h2>
           <p class="text-sm text-gray-500 max-w-[250px]">
             点击进入学科知识图谱界面，进行节点与连线的创建、编辑、删除等操作。
           </p>
@@ -40,7 +40,10 @@
 
 <script setup lang="ts">
 import { DocumentAdd, Connection } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+
+const router = useRouter()
 
 const openQuestionBank = () => {
   ElMessage.info('正在进入题库维护模块...')
@@ -48,8 +51,8 @@ const openQuestionBank = () => {
 }
 
 const openKnowledgeGraphEdit = () => {
-  ElMessage.info('正在进入学科知识图谱编辑模块...')
-  // TODO: 跳转到具体的图谱编辑页面
+  // 跳转到学科知识图谱管理页面
+  router.push('/teacher/kg-manage')
 }
 </script>
 

@@ -19,10 +19,23 @@
       <div class="right-panel glass-card">
         <div class="right-header">
           <h3 class="panel-title">错题记录</h3>
+          <div class="search-box">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索错题..."
+              clearable
+              @keyup.enter="handleSearch"
+              @clear="handleSearch"
+            >
+              <template #append>
+                <el-button @click="handleSearch">搜索</el-button>
+              </template>
+            </el-input>
+          </div>
         </div>
         <div class="records-list scroll-area">
           <!-- 按学科分组遍历 -->
-          <div v-for="(group, cid) in groupedWrongRecords" :key="cid" class="group-section">
+          <div v-for="(group, cid) in filteredGroups" :key="cid" class="group-section">
             <div class="group-header">{{ group.course_name }}</div>
             <div
               v-for="record in group.records"
@@ -69,8 +82,36 @@ const groupedWrongRecords = ref<Record<number, WrongGroup>>({})
 const loading = ref(true)
 
 const hasNoRecords = computed(() => {
-  return Object.keys(groupedWrongRecords.value).length === 0
+  return Object.keys(filteredGroups.value).length === 0
 })
+
+// 搜索错题
+const searchQuery = ref('')
+const handleSearch = () => {
+  // 触发 filteredGroups 重新计算
+  filteredGroups.value = buildFilteredGroups()
+}
+
+// 根据搜索词过滤错题分组
+const filteredGroups = ref<Record<number, WrongGroup>>({})
+const buildFilteredGroups = (): Record<number, WrongGroup> => {
+  const keyword = searchQuery.value.trim().toLowerCase()
+  if (!keyword) return groupedWrongRecords.value
+
+  const result: Record<number, WrongGroup> = {}
+  for (const [cid, group] of Object.entries(groupedWrongRecords.value)) {
+    const matched = group.records.filter((record) => {
+      const stem = (record.question_description || '').toLowerCase()
+      const kg = (record.kg_node_name || '').toLowerCase()
+      const course = (record.course_name || group.course_name || '').toLowerCase()
+      return stem.includes(keyword) || kg.includes(keyword) || course.includes(keyword)
+    })
+    if (matched.length > 0) {
+      result[Number(cid)] = { course_name: group.course_name, records: matched }
+    }
+  }
+  return result
+}
 
 onMounted(async () => {
   try {
@@ -81,6 +122,7 @@ onMounted(async () => {
     ])
     subjects.value = courses || []
     groupedWrongRecords.value = grouped || {}
+    filteredGroups.value = grouped || {}
   } catch (error) {
     console.error('获取数据失败:', error)
     ElMessage.error('获取数据失败')
@@ -185,8 +227,9 @@ const formatDate = (dateStr: string) => {
 }
 
 .right-header {
+  position: relative;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
   flex-shrink: 0;
@@ -196,6 +239,24 @@ const formatDate = (dateStr: string) => {
   margin: 0;
   font-size: 1.2rem;
   font-weight: bold;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.search-box {
+  width: 250px;
+  flex-shrink: 0;
+}
+:deep(.search-box .el-input__wrapper) {
+  background: transparent;
+  box-shadow: 0 0 0 1px #666 inset;
+}
+:deep(.search-box .el-input-group__append) {
+  background: transparent;
+  border: 1px solid #666;
+  border-left: none;
+  color: #333;
 }
 
 .records-list {

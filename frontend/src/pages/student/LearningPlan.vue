@@ -53,14 +53,9 @@ const mockLongText = '这是一段用于测试独立滚动条是否生效的超�
 }
 
 .title-badge {
-  display: inline-block;
-  padding: 8px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.6); /* 对应线框图中的边框 */
   font-size: 1.1rem;
   font-weight: 600;
   color: #000;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
 }
 
 .plan-content-wrapper {

@@ -37,8 +37,8 @@
               <span class="date">{{ formatDate(record.created_at) }}</span>
             </div>
           </div>
-          <div v-if="records.length === 0 && !loading" class="empty-tip">
-            暂无做题记录
+          <div v-if="filteredRecords.length === 0 && !loading" class="empty-tip">
+            {{ searchQuery.trim() ? '未找到匹配的做题记录' : '暂无做题记录' }}
           </div>
           <div v-if="loading" class="empty-tip">加载中...</div>
         </div>
@@ -75,7 +75,9 @@ const goBack = () => {
 
 const searchQuery = ref('')
 const handleSearch = () => {
-  ElMessage.success(`搜索内容：${searchQuery.value}`)
+  // 触发过滤：重置到第一页并重新计算 filteredRecords
+  currentPage.value = 1
+  filteredRecords.value = buildFilteredRecords()
 }
 
 const moduleId = route.query.module as string
@@ -84,6 +86,21 @@ const courseId = moduleId ? parseInt(moduleId, 10) : 0
 const subjectName = ref('学科')
 const records = ref<ExerciseRecordListItem[]>([])
 const loading = ref(true)
+
+// 搜索过滤后的记录列表
+const filteredRecords = ref<ExerciseRecordListItem[]>([])
+
+// 根据搜索词过滤记录
+const buildFilteredRecords = (): ExerciseRecordListItem[] => {
+  const keyword = searchQuery.value.trim().toLowerCase()
+  if (!keyword) return records.value
+  return records.value.filter((record) => {
+    const stem = (record.question_description || '').toLowerCase()
+    const kg = (record.kg_node_name || '').toLowerCase()
+    const course = (record.course_name || subjectName.value || '').toLowerCase()
+    return stem.includes(keyword) || kg.includes(keyword) || course.includes(keyword)
+  })
+}
 
 onMounted(async () => {
   if (!courseId) {
@@ -101,6 +118,7 @@ onMounted(async () => {
     // 获取该学科下的做题记录
     const data = await fetchExerciseRecords(courseId)
     records.value = data || []
+    filteredRecords.value = records.value
   } catch (error) {
     console.error('获取做题记录失败:', error)
     ElMessage.error('获取做题记录失败')
@@ -130,11 +148,11 @@ const formatDate = (dateStr: string) => {
 
 const currentPage = ref(1)
 const pageSize = ref(10)
-const totalRecords = computed(() => records.value.length)
+const totalRecords = computed(() => filteredRecords.value.length)
 
 const pagedRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return records.value.slice(start, start + pageSize.value)
+  return filteredRecords.value.slice(start, start + pageSize.value)
 })
 
 // 双击跳转到练习面板（携带学科 ID 和题目 ID）

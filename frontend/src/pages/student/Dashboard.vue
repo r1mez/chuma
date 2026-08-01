@@ -251,8 +251,8 @@ const motto = ref(localStorage.getItem(MOTTO_KEY) || '')
 
 // 头像根据性别显示
 const genderAvatar = computed(() => {
-  if (userGender.value === '女') return '👩'
-  if (userGender.value === '男') return '👨'
+  if (userGender.value === '女') return '👩‍🎓'
+  if (userGender.value === '男') return '👨‍🎓'
   return '🧑'
 })
 

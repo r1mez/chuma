@@ -58,6 +58,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { LayoutGrid, LogOut } from 'lucide-vue-next'
 import FloatingLines from '@/components/FloatingLines.vue'
 import { useAuthStore } from '@/stores/auth'
+import { ElMessageBox, ElMessage } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
@@ -93,8 +94,21 @@ const toggleMenu = () => {
 }
 
 const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
+  ElMessageBox.confirm('是否确定退出当前账号？', '退出登录', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+    customClass: 'logout-confirm-dialog'
+  }).then(() => {
+    authStore.logout()
+    ElMessage({
+      type: 'success',
+      message: '已成功退出',
+    })
+    router.push('/login')
+  }).catch(() => {
+    // 用户取消退出
+  })
 }
 
 const bentoRef = ref<HTMLElement | null>(null)
@@ -188,5 +202,19 @@ const handleMouseMove = (e: MouseEvent) => {
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.5) !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+}
+
+/* 退出登录确认弹窗的毛玻璃背景特效 */
+:global(.logout-confirm-dialog) {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
+}
+:global(.logout-confirm-dialog .el-message-box__header),
+:global(.logout-confirm-dialog .el-message-box__content),
+:global(.logout-confirm-dialog .el-message-box__btns) {
+  background: transparent !important;
 }
 </style>

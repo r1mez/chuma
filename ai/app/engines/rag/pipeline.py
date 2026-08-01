@@ -134,6 +134,23 @@ class RagPipeline:
                     limit,
                     kg_graph_ids if kg_graph_ids else None,
                 )
+                # Fallback: if course_id filter yields nothing but kg_graph_ids
+                # has data, retry without course_id (course_id may be NULL in DB)
+                if not rows and course_id is not None and kg_graph_ids:
+                    rows = await conn.fetch(
+                        """
+                        SELECT id, chunk_text, metadata,
+                               embedding <=> $1::vector AS distance
+                        FROM document_chunks
+                        WHERE embedding IS NOT NULL
+                          AND kg_graph_id = ANY($3)
+                        ORDER BY distance ASC
+                        LIMIT $2
+                        """,
+                        query_vec_str,
+                        limit,
+                        kg_graph_ids,
+                    )
                 results = []
                 for row in rows:
                     meta = row["metadata"]

@@ -16,6 +16,9 @@
           <label class="radio-label">
             <input type="radio" v-model="role" value="teacher" /> Teacher
           </label>
+          <label class="radio-label">
+            <input type="radio" v-model="role" value="admin" /> Admin
+          </label>
         </div>
 
         <span class="input-span">
@@ -59,7 +62,7 @@ const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
-const role = ref<'student' | 'teacher'>('student')
+const role = ref<'student' | 'teacher' | 'admin'>('student')
 const loading = ref(false)
 
 const handleLogin = async () => {
@@ -70,6 +73,28 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
+    // Admin: mock login (no backend admin table)
+    if (role.value === 'admin') {
+      if (!email.value.startsWith('admin')) {
+        ElMessage.warning('管理员账号必须以 admin 开头')
+        loading.value = false
+        return
+      }
+      authStore.setToken('admin-mock-token')
+      authStore.setUser({
+        id: 0,
+        name: email.value.split('@')[0],
+        email: email.value,
+        gender: null,
+        stu_level: null,
+        role: 'admin',
+      })
+      localStorage.setItem('userRole', 'admin')
+      ElMessage.success('Logged in as admin')
+      await router.push('/admin/ocr')
+      return
+    }
+
     const res: any = await request.post('/auth/login', {
       email: email.value,
       password: password.value,
@@ -86,13 +111,15 @@ const handleLogin = async () => {
       email: res.user_email || email.value,
       gender: null,
       // stu_level: res.stu_level || null,
-      role: role.value,
+      role: res.user_type,
     })
+    // 同步写入 localStorage，供路由守卫读取角色
+    localStorage.setItem('userRole', res.user_type)
 
     ElMessage.success(`Logged in as ${role.value}`)
 
     // 根据角色跳转到不同的主页面
-    if (role.value === 'student') {
+    if (res.user_type === 'student') {
       await router.push('/student/dashboard')
     } else {
       await router.push('/teacher/dashboard')

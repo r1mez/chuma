@@ -5,8 +5,10 @@ import logging
 import re
 from collections.abc import AsyncIterator
 
+from app.agent.suggestions import generate_suggested_questions
 from app.agent.tool_registry import ToolRegistry
 from app.engines.llm.client import LLMClient
+from app.kg_pipeline.neighbors import get_node_neighbors
 
 logger = logging.getLogger(__name__)
 
@@ -17,33 +19,52 @@ TOOL_TIMEOUT = 10.0
 
 
 def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict | None:
-    """Parse the first node from search_kg output text.
+    """Parse nodes from search_kg output text and return the best one by type priority.
 
     Expected format: "- {name} [{type}] (id:{id}): {description}"
+    Type priority: Algorithm > DataStructure > Concept > Principle > Protocol > Term > Technology > Model > Chapter > others
+    This ensures we pick a real knowledge point (e.g. "冒泡排序 [Algorithm]") over a
+    chapter heading (e.g. "8.3.1 冒泡排序 [Chapter]").
     Returns dict with id, name, type, graph_name or None if parsing fails.
     """
-    # Match the first node line: "- 红黑树 [Concept] (id:abc123): 一种自平衡..."
-    pattern = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^)]+)\):\s+(.*)'
-    match = re.search(pattern, tool_result_text)
-    if not match:
-        # Fallback: try without id (old format) — shouldn't happen after Task 1
-        pattern_old = r'-\s+(.+?)\s+\[(\w+)\]:\s+(.*)'
-        match_old = re.search(pattern_old, tool_result_text)
-        if match_old:
-            return {
-                "id": "",  # Unknown id — kg_hit will still work with name
-                "name": match_old.group(1),
-                "type": match_old.group(2),
-                "graph_name": graph_names[0] if graph_names else "",
-            }
-        return None
-
-    return {
-        "id": match.group(3),
-        "name": match.group(1),
-        "type": match.group(2),
-        "graph_name": graph_names[0] if graph_names else "",
+    # Type priority: lower number = higher priority
+    TYPE_PRIORITY: dict[str, int] = {
+        "Algorithm": 1, "DataStructure": 1,
+        "Concept": 2, "Principle": 2,
+        "Protocol": 3, "Technology": 3,
+        "Term": 4, "Model": 4,
+        "Chapter": 10,
     }
+    DEFAULT_PRIORITY = 5
+
+    # Parse ALL node lines from the text
+    pattern = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^)]+)\):\s+(.*)'
+    candidates: list[dict] = []
+    for match in re.finditer(pattern, tool_result_text):
+        candidates.append({
+            "id": match.group(3),
+            "name": match.group(1),
+            "type": match.group(2),
+            "graph_name": graph_names[0] if graph_names else "",
+        })
+
+    if candidates:
+        # Sort by type priority, then by name length (shorter = more specific)
+        candidates.sort(key=lambda n: (TYPE_PRIORITY.get(n["type"], DEFAULT_PRIORITY), len(n["name"])))
+        return candidates[0]
+
+    # Fallback: try without id (old format)
+    pattern_old = r'-\s+(.+?)\s+\[(\w+)\]:\s+(.*)'
+    match_old = re.search(pattern_old, tool_result_text)
+    if match_old:
+        return {
+            "id": "",
+            "name": match_old.group(1),
+            "type": match_old.group(2),
+            "graph_name": graph_names[0] if graph_names else "",
+        }
+
+    return None
 
 
 class AgentOrchestrator:
@@ -59,6 +80,7 @@ class AgentOrchestrator:
     def __init__(self, user_id: int, llm_client: LLMClient):
         self.user_id = user_id
         self.llm = llm_client
+        self._kg_hit_info: dict | None = None  # Tracks last kg_hit for suggestions
 
     @staticmethod
     def _build_system_prompt() -> str:
@@ -146,6 +168,56 @@ class AgentOrchestrator:
 
         return "\n".join(lines)
 
+    async def _emit_suggestions(self) -> dict | None:
+        """Generate suggested questions based on the last kg_hit node.
+
+        Returns an SSE event dict or None if suggestions cannot be generated.
+        Silently fails on any error — suggestions are nice-to-have.
+        """
+        if not self._kg_hit_info:
+            logger.info("No kg_hit_info, skipping suggestions")
+            return None
+
+        try:
+            logger.info(f"Generating suggestions for node: {self._kg_hit_info}")
+            neighbors = get_node_neighbors(
+                node_id=self._kg_hit_info["id"],
+                graph_name=self._kg_hit_info["graph_name"],
+            )
+            if not neighbors:
+                logger.info("No neighbors found, skipping suggestions")
+                return None
+
+            # Build conversation context from last few messages
+            context_parts = []
+            for msg in self._messages[-4:]:  # Last 2 exchanges
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    context_parts.append(f"{role}: {content[:200]}")
+            conversation_context = "\n".join(context_parts)
+
+            questions = await generate_suggested_questions(
+                hit_node_name=self._kg_hit_info["name"],
+                hit_node_type=self._kg_hit_info["type"],
+                neighbors=neighbors,
+                conversation_context=conversation_context,
+                llm_client=self.llm,
+            )
+            if not questions:
+                logger.info("LLM returned no questions, skipping suggestions")
+                return None
+
+            logger.info(f"Generated {len(questions)} suggested questions")
+            from dataclasses import asdict
+            return {
+                "type": "suggested_questions",
+                "questions": [asdict(q) for q in questions],
+            }
+        except Exception as e:
+            logger.warning(f"Failed to generate suggestions (non-critical): {e}", exc_info=True)
+            return None
+
     async def run(
         self,
         message: str,
@@ -176,6 +248,7 @@ class AgentOrchestrator:
             # Only keep role + content to avoid serialization issues
             messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
         messages.append({"role": "user", "content": message})
+        self._messages = messages  # Store for suggestions context
 
         tools = ToolRegistry.get_definitions()
 
@@ -243,6 +316,7 @@ class AgentOrchestrator:
                             g_names = current_graph_names.get()
                             hit_node = _parse_first_kg_node(result, g_names)
                             if hit_node:
+                                self._kg_hit_info = hit_node  # Store for suggestions
                                 yield {
                                     "type": "kg_hit",
                                     "node_id": hit_node["id"],
@@ -262,10 +336,16 @@ class AgentOrchestrator:
                     continue
 
                 # No tool calls — this is the final answer
-                # Stream it to the user
-                async for chunk in self.llm.stream(messages, temperature=0.7):
+                # Stream it to the user (pass tools with tool_choice=none to prevent
+                # DeepSeek from emitting DSML tool-call markers in the content stream)
+                async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                     if chunk.get("content"):
                         yield {"type": "content", "content": chunk["content"]}
+
+                # Emit suggested questions if a kg_hit occurred
+                suggestions_event = await self._emit_suggestions()
+                if suggestions_event:
+                    yield suggestions_event
 
                 yield {"type": "done"}
                 return
@@ -274,9 +354,14 @@ class AgentOrchestrator:
             logger.warning(f"Agent reached max turns ({MAX_TURNS}), forcing final answer")
             messages.append({"role": "system", "content": FORCE_ANSWER_PROMPT})
 
-            async for chunk in self.llm.stream(messages, temperature=0.7):
+            async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                 if chunk.get("content"):
                     yield {"type": "content", "content": chunk["content"]}
+
+            # Emit suggested questions if a kg_hit occurred
+            suggestions_event = await self._emit_suggestions()
+            if suggestions_event:
+                yield suggestions_event
 
             yield {"type": "done"}
 

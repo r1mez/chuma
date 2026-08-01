@@ -7,7 +7,7 @@ export interface UserInfo {
   email: string | null
   gender: string | null
   stu_level: string | null
-  role: 'student' | 'teacher'
+  role: 'student' | 'teacher' | 'admin'
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -27,6 +27,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('userRole')
   }
 
   return { token, user, setToken, setUser, logout }

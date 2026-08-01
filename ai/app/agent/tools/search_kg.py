@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 @ToolRegistry.register(
     name="search_kg",
-    description="查询知识图谱中的概念节点和关系。用于查找408考研/计算机学科相关的知识点、算法、数据结构等信息。",
+    description="查询知识图谱中的概念节点和关系。用于查找计算机学科相关的知识点、算法、数据结构等信息。query每次有且仅能输入一个知识点，如果需要搜索多个知识点，需要分别请求",
     parameters={
         "type": "object",
         "properties": {

@@ -24,18 +24,33 @@
       </div>
     </div>
 
-    <!-- 消息列表 -->
-    <div class="chat-messages" ref="messagesRef">
-      <div v-if="messages.length === 0" class="empty-state">
-        <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-        <p>开始向 AI 助学提问吧！</p>
-        <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
+    <!-- 消息列表 + 子图面板 -->
+    <div class="chat-body">
+      <div class="chat-messages" ref="messagesRef">
+        <div v-if="messages.length === 0" class="empty-state">
+          <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
+          <p>开始向 AI 助学提问吧！</p>
+          <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
+        </div>
+        <ChatMessage
+          v-for="(msg, i) in messages"
+          :key="i"
+          :message="msg"
+          :loading="loading && i === messages.length - 1"
+          :suggesting="suggesting && i === messages.length - 1 && chatMode === 'agent'"
+          @select-question="handleSelectQuestion"
+        />
       </div>
-      <ChatMessage
-        v-for="(msg, i) in messages"
-        :key="i"
-        :message="msg"
-        :loading="loading && i === messages.length - 1"
+      <ChatSubgraphPanel
+        v-if="chatMode === 'agent'"
+        :visible="subgraphPanelVisible"
+        :hit-node-name="kgHitNode?.nodeName || ''"
+        :hit-node-type="kgHitNode?.nodeType || ''"
+        :subgraphs="subgraphs"
+        :loading="subgraphLoading"
+        :error="subgraphError"
+        @close="closeSubgraphPanel"
+        @retry="handleRetrySubgraph"
       />
     </div>
 
@@ -52,16 +67,32 @@ import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
+import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
+import type { SuggestedQuestion } from '@/api/ai'
 
-const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
+const {
+  messages, loading, sendMessage, clearMessages, chatMode,
+  kgHitNode, subgraphPanelVisible, closeSubgraphPanel,
+  subgraphs, subgraphLoading, subgraphError, extractSubgraphs,
+  suggesting, selectSuggestedQuestion,
+} = useChat()
 const messagesRef = ref<HTMLElement>()
 
 const navItems = [
   { label: '快速回答', value: 'quick' },
   { label: '深度思考', value: 'deep' },
-  { label: '智能管家', value: 'agent' },
-  { label: '规划模式 (开发中)', value: 'plan', disabled: true }
+  { label: '智能体模式', value: 'agent' },
 ]
+
+function handleSelectQuestion(question: SuggestedQuestion) {
+  selectSuggestedQuestion(question)
+}
+
+function handleRetrySubgraph() {
+  if (kgHitNode.value) {
+    extractSubgraphs(kgHitNode.value)
+  }
+}
 
 // 自动滚动到底部
 watch(
@@ -128,6 +159,11 @@ watch(
 }
 .clear-btn-wrapper :deep(.inner-content) {
   background: #e5e8e4;
+}
+.chat-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 .chat-messages {
   flex: 1;

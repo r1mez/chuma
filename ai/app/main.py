@@ -8,6 +8,7 @@ import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI
 
 from app.api import analysis, chat, gnn, kg
+from app.agent.router import router as agent_router
 from app.config import settings
 from app.dependencies import verify_service_token
 from app.tasks.scheduler import start_scheduler, stop_scheduler
@@ -69,6 +70,9 @@ app.include_router(analysis.router, prefix="/analysis", tags=["AI 学习分析"]
 
 # OCR 路由 — 无需认证
 app.include_router(ocr_router, prefix="/ocr", tags=["OCR 文档解析"])
+
+# Agent 智能体模式路由
+app.include_router(agent_router, prefix="/agent", tags=["Agent"], dependencies=auth_dep)
 
 
 @app.get("/health")

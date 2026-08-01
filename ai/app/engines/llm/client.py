@@ -10,6 +10,7 @@ Caller 只需要知道：传入消息，选择 profile（默认 remote）。
 
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -33,6 +34,22 @@ class ChatResponse:
     """LLM 对话响应 — 可能是纯文本或工具调用请求"""
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
+
+
+# DeepSeek models occasionally emit internal DSML markers in streaming output,
+# e.g. "<｜｜DSML｜｜tool_calls>", "<｜｜DSML｜｜invoke ...>". These are not
+# intended for end users and should be stripped.
+_DSML_RE = re.compile(r"<\|?\|?DSML\|?\|?>.*?(?=<\|?\|?DSML\|?\|?>|$)", re.DOTALL)
+_DSML_TAG_RE = re.compile(r"<\|?\|?DSML\|?\|?[^>]*>")
+
+
+def _strip_dsml(text: str) -> str:
+    """Remove DeepSeek internal DSML markers from streaming content."""
+    # Remove full DSML blocks (tag + content until next tag or end)
+    text = _DSML_RE.sub("", text)
+    # Remove any remaining standalone tags
+    text = _DSML_TAG_RE.sub("", text)
+    return text
 
 
 class LLMClient:
@@ -198,6 +215,9 @@ class LLMClient:
 
                             content = delta.get("content", "")
                             reasoning = delta.get("reasoning_content", "")
+                            # Filter out DeepSeek internal DSML markers
+                            if content:
+                                content = _strip_dsml(content)
                             if content or reasoning:
                                 yield {"content": content, "reasoning": reasoning}
                         except (json.JSONDecodeError, KeyError, IndexError):

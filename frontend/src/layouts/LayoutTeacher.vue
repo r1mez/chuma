@@ -77,7 +77,6 @@ const menuItems = [
   { name: 'AI 聊天',       path: '/teacher/chat' },
   { name: '互动专区',       path: '/teacher/interactive' },
   { name: '学科管理',       path: '/teacher/subject' },
-  { name: '知识图谱管理',   path: '/teacher/kg-manage' },
 ]
 
 const gridCols = computed(() => {

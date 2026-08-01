@@ -175,14 +175,17 @@ class AgentOrchestrator:
         Silently fails on any error — suggestions are nice-to-have.
         """
         if not self._kg_hit_info:
+            logger.info("No kg_hit_info, skipping suggestions")
             return None
 
         try:
+            logger.info(f"Generating suggestions for node: {self._kg_hit_info}")
             neighbors = get_node_neighbors(
                 node_id=self._kg_hit_info["id"],
                 graph_name=self._kg_hit_info["graph_name"],
             )
             if not neighbors:
+                logger.info("No neighbors found, skipping suggestions")
                 return None
 
             # Build conversation context from last few messages
@@ -202,15 +205,17 @@ class AgentOrchestrator:
                 llm_client=self.llm,
             )
             if not questions:
+                logger.info("LLM returned no questions, skipping suggestions")
                 return None
 
+            logger.info(f"Generated {len(questions)} suggested questions")
             from dataclasses import asdict
             return {
                 "type": "suggested_questions",
                 "questions": [asdict(q) for q in questions],
             }
         except Exception as e:
-            logger.debug(f"Failed to generate suggestions (non-critical): {e}")
+            logger.warning(f"Failed to generate suggestions (non-critical): {e}", exc_info=True)
             return None
 
     async def run(
@@ -331,8 +336,9 @@ class AgentOrchestrator:
                     continue
 
                 # No tool calls — this is the final answer
-                # Stream it to the user
-                async for chunk in self.llm.stream(messages, temperature=0.7):
+                # Stream it to the user (pass tools with tool_choice=none to prevent
+                # DeepSeek from emitting DSML tool-call markers in the content stream)
+                async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                     if chunk.get("content"):
                         yield {"type": "content", "content": chunk["content"]}
 
@@ -348,7 +354,7 @@ class AgentOrchestrator:
             logger.warning(f"Agent reached max turns ({MAX_TURNS}), forcing final answer")
             messages.append({"role": "system", "content": FORCE_ANSWER_PROMPT})
 
-            async for chunk in self.llm.stream(messages, temperature=0.7):
+            async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                 if chunk.get("content"):
                     yield {"type": "content", "content": chunk["content"]}
 

@@ -38,6 +38,19 @@
         </div>
         <!-- 正式回答 -->
         <div class="markdown-body" v-html="renderedContent"></div>
+        <!-- Suggested questions loading -->
+        <div v-if="suggesting && !message.suggestedQuestions?.length" class="suggesting-dots">
+          <span class="suggesting-text">正在推荐</span>
+          <span class="dot dot-1">·</span>
+          <span class="dot dot-2">·</span>
+          <span class="dot dot-3">·</span>
+        </div>
+        <!-- Knowledge cards -->
+        <KnowledgeCard
+          v-if="message.suggestedQuestions && message.suggestedQuestions.length > 0"
+          :questions="message.suggestedQuestions"
+          @select="$emit('selectQuestion', $event)"
+        />
       </div>
     </div>
   </div>
@@ -50,6 +63,8 @@ import { marked } from 'marked'
 import hljs from 'highlight.js'
 import katex from 'katex'
 import type { ChatMessage } from '@/composables/useChat'
+import KnowledgeCard from './KnowledgeCard.vue'
+import type { SuggestedQuestion } from '@/api/ai'
 
 // 思考中自动展开，思考完毕自动收起；用户手动点击可覆盖
 const showReasoning = ref(true)
@@ -58,6 +73,11 @@ const userToggled = ref(false)
 const props = defineProps<{
   message: ChatMessage
   loading?: boolean
+  suggesting?: boolean
+}>()
+
+defineEmits<{
+  selectQuestion: [question: SuggestedQuestion]
 }>()
 
 // 思考中 = loading 且有 reasoning 但还没有正式 content
@@ -193,15 +213,15 @@ function toolLabel(tool: string): string {
   gap: 4px;
   padding: 4px 0;
 }
-.dot {
+.typing .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #c0c4cc;
   animation: bounce 1.4s infinite ease-in-out;
 }
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
+.typing .dot:nth-child(1) { animation-delay: -0.32s; }
+.typing .dot:nth-child(2) { animation-delay: -0.16s; }
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
@@ -390,5 +410,30 @@ function toolLabel(tool: string): string {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 200px;
+}
+
+/* Suggested questions loading dots */
+.suggesting-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 12px;
+  padding: 8px 0;
+}
+.suggesting-text {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-right: 4px;
+}
+.suggesting-dots .dot {
+  font-size: 20px;
+  color: #94a3b8;
+  animation: dot-pulse 1.4s infinite ease-in-out;
+}
+.dot-2 { animation-delay: 0.2s; }
+.dot-3 { animation-delay: 0.4s; }
+@keyframes dot-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.2); }
 }
 </style>

@@ -10,8 +10,16 @@ export interface ChatChunk {
   reasoning: string
 }
 
+export interface SuggestedQuestion {
+  text: string
+  node_id: string
+  node_name: string
+  node_type: string
+  relation: 'upstream' | 'downstream' | 'both'
+}
+
 export interface AgentSSEEvent {
-  type: 'tool_used' | 'tool_result' | 'content' | 'done' | 'error' | 'kg_hit'
+  type: 'tool_used' | 'tool_result' | 'content' | 'done' | 'error' | 'kg_hit' | 'suggested_questions'
   tool?: string
   query?: string
   preview?: string
@@ -21,6 +29,8 @@ export interface AgentSSEEvent {
   node_name?: string
   node_type?: string
   graph_name?: string
+  // suggested_questions fields
+  questions?: SuggestedQuestion[]
 }
 
 /**

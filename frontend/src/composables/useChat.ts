@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { sendQuickMessage, sendDeepMessage, sendAgentMessage, type ChatHistoryItem, type ChatChunk, type AgentSSEEvent } from '@/api/ai'
+import { sendQuickMessage, sendDeepMessage, sendAgentMessage, type ChatHistoryItem, type ChatChunk, type AgentSSEEvent, type SuggestedQuestion } from '@/api/ai'
 import { useSubgraph } from '@/composables/useSubgraph'
 
 export interface ChatMessage {
@@ -7,6 +7,7 @@ export interface ChatMessage {
   content: string
   reasoning?: string
   toolCalls?: ToolCallStatus[]
+  suggestedQuestions?: SuggestedQuestion[]
 }
 
 export interface ToolCallStatus {
@@ -35,6 +36,7 @@ export function useChat() {
   const kgHitNode = ref<KgHitNode | null>(null)
   const subgraphPanelVisible = ref(false)
   const subgraphManuallyClosed = ref(false)
+  const suggesting = ref(false)
   const { subgraphs, subgraphLoading, subgraphError, extractSubgraphs, clearSubgraphs } = useSubgraph()
 
   async function sendMessage(content: string) {
@@ -45,6 +47,7 @@ export function useChat() {
       .map((m) => ({ role: m.role, content: m.content }))
 
     loading.value = true
+    suggesting.value = false
     streamingContent.value = ''
     streamingReasoning.value = ''
 
@@ -87,6 +90,13 @@ export function useChat() {
               subgraphPanelVisible.value = true
               // Trigger subgraph extraction (async, doesn't block SSE)
               extractSubgraphs(kgHitNode.value)
+              suggesting.value = true
+            }
+          } else if (event.type === 'suggested_questions') {
+            suggesting.value = false
+            const lastMsg = messages.value[messages.value.length - 1]
+            if (lastMsg && lastMsg.role === 'assistant') {
+              lastMsg.suggestedQuestions = event.questions
             }
           }
         },
@@ -94,6 +104,7 @@ export function useChat() {
           loading.value = false
           streamingContent.value = ''
           streamingReasoning.value = ''
+          suggesting.value = false
         },
         (err) => {
           messages.value[assistantIdx].content = `⚠️ 出错了：${err.message}`
@@ -139,6 +150,10 @@ export function useChat() {
     subgraphManuallyClosed.value = true
   }
 
+  function selectSuggestedQuestion(question: SuggestedQuestion) {
+    sendMessage(question.text)
+  }
+
   function clearMessages() {
     messages.value = []
     kgHitNode.value = null
@@ -147,5 +162,5 @@ export function useChat() {
     clearSubgraphs()
   }
 
-  return { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds, kgHitNode, subgraphPanelVisible, closeSubgraphPanel, subgraphs, subgraphLoading, subgraphError, extractSubgraphs }
+  return { messages, loading, sendMessage, clearMessages, chatMode, kgGraphIds, kgHitNode, subgraphPanelVisible, closeSubgraphPanel, subgraphs, subgraphLoading, subgraphError, extractSubgraphs, suggesting, selectSuggestedQuestion }
 }

@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import quick_profile
+from app.engines.llm.profiles import deepseek_profile
 from app.kg_pipeline.neighbors import NeighborInfo
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ async def generate_suggested_questions(
             llm_client.chat(
                 messages,
                 temperature=0.5,
-                profile=quick_profile(),
+                profile=deepseek_profile(),
                 response_format={"type": "json_object"},
             ),
             timeout=SUGGESTIONS_TIMEOUT,

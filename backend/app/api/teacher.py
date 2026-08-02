@@ -36,9 +36,17 @@ async def list_teacher_classes(
 
 
 @router.get("/classes/{class_id}/students")
-async def list_class_students(class_id: int):
-    """获取班级学生列表"""
-    pass
+async def list_class_students(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """获取指定班级的学生列表（含所选学科的学习进度与评级）"""
+    if current_user["user_type"] != "teacher":
+        return []
+    service = TeacherService()
+    return await service.get_class_students(current_user["id"], class_id, course_id, db)
 
 
 @router.get("/analytics/{class_id}")

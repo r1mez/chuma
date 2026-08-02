@@ -42,15 +42,18 @@
         </template>
         <div class="overflow-y-auto h-full pr-2 custom-scrollbar">
           <div 
-            v-for="i in 15" :key="i" 
+            v-for="stu in studentList" :key="stu.stu_id" 
             class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors border-b border-gray-50 last:border-0"
-            @dblclick="openStudentDetail(i)"
+            @dblclick="openStudentDetail(stu)"
           >
-            <span class="w-16 text-sm text-gray-700">学生 {{ String.fromCharCode(64 + (i % 26 || 26)) }}</span>
-            <el-progress :percentage="Math.floor(Math.random() * 40 + 60)" :stroke-width="8" class="flex-1 mx-4" />
-            <span class="w-8 text-center font-bold text-sm" :class="getRatingColor(i)">
-              {{ ['A', 'B', 'C'][i % 3] }}
+            <span class="w-24 text-sm text-gray-700 truncate">{{ stu.stu_name }}</span>
+            <el-progress :percentage="progressPercent(stu.course_process)" :stroke-width="8" class="flex-1 mx-4" />
+            <span class="w-8 text-center font-bold text-sm" :class="getRatingColor(stu.stu_level)">
+              {{ stu.stu_level || '—' }}
             </span>
+          </div>
+          <div v-if="studentList.length === 0" class="py-8 text-center text-gray-400 text-sm">
+            该班级暂无学生数据
           </div>
         </div>
       </el-card>
@@ -113,10 +116,10 @@
         <div class="w-1/4 flex flex-col gap-4">
           <el-card shadow="never" class="bg-gray-50">
             <div class="space-y-2 text-sm">
-              <div><span class="text-gray-500">班级:</span> 2026级 计科1班</div>
-              <div><span class="text-gray-500">姓名:</span> 学生 X</div>
-              <div><span class="text-gray-500">评级:</span> <span class="font-bold text-blue-600">B</span></div>
-              <div><span class="text-gray-500">进度:</span> 75%</div>
+              <div><span class="text-gray-500">班级:</span> {{ currentClassName }}</div>
+              <div><span class="text-gray-500">姓名:</span> {{ currentStudent?.stu_name || '—' }}</div>
+              <div><span class="text-gray-500">评级:</span> <span class="font-bold text-blue-600">{{ currentStudent?.stu_level || '—' }}</span></div>
+              <div><span class="text-gray-500">进度:</span> {{ progressPercent(currentStudent?.course_process ?? null) }}%</div>
             </div>
           </el-card>
           <el-card shadow="never" class="flex-1 flex flex-col">
@@ -149,16 +152,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { PieChart, DataAnalysis, Share } from '@element-plus/icons-vue'
-import { getTeacherCourses, getTeacherClasses, type TeacherCourse, type TeacherClass } from '@/api/teacher'
+import { getTeacherCourses, getTeacherClasses, getClassStudents, type TeacherCourse, type TeacherClass, type ClassStudent } from '@/api/teacher'
 
 const selectedClass = ref<number | null>(null)
 const selectedCourse = ref<number | null>(null)
 const classList = ref<TeacherClass[]>([])
 const courseList = ref<TeacherCourse[]>([])
+const studentList = ref<ClassStudent[]>([])
 const studentDialogVisible = ref(false)
 const teacherSuggestion = ref('')
+const currentStudent = ref<ClassStudent | null>(null)
+
+// 当前选中班级名称
+const currentClassName = computed(() => {
+  const cls = classList.value.find((c) => c.class_id === selectedClass.value)
+  return cls?.class_name ?? '—'
+})
 
 // 当前选中班级的学生数量（优先取数据库统计值，其次取班级表字段）
 const currentClassStudentCount = computed(() => {
@@ -166,6 +177,12 @@ const currentClassStudentCount = computed(() => {
   if (!cls) return '—'
   return cls.student_count ?? cls.classmates_num ?? '—'
 })
+
+// 学科进度：course_process 为 0~1 的小数，0.5 即 50%
+const progressPercent = (process: number | null) => {
+  if (process === null || process === undefined) return 0
+  return Math.round(process * 100)
+}
 
 const loadTeacherData = async () => {
   try {
@@ -182,18 +199,36 @@ const loadTeacherData = async () => {
   }
 }
 
+// 根据选中的班级与学科加载学生列表（含进度与评级）
+const loadStudents = async () => {
+  if (selectedClass.value === null || selectedCourse.value === null) {
+    studentList.value = []
+    return
+  }
+  try {
+    studentList.value = await getClassStudents(selectedClass.value, selectedCourse.value)
+  } catch (e) {
+    console.error('加载班级学生列表失败:', e)
+    studentList.value = []
+  }
+}
+
+// 班级或学科切换时重新加载学生列表
+watch([selectedClass, selectedCourse], loadStudents)
+
 onMounted(loadTeacherData)
 
-const openStudentDetail = (id: number) => {
+const openStudentDetail = (stu: ClassStudent) => {
+  currentStudent.value = stu
   studentDialogVisible.value = true
   teacherSuggestion.value = ''
 }
 
-const getRatingColor = (i: number) => {
-  const rating = ['A', 'B', 'C'][i % 3]
-  if (rating === 'A') return 'text-green-600'
-  if (rating === 'B') return 'text-blue-600'
-  return 'text-orange-500'
+const getRatingColor = (level: string | null) => {
+  if (level === 'A') return 'text-green-600'
+  if (level === 'B') return 'text-blue-600'
+  if (level === 'C') return 'text-orange-500'
+  return 'text-gray-500'
 }
 </script>
 

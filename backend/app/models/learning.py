@@ -9,12 +9,17 @@ class StudentCourseMastery(Base):
     stu_id = Column(BigInteger, ForeignKey("students.stu_id"), primary_key=True)
     course_id = Column(BigInteger, ForeignKey("courses.course_id"), primary_key=True)
     course_degree = Column(Float, nullable=False)
+    course_process = Column(Float, nullable=True)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
         CheckConstraint(
             "course_degree >= 0.0 AND course_degree <= 5.0",
             name="ck_course_degree_range",
+        ),
+        CheckConstraint(
+            "course_process >= 0.0 AND course_process <= 1.0",
+            name="ck_course_process_range",
         ),
     )
 

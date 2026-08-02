@@ -14,11 +14,10 @@
         <h3 class="section-title">问题区:</h3>
         <div class="scroll-area">
           <div class="post-content">
-            <p><strong>学生A:</strong> 问题、对话、描述等占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位。。。。</p>
-            <!-- 增加一些占位文本以测试滚动 -->
-            <p v-for="i in 5" :key="'q-'+i" class="mock-text">
-              这是一段用于测试问题区独立滚动条是否生效的长文本占位 {{ i }}。
+            <p v-if="message">
+              <strong>{{ message.stu_name || '学生' }}:</strong> {{ message.msg_texts }}
             </p>
+            <p v-else class="mock-text">加载中...</p>
           </div>
           <div class="spacer"></div>
         </div>
@@ -32,19 +31,35 @@
         <h3 class="section-title">答疑区:</h3>
         <div class="scroll-area">
           <div class="reply-list">
-            <div class="reply-item">
-              <p><strong>老师:</strong> 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位。。。。</p>
+            <div v-if="answers.length === 0" class="reply-item">
+              <p class="mock-text">暂无回答，快来抢答吧~</p>
             </div>
-            <div class="reply-item">
-              <p><strong>学生B:</strong> 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位 占位。。。。</p>
-            </div>
-            
-            <!-- 增加一些占位回复以测试滚动 -->
-            <div v-for="i in 10" :key="'a-'+i" class="reply-item mock-item">
-              <p><strong>学生{{ i }}:</strong> 这是一段用于测试答疑区独立滚动条是否生效的长文本占位回答 {{ i }}。</p>
+            <div v-for="answer in answers" :key="answer.answer_id" class="reply-item">
+              <p>
+                <strong>{{ answer.author_name || '匿名' }}:</strong> {{ answer.answer_text }}
+              </p>
             </div>
           </div>
           <div class="spacer"></div>
+        </div>
+      </div>
+
+      <!-- 回答输入框 -->
+      <div class="answer-input-container">
+        <el-input
+          v-model="answerText"
+          type="textarea"
+          :rows="2"
+          placeholder="请输入你的回答..."
+          maxlength="500"
+          show-word-limit
+          resize="none"
+          class="answer-input"
+        />
+        <div class="answer-actions">
+          <el-button type="primary" class="answer-btn" :loading="submitting" @click="handleSubmitAnswer">
+            提交回答
+          </el-button>
         </div>
       </div>
 
@@ -53,15 +68,68 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
+import {
+  fetchMessageDetail,
+  fetchAnswers,
+  publishAnswer,
+  type InteractionMessage,
+  type InteractionAnswer
+} from '@/api/interaction'
 
+const route = useRoute()
 const router = useRouter()
+
+const message = ref<InteractionMessage | null>(null)
+const answers = ref<InteractionAnswer[]>([])
+const answerText = ref('')
+const submitting = ref(false)
+
+const msgId = Number(route.params.id)
+
+const loadDetail = async () => {
+  try {
+    message.value = await fetchMessageDetail(msgId)
+  } catch (e) {
+    ElMessage.error('加载互动消息失败')
+  }
+  try {
+    answers.value = await fetchAnswers(msgId)
+  } catch (e) {
+    ElMessage.error('加载回答失败')
+  }
+}
+
+const handleSubmitAnswer = async () => {
+  const text = answerText.value.trim()
+  if (!text) {
+    ElMessage.warning('请输入回答内容')
+    return
+  }
+  submitting.value = true
+  try {
+    await publishAnswer(msgId, text)
+    ElMessage.success('回答成功')
+    answerText.value = ''
+    await loadDetail()
+  } catch (e) {
+    ElMessage.error('提交回答失败')
+  } finally {
+    submitting.value = false
+  }
+}
 
 const goBack = () => {
   router.push('/student/interactive')
 }
+
+onMounted(() => {
+  loadDetail()
+})
 </script>
 
 <style scoped>
@@ -175,7 +243,36 @@ const goBack = () => {
   border-bottom: none;
 }
 
-.mock-text, .mock-item p {
+.mock-text {
   color: #555;
+}
+
+/* 回答输入框区域 */
+.answer-input-container {
+  margin-top: 16px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.answer-input {
+  width: 100%;
+}
+
+.answer-input :deep(.el-textarea__inner) {
+  background: rgba(255, 255, 255, 0.5);
+  color: #000;
+  border-radius: 8px;
+}
+
+.answer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.answer-btn {
+  background: #2980b9;
+  border-color: #2980b9;
 }
 </style>

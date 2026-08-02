@@ -458,7 +458,7 @@ const mockSubjectData: Record<string, { progress: number; latestMsg: string; rec
 }
 
 /** 截断题目描述，保留前 maxLen 个字符 */
-const truncateDesc = (desc: string, maxLen: number = 30): string => {
+const truncateDesc = (desc: string, maxLen: number = 28): string => {
   if (!desc) return '暂无记录'
   return desc.length > maxLen ? desc.slice(0, maxLen) + '...' : desc
 }

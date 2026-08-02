@@ -1,7 +1,5 @@
 import request from '@/utils/request'
 
-// teacher API 调用封装
-
 export interface TeacherCourse {
   course_id: number
   course_name: string
@@ -21,19 +19,31 @@ export interface ClassStudent {
   course_process: number | null
 }
 
-// 获取当前登录教师所授学科列表
+export interface DifficultKnowledgePoint {
+  name: string
+  count: number
+  ratio: number
+}
+
 export function getTeacherCourses() {
   return request.get<TeacherCourse[]>('/teacher/courses')
 }
 
-// 获取当前登录教师所管班级列表（含学生数量）
 export function getTeacherClasses() {
   return request.get<TeacherClass[]>('/teacher/classes')
 }
 
-// 获取指定班级的学生列表（含所选学科的学习进度与评级）
 export function getClassStudents(classId: number, courseId: number) {
-  return request.get<ClassStudent[]>('/teacher/classes/' + classId + '/students', {
+  return request.get<ClassStudent[]>(`/teacher/classes/${classId}/students`, {
     params: { course_id: courseId },
   })
+}
+
+export function getDifficultKnowledge(classId: number, courseId: number) {
+  return request.get<DifficultKnowledgePoint[]>(
+    `/teacher/classes/${classId}/difficult-knowledge`,
+    {
+      params: { course_id: courseId },
+    },
+  )
 }

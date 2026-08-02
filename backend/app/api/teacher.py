@@ -1,4 +1,4 @@
-"""教师管理路由"""
+"""Teacher management routes."""
 from typing import List
 
 from fastapi import APIRouter, Depends
@@ -16,9 +16,10 @@ async def list_teacher_courses(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    """获取当前登录教师所授学科列表"""
+    """Get the subjects taught by the current teacher."""
     if current_user["user_type"] != "teacher":
         return []
+
     service = TeacherService()
     return await service.get_teacher_courses(current_user["id"], db)
 
@@ -28,9 +29,10 @@ async def list_teacher_classes(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    """获取当前登录教师所管班级列表（含学生数量）"""
+    """Get the classes managed by the current teacher."""
     if current_user["user_type"] != "teacher":
         return []
+
     service = TeacherService()
     return await service.get_teacher_classes(current_user["id"], db)
 
@@ -42,38 +44,56 @@ async def list_class_students(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    """获取指定班级的学生列表（含所选学科的学习进度与评级）"""
+    """Get the students in a class for the selected subject."""
     if current_user["user_type"] != "teacher":
         return []
+
     service = TeacherService()
     return await service.get_class_students(current_user["id"], class_id, course_id, db)
 
 
+@router.get("/classes/{class_id}/difficult-knowledge")
+async def list_difficult_knowledge(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Get difficult knowledge point word-cloud data for a class and subject."""
+    if current_user["user_type"] != "teacher":
+        return []
+
+    service = TeacherService()
+    return await service.get_difficult_knowledge_points(
+        current_user["id"], class_id, course_id, db
+    )
+
+
 @router.get("/analytics/{class_id}")
 async def get_class_analytics(class_id: int):
-    """获取班级学情分析报告"""
+    """Get the class analytics report."""
     pass
 
 
 @router.get("/alerts")
 async def get_learning_alerts():
-    """获取学习风险预警列表"""
+    """Get learning risk alerts."""
     pass
 
 
 @router.get("/students/{student_id}/profile")
 async def get_student_profile(student_id: int):
-    """获取学生能力画像"""
+    """Get a student profile."""
     pass
 
 
 @router.post("/assignments")
 async def create_assignment():
-    """发布作业/考试"""
+    """Publish an assignment or exam."""
     pass
 
 
 @router.get("/assignments/{assignment_id}/results")
 async def get_assignment_results(assignment_id: int):
-    """获取作业批改结果"""
+    """Get assignment grading results."""
     pass

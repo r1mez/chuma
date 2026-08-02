@@ -5,15 +5,27 @@
       <!-- 班级信息面板 (左侧) -->
       <el-card class="w-1/4 flex flex-col" shadow="never">
         <template #header>
-          <div class="font-bold text-gray-800">
-            <el-select v-model="selectedClass" placeholder="选择班级" class="w-full">
-              <el-option label="2026级 计科1班" value="class1" />
-              <el-option label="2026级 软件2班" value="class2" />
+          <div class="flex gap-3">
+            <el-select v-model="selectedClass" placeholder="选择班级" class="flex-1">
+              <el-option
+                v-for="cls in classList"
+                :key="cls.class_id"
+                :label="cls.class_name"
+                :value="cls.class_id"
+              />
+            </el-select>
+            <el-select v-model="selectedCourse" placeholder="选择学科" class="flex-1">
+              <el-option
+                v-for="course in courseList"
+                :key="course.course_id"
+                :label="course.course_name"
+                :value="course.course_id"
+              />
             </el-select>
           </div>
         </template>
         <div class="space-y-4 text-sm text-gray-700">
-          <div class="flex justify-between"><span>学生数量:</span> <span class="font-bold">45</span></div>
+          <div class="flex justify-between"><span>学生数量:</span> <span class="font-bold">{{ currentClassStudentCount }}</span></div>
           <div class="flex justify-between"><span>整体班级AI评级:</span> <span class="font-bold text-green-600">A</span></div>
           <div class="flex justify-between"><span>最近作业/考试平均分:</span> <span class="font-bold">82.5</span></div>
           <div class="flex justify-between"><span>知识点平均掌握度:</span> <span class="font-bold text-blue-600">78%</span></div>
@@ -137,12 +149,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { PieChart, DataAnalysis, Share } from '@element-plus/icons-vue'
+import { getTeacherCourses, getTeacherClasses, type TeacherCourse, type TeacherClass } from '@/api/teacher'
 
-const selectedClass = ref('class1')
+const selectedClass = ref<number | null>(null)
+const selectedCourse = ref<number | null>(null)
+const classList = ref<TeacherClass[]>([])
+const courseList = ref<TeacherCourse[]>([])
 const studentDialogVisible = ref(false)
 const teacherSuggestion = ref('')
+
+// 当前选中班级的学生数量（优先取数据库统计值，其次取班级表字段）
+const currentClassStudentCount = computed(() => {
+  const cls = classList.value.find((c) => c.class_id === selectedClass.value)
+  if (!cls) return '—'
+  return cls.student_count ?? cls.classmates_num ?? '—'
+})
+
+const loadTeacherData = async () => {
+  try {
+    const [courses, classes] = await Promise.all([
+      getTeacherCourses(),
+      getTeacherClasses(),
+    ])
+    courseList.value = courses
+    classList.value = classes
+    if (classes.length > 0) selectedClass.value = classes[0].class_id
+    if (courses.length > 0) selectedCourse.value = courses[0].course_id
+  } catch (e) {
+    console.error('加载教师学科/班级数据失败:', e)
+  }
+}
+
+onMounted(loadTeacherData)
 
 const openStudentDetail = (id: number) => {
   studentDialogVisible.value = true

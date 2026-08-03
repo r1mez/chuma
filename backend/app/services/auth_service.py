@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.user import Student, Teacher
+from app.models.classes import Class
 from app.schemas.auth import (
     StudentRegisterRequest, TeacherRegisterRequest,
     StudentResponse, TeacherResponse, TokenResponse,
@@ -77,6 +78,14 @@ class AuthService:
         if student is None:
             return None
         return StudentResponse.model_validate(student)
+
+    async def get_class_name(self, class_id: int, db: AsyncSession) -> Optional[str]:
+        """根据班级 ID 查询班级名称"""
+        result = await db.execute(select(Class).where(Class.class_id == class_id))
+        cls = result.scalar_one_or_none()
+        if cls is None:
+            return None
+        return cls.class_name
 
     async def get_teacher_by_id(self, tea_id: int, db: AsyncSession) -> Optional[TeacherResponse]:
         result = await db.execute(select(Teacher).where(Teacher.tea_id == tea_id))

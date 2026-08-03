@@ -185,6 +185,35 @@ async def learning_plan(request: Request):
         return resp.json()
 
 
+@router.post("/analysis/question")
+async def question_analysis(request: Request):
+    """AI 题目分析与解惑 — 转发到 ai/ 服务（双维度：题目答案深度剖析 + 知识图谱局部网络视角 + 个性化作答剖析）"""
+    body = await request.json()
+    question_id = body.get("question_id")
+    if not question_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "缺少 question_id 参数"}, status_code=400)
+
+    # 学生提交的答案（do_stu_answer）与学生 ID（stu_id），用于个性化作答剖析
+    do_stu_answer = body.get("do_stu_answer")
+    stu_id = body.get("stu_id")
+
+    # 仅当 stu_id 有值时传入，避免 None 被序列化为空字符串导致 AI 服务 422
+    params = {"question_id": question_id}
+    if do_stu_answer:
+        params["do_stu_answer"] = do_stu_answer
+    if stu_id:
+        params["stu_id"] = stu_id
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{settings.AI_SERVICE_URL}/analysis/question",
+            headers=_ai_headers(),
+            params=params,
+        )
+        return resp.json()
+
+
 @router.post("/recommend")
 async def recommend_questions():
     """GNN 题目推荐 — 转发到 ai/ 服务"""

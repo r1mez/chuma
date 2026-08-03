@@ -5,6 +5,11 @@ export interface TeacherCourse {
   course_name: string
 }
 
+export interface CourseChapter {
+  id: string
+  name: string
+}
+
 export interface TeacherClass {
   class_id: number
   class_name: string
@@ -27,6 +32,10 @@ export interface DifficultKnowledgePoint {
 
 export function getTeacherCourses() {
   return request.get<TeacherCourse[]>('/teacher/courses')
+}
+
+export function getCourseChapters(courseId: number) {
+  return request.get<CourseChapter[]>(`/teacher/courses/${courseId}/chapters`)
 }
 
 export function getTeacherClasses() {

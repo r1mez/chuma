@@ -46,30 +46,94 @@
     <el-card class="h-1/2 flex flex-col" shadow="never">
       <template #header>
         <span class="font-bold text-gray-800 text-sm">作业 / 考试推送</span>
+        <span class="text-xs text-gray-500 ml-4">当前教师：{{ authStore.user?.name || '未知' }}</span>
       </template>
       <div class="h-full flex gap-6">
         <!-- 操作区 -->
-        <div class="w-48 flex flex-col gap-4">
+        <div class="w-56 flex flex-col gap-4">
           <div class="text-sm text-gray-600 mb-2">配置生成条件：</div>
-          <el-select v-model="targetClass" placeholder="选择推送班级" size="small">
-            <el-option label="2026级 计科1班" value="class1" />
-            <el-option label="2026级 软件2班" value="class2" />
+          <el-select
+            v-model="selectedCourseId"
+            placeholder="选择教学学科"
+            size="small"
+            filterable
+            @change="handleCourseChange"
+          >
+            <el-option
+              v-for="course in courseList"
+              :key="course.course_id"
+              :label="course.course_name"
+              :value="course.course_id"
+            />
           </el-select>
-          <el-select v-model="targetChapter" placeholder="选择章节范围" size="small">
-            <el-option label="数据结构 - 图" value="ch1" />
-            <el-option label="计算机组成 - CPU" value="ch2" />
+          <el-select
+            v-model="selectedClassId"
+            placeholder="选择推送班级"
+            size="small"
+            filterable
+            :disabled="!selectedCourseId"
+            @change="handleClassChange"
+          >
+            <el-option
+              v-for="cls in classList"
+              :key="cls.class_id"
+              :label="`${cls.class_name}（${cls.student_count}人）`"
+              :value="cls.class_id"
+            />
           </el-select>
-          <el-button type="primary" @click="generateContent" :loading="isGenerating" class="mt-auto">
-            点击生成
+          <el-select
+            v-model="selectedChapter"
+            placeholder="选择章节范围"
+            size="small"
+            filterable
+            clearable
+            :disabled="!selectedCourseId"
+          >
+            <el-option
+              v-for="chapter in chapterList"
+              :key="chapter.id"
+              :label="chapter.name"
+              :value="chapter.name"
+            />
+          </el-select>
+          <el-button
+            type="primary"
+            class="mt-auto"
+            disabled
+            title="功能开发中"
+          >
+            点击生成（功能开发中）
           </el-button>
         </div>
         <!-- 内容展示区 -->
         <div class="flex-1 border border-gray-200 rounded-lg bg-gray-50/50 p-4 overflow-y-auto custom-scrollbar relative">
-          <div v-if="!generatedContent" class="h-full flex items-center justify-center text-gray-400 text-sm">
-            Agent 生成作业 / 考试内容展示区
+          <div v-if="!selectedCourseId" class="h-full flex items-center justify-center text-gray-400 text-sm">
+            请先选择教学学科
           </div>
-          <div v-else class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {{ generatedContent }}
+          <div v-else-if="!selectedClassId" class="h-full flex items-center justify-center text-gray-400 text-sm">
+            请选择推送班级
+          </div>
+          <div v-else class="text-sm text-gray-700">
+            <div class="font-bold text-gray-800 mb-3">推送对象（{{ selectedClass?.class_name }}）</div>
+            <div v-if="studentList.length === 0" class="text-gray-400 text-sm">
+              该班级暂无学生
+            </div>
+            <div v-else class="flex flex-wrap gap-2">
+              <el-tag
+                v-for="stu in studentList"
+                :key="stu.stu_id"
+                size="small"
+                effect="plain"
+              >
+                {{ stu.stu_name }}
+              </el-tag>
+            </div>
+            <div class="mt-4 text-gray-400 text-xs">
+              已选学科：{{ selectedCourse?.course_name }}　已选章节：{{ selectedChapter || '未选择' }}
+            </div>
+            <div class="mt-6 text-gray-400 text-sm">
+              Agent 生成作业 / 考试内容展示区（功能开发中）
+            </div>
           </div>
         </div>
       </div>
@@ -137,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchMessages,
@@ -146,7 +210,18 @@ import {
   type InteractionMessage,
   type InteractionAnswer
 } from '@/api/interaction'
+import {
+  getTeacherCourses,
+  getTeacherClasses,
+  getClassStudents,
+  getCourseChapters,
+  type TeacherCourse,
+  type TeacherClass,
+  type ClassStudent,
+  type CourseChapter
+} from '@/api/teacher'
 import { useAuthStore } from '@/stores/auth'
+import { fetchCurrentUser } from '@/api/auth'
 
 const authStore = useAuthStore()
 
@@ -234,22 +309,84 @@ const handleReply = async () => {
   }
 }
 
-// 生成作业逻辑
-const targetClass = ref('')
-const targetChapter = ref('')
-const isGenerating = ref(false)
-const generatedContent = ref('')
+// 作业/考试推送 —— 严格联动：教师 → 学科 → 班级 → 学生 → 章节
+const courseList = ref<TeacherCourse[]>([])
+const classList = ref<TeacherClass[]>([])
+const chapterList = ref<CourseChapter[]>([])
+const studentList = ref<ClassStudent[]>([])
 
-const generateContent = () => {
-  isGenerating.value = true
-  setTimeout(() => {
-    generatedContent.value = `基于 Agent 生成的作业/考试内容：\n\n一、 选择题\n1. 在一棵度为3的树中，度为3的节点有2个，度为2的节点有1个，度为1的节点有2个，则叶子节点有()个。\n   A. 4\n   B. 5\n   C. 6\n   D. 7\n\n二、 简答题\n1. 请简述图的深度优先搜索(DFS)和广度优先搜索(BFS)的区别与应用场景。\n\n...\n[更多内容由AI自动生成]`
-    isGenerating.value = false
-  }, 1500)
+const selectedCourseId = ref<number | null>(null)
+const selectedClassId = ref<number | null>(null)
+const selectedChapter = ref<string>('')
+
+const selectedCourse = computed(() =>
+  courseList.value.find((c) => c.course_id === selectedCourseId.value) || null
+)
+const selectedClass = computed(() =>
+  classList.value.find((c) => c.class_id === selectedClassId.value) || null
+)
+
+/** 选择学科后：加载该学科知识图谱章节，并清空班级/章节/学生选择 */
+const handleCourseChange = async () => {
+  selectedClassId.value = null
+  selectedChapter.value = ''
+  studentList.value = []
+  chapterList.value = []
+  if (!selectedCourseId.value) return
+  try {
+    chapterList.value = await getCourseChapters(selectedCourseId.value)
+  } catch (e) {
+    ElMessage.error('加载学科章节失败')
+  }
+}
+
+/** 选择班级后：加载该班级学生（需同时具备学科与班级） */
+const handleClassChange = async () => {
+  studentList.value = []
+  if (!selectedCourseId.value || !selectedClassId.value) return
+  try {
+    studentList.value = await getClassStudents(selectedClassId.value, selectedCourseId.value)
+  } catch (e) {
+    ElMessage.error('加载班级学生失败')
+  }
+}
+
+const loadTeacherData = async () => {
+  try {
+    const [courses, classes] = await Promise.all([
+      getTeacherCourses(),
+      getTeacherClasses(),
+    ])
+    courseList.value = courses
+    classList.value = classes
+  } catch (e) {
+    ElMessage.error('加载教师学科/班级失败')
+  }
+}
+
+/** 恢复当前登录教师信息（页面刷新后 authStore.user 为 null，需从后端重新拉取） */
+const loadUserInfo = async () => {
+  try {
+    const me = await fetchCurrentUser()
+    authStore.setUser({
+      id: me.id,
+      name: me.name,
+      email: me.email,
+      gender: me.gender,
+      stu_level: me.stu_level,
+      class_id: me.class_id,
+      class_name: me.class_name,
+      role: me.user_type as 'student' | 'teacher',
+    })
+  } catch {
+    // 接口失败时降级使用 Store 中已有的信息
+  }
 }
 
 onMounted(() => {
   loadMessages()
+  loadTeacherData()
+  loadUserInfo()
 })
 </script>
 

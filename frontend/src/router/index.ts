@@ -48,21 +48,6 @@ const router = createRouter({
         { path: 'chat', component: () => import('@/pages/teacher/Chat.vue') },
         { path: 'interactive', component: () => import('@/pages/teacher/InteractiveZone.vue') },
         { path: 'subject', component: () => import('@/pages/teacher/SubjectManage.vue') },
-        { path: 'kg-manage', component: () => import('@/pages/teacher/KnowledgeGraphManage.vue') },
-      ],
-    },
-
-    // ==================== Admin ====================
-    {
-      path: '/admin',
-      component: () => import('@/layouts/LayoutAdmin.vue'),
-      meta: { role: 'admin' },
-      children: [
-        { path: 'ocr', component: () => import('@/pages/student/OcrParse.vue') },
-        { path: 'kg-pipeline', component: () => import('@/pages/student/KgPipeline.vue') },
-        { path: 'students', component: () => import('@/pages/teacher/StudentManage.vue') },
-        { path: 'alerts', component: () => import('@/pages/teacher/Alert.vue') },
-        { path: ':pathMatch(.*)*', redirect: '/admin/ocr' },
       ],
     },
     {

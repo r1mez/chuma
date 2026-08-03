@@ -24,6 +24,20 @@ async def list_teacher_courses(
     return await service.get_teacher_courses(current_user["id"], db)
 
 
+@router.get("/courses/{course_id}/chapters")
+async def list_course_chapters(
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Get the knowledge-graph chapters of a subject taught by the current teacher."""
+    if current_user["user_type"] != "teacher":
+        return []
+
+    service = TeacherService()
+    return await service.get_course_chapters(current_user["id"], course_id, db)
+
+
 @router.get("/classes")
 async def list_teacher_classes(
     current_user: dict = Depends(get_current_user),

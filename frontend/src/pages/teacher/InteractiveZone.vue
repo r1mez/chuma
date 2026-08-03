@@ -3,28 +3,32 @@
     <!-- 上半部分：互动列表 -->
     <el-card class="h-1/2 flex flex-col" shadow="never">
       <template #header>
-        <span class="font-bold text-gray-800 text-sm">互动专区 (答疑列表)</span>
+        <span class="font-bold text-gray-800 text-sm">互动答疑</span>
         <span class="text-xs text-gray-500 ml-4">双击跳转详细对话面板</span>
       </template>
       <div class="h-full flex flex-col">
         <el-table
-          :data="pagedData"
+          :data="messageList"
           style="width: 100%; background: transparent;"
           class="flex-1"
           @row-dblclick="handleRowDblclick"
         >
-          <el-table-column prop="studentName" label="学生" width="120" />
-          <el-table-column prop="content" label="问题、对话、描述等" min-width="300">
+          <el-table-column prop="stu_name" label="学生" width="120" />
+          <el-table-column prop="msg_texts" label="问题、对话、描述等" min-width="300">
             <template #default="scope">
-              <span class="truncate">{{ scope.row.content }}</span>
+              <span class="truncate">{{ scope.row.msg_texts }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="replyCount" label="回答数" width="120">
+          <el-table-column prop="answer_num" label="回答数" width="120">
             <template #default="scope">
-              回答数 × {{ scope.row.replyCount }}
+              回答数 × {{ scope.row.answer_num }}
             </template>
           </el-table-column>
-          <el-table-column prop="time" label="时间" width="150" align="right" />
+          <el-table-column prop="created_at" label="时间" width="170" align="right">
+            <template #default="scope">
+              {{ formatTime(scope.row.created_at) }}
+            </template>
+          </el-table-column>
         </el-table>
         <div class="mt-4 flex justify-center">
           <el-pagination
@@ -32,6 +36,7 @@
             :page-size="pageSize"
             :total="total"
             layout="total, prev, pager, next"
+            @current-change="loadMessages"
           />
         </div>
       </div>
@@ -70,51 +75,61 @@
       </div>
     </el-card>
 
-    <!-- 详情对话框 -->
+    <!-- 详情对话框（微信聊天风格） -->
     <el-dialog
       v-model="detailDialogVisible"
       title="详细对话面板"
       width="70%"
       destroy-on-close
+      @opened="scrollToBottom"
     >
-      <div class="flex flex-col h-[500px] border border-gray-200 rounded-lg">
-        <!-- 问题区 -->
-        <div class="p-4 border-b border-gray-200 bg-gray-50 min-h-[100px]">
+      <div class="flex flex-col h-[500px] border border-gray-200 rounded-lg overflow-hidden">
+        <!-- 问题区（置顶） -->
+        <div class="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
           <div class="font-bold text-sm text-gray-800 mb-2">问题区:</div>
           <div class="text-sm text-gray-700">
-            <span class="font-bold mr-2">{{ currentDetail?.studentName }}:</span>
-            {{ currentDetail?.content }}
+            <span class="font-bold mr-2">{{ currentDetail?.stu_name || '学生' }}:</span>
+            {{ currentDetail?.msg_texts }}
           </div>
         </div>
-        <!-- 答疑区 -->
-        <div class="flex-1 p-4 overflow-y-auto custom-scrollbar bg-white">
+        <!-- 答疑区（微信聊天风格，按时间正序：旧在上、新在下） -->
+        <div ref="chatScrollRef" class="flex-1 p-4 overflow-y-auto custom-scrollbar bg-white">
           <div class="font-bold text-sm text-gray-800 mb-4">答疑区:</div>
-          
-          <div class="mb-4">
-            <div class="text-xs text-gray-500 mb-1">老师:</div>
-            <div class="bg-blue-50 p-3 rounded-lg text-sm text-gray-700 inline-block max-w-[80%]">
-              这个问题考察的是关于二叉树的遍历，你需要注意...
-            </div>
+
+          <div v-if="answers.length === 0" class="text-center text-gray-400 text-sm py-8">
+            暂无回答，快来抢答吧~
           </div>
 
-          <div class="mb-4 text-right">
-            <div class="text-xs text-gray-500 mb-1">{{ currentDetail?.studentName }}:</div>
-            <div class="bg-gray-100 p-3 rounded-lg text-sm text-gray-700 inline-block max-w-[80%] text-left">
-              老师，那如果改成后序遍历呢？
+          <div
+            v-for="answer in answers"
+            :key="answer.answer_id"
+            class="mb-4"
+            :class="isMyAnswer(answer) ? 'text-right' : ''"
+          >
+            <div class="text-xs text-gray-500 mb-1">
+              {{ answer.author_name || '匿名' }}
+              <span v-if="answer.author_type === 'teacher'" class="ml-1 text-blue-500">(老师)</span>
+              <span v-else class="ml-1 text-green-600">(学生)</span>
+              <span class="ml-2">{{ formatTime(answer.created_at) }}</span>
             </div>
-          </div>
-          
-          <div class="mb-4">
-            <div class="text-xs text-gray-500 mb-1">老师:</div>
-            <div class="bg-blue-50 p-3 rounded-lg text-sm text-gray-700 inline-block max-w-[80%]">
-              后序遍历的话，顺序就变成了左右根。
+            <div
+              class="p-3 rounded-lg text-sm text-gray-700 inline-block max-w-[80%] text-left break-words"
+              :class="isMyAnswer(answer) ? 'bg-blue-50' : 'bg-gray-100'"
+            >
+              {{ answer.answer_text }}
             </div>
           </div>
         </div>
         <!-- 底部回复输入 -->
-        <div class="p-4 border-t border-gray-200 bg-gray-50 flex gap-4">
-          <el-input v-model="replyText" placeholder="输入回复内容..." class="flex-1" />
-          <el-button type="primary">回复</el-button>
+        <div class="p-4 border-t border-gray-200 bg-gray-50 flex gap-4 shrink-0">
+          <el-input
+            v-model="replyText"
+            placeholder="输入回复内容..."
+            class="flex-1"
+            maxlength="500"
+            @keyup.enter="handleReply"
+          />
+          <el-button type="primary" :loading="replying" @click="handleReply">回复</el-button>
         </div>
       </div>
     </el-dialog>
@@ -122,37 +137,101 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  fetchMessages,
+  fetchAnswers,
+  publishAnswer,
+  type InteractionMessage,
+  type InteractionAnswer
+} from '@/api/interaction'
+import { useAuthStore } from '@/stores/auth'
 
-// 模拟答疑数据
-const mockData = Array.from({ length: 25 }).map((_, index) => {
-  const isA = index % 2 === 0
-  return {
-    id: index + 1,
-    studentName: isA ? '学生A' : '学生B',
-    content: `关于计算机组成原理中流水线CPU的冒险问题，当遇到数据冒险时，除了停顿还有什么处理方法？占位 占位...`,
-    replyCount: index % 4,
-    time: '2026-07-27 10:00'
-  }
-})
+const authStore = useAuthStore()
 
+const messageList = ref<InteractionMessage[]>([])
 const currentPage = ref(1)
 const pageSize = ref(5)
-const total = ref(mockData.length)
+const total = ref(0)
 
-const pagedData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return mockData.slice(start, start + pageSize.value)
-})
+/** 将时间格式化为 YYYY-MM-DD HH:mm:ss */
+const formatTime = (value: string | null | undefined): string => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (isNaN(date.getTime())) return value
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  )
+}
+
+const loadMessages = async () => {
+  try {
+    const data = await fetchMessages(currentPage.value, pageSize.value)
+    messageList.value = data.items
+    total.value = data.total
+  } catch (e) {
+    ElMessage.error('加载互动消息失败')
+  }
+}
 
 const detailDialogVisible = ref(false)
-const currentDetail = ref<any>(null)
+const currentDetail = ref<InteractionMessage | null>(null)
+const answers = ref<InteractionAnswer[]>([])
 const replyText = ref('')
+const replying = ref(false)
+const chatScrollRef = ref<HTMLElement | null>(null)
 
-const handleRowDblclick = (row: any) => {
+/** 判断某条回答是否为当前登录老师本人发布 */
+const isMyAnswer = (answer: InteractionAnswer): boolean => {
+  return answer.author_type === 'teacher' && answer.tea_id === authStore.user?.id
+}
+
+const handleRowDblclick = async (row: InteractionMessage) => {
   currentDetail.value = row
-  detailDialogVisible.value = true
+  answers.value = []
   replyText.value = ''
+  detailDialogVisible.value = true
+  try {
+    answers.value = await fetchAnswers(row.msg_id)
+    await nextTick()
+    scrollToBottom()
+  } catch (e) {
+    ElMessage.error('加载回答失败')
+  }
+}
+
+/** 滚动到底部（最新消息在下方） */
+const scrollToBottom = () => {
+  if (chatScrollRef.value) {
+    chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
+  }
+}
+
+const handleReply = async () => {
+  const text = replyText.value.trim()
+  if (!text) {
+    ElMessage.warning('请输入回复内容')
+    return
+  }
+  if (!currentDetail.value) return
+  replying.value = true
+  try {
+    await publishAnswer(currentDetail.value.msg_id, text)
+    ElMessage.success('回复成功')
+    replyText.value = ''
+    answers.value = await fetchAnswers(currentDetail.value.msg_id)
+    // 同步刷新列表中的回答数
+    await loadMessages()
+    await nextTick()
+    scrollToBottom()
+  } catch (e) {
+    ElMessage.error('回复失败')
+  } finally {
+    replying.value = false
+  }
 }
 
 // 生成作业逻辑
@@ -168,6 +247,10 @@ const generateContent = () => {
     isGenerating.value = false
   }, 1500)
 }
+
+onMounted(() => {
+  loadMessages()
+})
 </script>
 
 <style scoped>

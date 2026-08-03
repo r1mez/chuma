@@ -194,3 +194,26 @@ class TestExtractorFiltering:
         kg = await extractor.extract_from_chunk(chunk)
         assert {n.id for n in kg.nodes} == {"栈"}
         assert kg.edges == []  # 边引用被剪掉的 printf，已删除
+
+    @pytest.mark.asyncio
+    async def test_chinese_type_name_kept(self):
+        """LLM 返回中文类型名时应映射到规范枚举，核心类型不被剪掉"""
+        from app.engines.llm.client import ChatResponse
+        from app.kg_pipeline.extraction import KGExtractor
+        from app.kg_pipeline.models import DocumentChunk
+
+        class FakeLLM:
+            async def chat(self, messages, temperature=0.1, profile=None):
+                return ChatResponse(content=(
+                    '{"nodes":['
+                    '{"id":"快速排序","name":"快速排序","type":"算法","description":"分治排序"},'
+                    '{"id":"printf","name":"printf","type":"函数","description":"输出"}'
+                    '],"edges":[]}'
+                ))
+
+        extractor = KGExtractor(llm_client=FakeLLM())
+        chunk = DocumentChunk(text="快速排序是一种分治排序算法，printf 用于输出。")
+        kg = await extractor.extract_from_chunk(chunk)
+        assert {n.id for n in kg.nodes} == {"快速排序"}
+        node = kg.nodes[0]
+        assert node.type == EntityType.ALGORITHM  # 中文"算法"→ Algorithm，未被剪掉

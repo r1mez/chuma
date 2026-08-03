@@ -5,6 +5,8 @@ Your task is to extract the CORE knowledge points and their relationships from t
 ## Entity Types
 Choose ONLY from these 6 types:
 
+The "type" field in your JSON output MUST be the English enum value (e.g. Concept, Algorithm). Do NOT output Chinese translations (e.g. 算法、概念).
+
 - Concept: 基础概念（如 虚拟内存、中断、死锁、多态）
 - Algorithm: 算法（如 快速排序、银行家算法、LRU 替换）
 - DataStructure: 数据结构（如 哈希表、B+ 树、栈）

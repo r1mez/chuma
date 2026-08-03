@@ -31,6 +31,32 @@ class TestEntityType:
         """未知类型降级为 TERM（噪声桶），供剪枝丢弃"""
         assert EntityType("SomethingUnknown") is EntityType.TERM
 
+    def test_chinese_type_aliases(self):
+        """中文类型名应映射到规范枚举值"""
+        assert EntityType("概念") is EntityType.CONCEPT
+        assert EntityType("算法") is EntityType.ALGORITHM
+        assert EntityType("数据结构") is EntityType.DATA_STRUCTURE
+        assert EntityType("协议") is EntityType.PROTOCOL
+        assert EntityType("原理") is EntityType.PRINCIPLE
+        assert EntityType("原理/定理") is EntityType.PRINCIPLE
+        assert EntityType("技术") is EntityType.TECHNOLOGY
+        assert EntityType("模型") is EntityType.TECHNOLOGY  # Model 并入 Technology
+
+    def test_english_variants_normalized(self):
+        """英文大小写/空白/下划线变体应归一化到规范值"""
+        assert EntityType("algorithm") is EntityType.ALGORITHM
+        assert EntityType("Data Structure") is EntityType.DATA_STRUCTURE
+        assert EntityType("data_structure") is EntityType.DATA_STRUCTURE
+        assert EntityType("PROTOCOL") is EntityType.PROTOCOL
+
+    def test_chinese_low_value_types_map_to_term(self):
+        """中文低价值类型名应降级为 TERM（由剪枝丢弃）"""
+        assert EntityType("函数") is EntityType.TERM
+        assert EntityType("操作") is EntityType.TERM
+        assert EntityType("方法") is EntityType.TERM
+        assert EntityType("工具") is EntityType.TERM
+        assert EntityType("术语") is EntityType.TERM
+
 
 class TestDocumentChunk:
     def test_heading_path_default_empty(self):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from enum import Enum
 from typing import Optional
@@ -27,10 +28,57 @@ class EntityType(str, Enum):
 
     @classmethod
     def _missing_(cls, value):
-        """未知类型降级为 TERM（噪声桶），不中断流水线，由剪枝阶段丢弃"""
+        """未知类型降级：先查别名映射（中文/英文变体），命中则返回对应类型；
+        否则降级为 TERM（噪声桶），不中断流水线，由剪枝阶段丢弃"""
         logger = __import__("logging").getLogger(__name__)
+        if isinstance(value, str):
+            hit = _TYPE_LOOKUP.get(_normalize_type_key(value))
+            if hit is not None:
+                return hit
         logger.warning(f"[KG] Unknown entity type '{value}', falling back to 'Term'")
         return cls.TERM
+
+
+# ---------------------------------------------------------------------------
+# 类型别名映射 — 处理 LLM 返回中文名 / 英文大小写·空白·下划线变体
+# ---------------------------------------------------------------------------
+
+
+def _normalize_type_key(value: str) -> str:
+    """归一化类型字符串：去首尾空白、转小写、去空白/下划线/连字符
+
+    'DataStructure' / 'Data Structure' / 'data_structure' → 'datastructure'
+    """
+    return re.sub(r"[\s\-_]", "", value.strip().lower())
+
+
+# 中文别名 → 规范类型（低价值类型映射到 TERM，由剪枝白名单丢弃）
+_TYPE_ALIASES: dict[str, EntityType] = {
+    "概念": EntityType.CONCEPT,
+    "算法": EntityType.ALGORITHM,
+    "数据结构": EntityType.DATA_STRUCTURE,
+    "协议": EntityType.PROTOCOL,
+    "原理": EntityType.PRINCIPLE,
+    "原理/定理": EntityType.PRINCIPLE,
+    "技术": EntityType.TECHNOLOGY,
+    "技术/系统/模型": EntityType.TECHNOLOGY,
+    "模型": EntityType.TECHNOLOGY,          # Model 并入 Technology
+    # 低价值类型 → TERM 噪声桶
+    "术语": EntityType.TERM,
+    "函数": EntityType.TERM,
+    "操作": EntityType.TERM,
+    "方法": EntityType.TERM,
+    "流程": EntityType.TERM,
+    "工具": EntityType.TERM,
+    "标准": EntityType.TERM,
+}
+
+# 规范英文值（大小写/空白/下划线变体）+ 中文别名 → EntityType 的查找表
+_TYPE_LOOKUP: dict[str, EntityType] = {
+    _normalize_type_key(member.value): member for member in EntityType
+}
+for _alias, _member in _TYPE_ALIASES.items():
+    _TYPE_LOOKUP.setdefault(_normalize_type_key(_alias), _member)
 
 
 class KGNode(BaseModel):

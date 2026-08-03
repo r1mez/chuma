@@ -35,3 +35,5 @@ Thumbs.db
 skills-lock.json.ai/
 .worktrees/
 .trae/rules/项目结构规范.md
+docs/superpowers/plans
+docs/superpowers/specs

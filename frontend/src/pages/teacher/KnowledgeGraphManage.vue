@@ -193,7 +193,7 @@ async function loadGraph(graphName: string) {
     } else {
       graphData.value = data
       // 初始化类型筛选：全部勾选
-      visibleTypes.value = new Set(Object.keys(data.stats.node_types))
+      visibleTypes.value = new Set()
     }
   } catch {
     graphData.value = null
@@ -226,9 +226,21 @@ function onEdgeSelected(edge: EdgeEditData | null) {
 }
 
 function onCanvasClick(coords: { x: number; y: number }) {
-  // In add-edge mode, canvas clicks are part of the edge-creation flow;
-  // don't clear selection or reset the panel.
+  // In add-edge mode, show the edge creation panel directly
   if (toolMode.value === 'add-edge') {
+    selectedEdge.value = {
+      id: '',
+      source: '',
+      target: '',
+      sourceName: '',
+      targetName: '',
+      relationship_name: '相关',
+      description: '',
+    }
+    selectedNode.value = null
+    isNewItem.value = true
+    panelMode.value = 'edge'
+    toolMode.value = 'select'
     return
   }
 
@@ -249,38 +261,10 @@ function onCanvasClick(coords: { x: number; y: number }) {
   panelMode.value = 'overview'
 }
 
-function onEdgeCreated(edgeData: any) {
-  // 用户通过 create-edge 行为创建了边，显示边编辑面板
-  const source = edgeData?.source ?? ''
-  const target = edgeData?.target ?? ''
-  // Use the actual G6 edge ID so onCancelEdit can correctly remove the edge
-  const edgeId = edgeData?.id || `${source}-${target}`
-
-  // Resolve source/target node names from the graph
-  let sourceName = source
-  let targetName = target
-  const graph = canvasRef.value?.getGraph()
-  if (graph) {
-    const srcNode = graph.getNodeData(source)
-    const tgtNode = graph.getNodeData(target)
-    const srcD = srcNode?.data as Record<string, unknown> | undefined
-    const tgtD = tgtNode?.data as Record<string, unknown> | undefined
-    sourceName = (srcD?.label as string) || source
-    targetName = (tgtD?.label as string) || target
-  }
-
-  selectedEdge.value = {
-    id: edgeId,
-    source,
-    target,
-    sourceName,
-    targetName,
-    relationship_name: '相关',
-    description: '',
-  }
-  selectedNode.value = null
-  isNewItem.value = true
-  panelMode.value = 'edge'
+function onEdgeCreated(_edgeData: any) {
+  // ECharts 版本：不再通过拖拽连线创建边
+  // 改为在面板中手动选择源/目标节点
+  // 此事件保留但不再由 ECharts 触发
 }
 
 function onCancelEdit() {
@@ -303,16 +287,12 @@ function onCancelEdit() {
 
 function onNodeSaved(data: NodeEditData) {
   if (isNewItem.value && selectedNode.value?.id.startsWith('temp_')) {
-    // 新增节点：用真实 ID 替换临时 ID
-    const tempId = selectedNode.value.id
-    canvasRef.value?.updateNodeData(tempId, data)
-    // G6 不支持直接改 ID，需要删除旧节点再添加
-    // 简化处理：重新加载图谱数据
+    // 新增节点：后端已分配真实 ID，需要重新加载图谱数据
     if (currentGraph.value) {
       loadGraph(currentGraph.value.graph_name)
     }
   } else if (selectedNode.value) {
-    // 编辑节点：乐观更新已在 API 调用前完成，这里更新画布
+    // 编辑节点：更新画布上的数据
     canvasRef.value?.updateNodeData(selectedNode.value.id, data)
   }
   selectedNode.value = data

@@ -1,10 +1,10 @@
 <template>
-  <div ref="containerRef" class="kg-editor-canvas" />
+  <div ref="chartRef" class="kg-editor-canvas" />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, shallowRef, nextTick } from 'vue'
-import { Graph } from '@antv/g6'
+import * as echarts from 'echarts'
 import type { GraphData as AppGraphData, GraphNode, GraphEdge } from '@/api/knowledge'
 import { TYPE_COLORS } from '@/constants/knowledgeColors'
 
@@ -21,8 +21,8 @@ const emit = defineEmits<{
   'edge-created': [edge: any]
 }>()
 
-const containerRef = ref<HTMLElement>()
-const graphInstance = shallowRef<Graph>()
+const chartRef = ref<HTMLElement>()
+const chartInstance = shallowRef<echarts.ECharts>()
 
 // ---- Exported data types for panel consumption ----
 
@@ -43,412 +43,295 @@ export interface EdgeEditData {
   description: string
 }
 
+// ---- Internal state ----
+
+// Keep a local mutable copy of graph data for editing (add/remove/update)
+let localNodes: GraphNode[] = []
+let localEdges: GraphEdge[] = []
+
 // ---- Data format conversion ----
 
-function toG6Nodes(nodes: GraphNode[]) {
-  return nodes.map(n => ({
-    id: n.id,
-    data: {
-      label: n.name,
-      type: n.type,
-      description: n.description,
-    },
-    style: {
-      fill: TYPE_COLORS[n.type] || '#94A3B8',
-      stroke: '#fff',
-      lineWidth: 2,
-      size: Math.max(30, Math.min(60, 20 + (n.degree || 0) * 2)),
-    },
-  }))
-}
+function buildEChartsOption() {
+  if (!props.data) return {}
 
-function toG6Edges(edges: GraphEdge[]) {
-  return edges.map(e => ({
-    id: `${e.source}-${e.target}`,
+  // Apply type filter
+  const filteredNodes = localNodes.filter(
+    n => props.visibleTypes.size === 0 || props.visibleTypes.has(n.type)
+  )
+  const activeNodeIds = new Set(filteredNodes.map(n => n.id))
+  const filteredEdges = localEdges.filter(
+    e => activeNodeIds.has(e.source) && activeNodeIds.has(e.target)
+  )
+
+  const nodes = filteredNodes.map(n => ({
+    id: n.id,
+    name: n.name,
+    value: n.type,
+    symbolSize: Math.max(20, Math.min(50, 10 + (n.degree || 0) * 3)),
+    itemStyle: {
+      color: TYPE_COLORS[n.type] || '#94A3B8',
+      borderColor: '#fff',
+      borderWidth: 1,
+    },
+    label: {
+      show: true,
+      position: 'bottom',
+      color: '#333',
+      fontSize: 11,
+    },
+    rawNode: n,
+  }))
+
+  const links = filteredEdges.map(e => ({
     source: e.source,
     target: e.target,
-    data: {
-      label: e.relationship_name,
-      description: e.description || '',
+    value: e.relationship_name,
+    lineStyle: {
+      width: 1.5,
+      color: '#94A3B8',
+      opacity: 0.5,
+      curveness: 0.1,
     },
   }))
+
+  return {
+    backgroundColor: '#fafafa',
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: any) => {
+        if (params.dataType === 'node') {
+          const n = params.data
+          return `<b>${n.name}</b><br/><span style="color:#999">${n.value}</span>`
+        }
+        if (params.dataType === 'edge') {
+          return params.data.value || ''
+        }
+        return ''
+      },
+    },
+    series: [{
+      type: 'graph',
+      layout: 'force',
+      nodes,
+      links,
+      roam: true,
+      draggable: true,
+      label: {
+        show: true,
+        position: 'bottom',
+        fontSize: 11,
+        color: '#333',
+      },
+      force: {
+        repulsion: 350,
+        edgeLength: [80, 200],
+        gravity: 0.1,
+        friction: 0.6,
+      },
+      emphasis: {
+        focus: 'adjacency',
+        lineStyle: { width: 3, opacity: 0.8 },
+      },
+      blur: {
+        opacity: 0.15,
+        lineStyle: { opacity: 0.1 },
+      },
+      lineStyle: { color: '#94A3B8' },
+      edgeLabel: {
+        show: false,
+        fontSize: 9,
+        color: '#6b7280',
+        formatter: (params: any) => params.data?.value || '',
+      },
+    }],
+  }
 }
 
-// ---- G6 initialization ----
+// ---- Initialization ----
 
-function initGraph() {
-  if (!containerRef.value) return
-
-  const graph = new Graph({
-    container: containerRef.value,
-    autoFit: 'view',
-    node: {
-      style: {
-        size: (d: any) => d.style?.size || 40,
-        fill: (d: any) => d.style?.fill || '#94A3B8',
-        stroke: (d: any) => d.style?.stroke || '#fff',
-        lineWidth: (d: any) => d.style?.lineWidth || 2,
-        labelText: (d: any) => d.data?.label || '',
-        labelFontSize: 12,
-        labelPlacement: 'bottom',
-        labelOffsetY: 4,
-      },
-      state: {
-        selected: {
-          stroke: '#E6A23C',
-          lineWidth: 4,
-          shadowColor: 'rgba(230, 162, 60, 0.5)',
-          shadowBlur: 10,
-        },
-        hover: {
-          stroke: '#E6A23C',
-          lineWidth: 3,
-        },
-        dim: {
-          opacity: 0.25,
-        },
-      },
-    },
-    edge: {
-      type: 'line',
-      style: {
-        stroke: '#94A3B8',
-        lineWidth: 1.5,
-        endArrow: true,
-        labelText: (d: any) => d.data?.label || '',
-        labelFontSize: 10,
-        labelFill: '#6b7280',
-        labelBackground: true,
-        labelBackgroundFill: '#fff',
-        labelBackgroundOpacity: 0.8,
-        labelBackgroundRadius: 2,
-        labelPadding: [2, 4],
-      },
-      state: {
-        selected: {
-          stroke: '#E6A23C',
-          lineWidth: 3,
-        },
-        hover: {
-          stroke: '#E6A23C',
-          lineWidth: 2,
-        },
-        dim: {
-          opacity: 0.15,
-        },
-      },
-    },
-    layout: {
-      type: 'force',
-      preventOverlap: true,
-      nodeStrength: -300,
-      edgeStrength: 0.1,
-      linkDistance: 180,
-    },
-    behaviors: [
-      'drag-canvas',
-      'zoom-canvas',
-      'drag-element',
-      {
-        type: 'click-select',
-        multiple: false,
-        trigger: 'click',
-      },
-    ],
-    plugins: [],
-    animation: false,
-  })
+function initChart() {
+  if (!chartRef.value) return
+  chartInstance.value = echarts.init(chartRef.value)
 
   // Node click
-  graph.on('node:click', (evt: any) => {
-    const nodeId = evt.target?.id
-    if (!nodeId) return
-    const nodeData = graph.getNodeData(nodeId)
-    if (nodeData) {
-      dimUnselected(nodeId, 'node')
-      const d = nodeData.data as Record<string, unknown> | undefined
-      emit('node-selected', {
-        id: nodeId,
-        name: (d?.label as string) || '',
-        type: (d?.type as string) || '',
-        description: (d?.description as string) || '',
-      })
+  chartInstance.value.on('click', (params: any) => {
+    if (params.dataType === 'node') {
+      const rawNode = params.data?.rawNode as GraphNode | undefined
+      if (rawNode) {
+        emit('node-selected', {
+          id: rawNode.id,
+          name: rawNode.name,
+          type: rawNode.type,
+          description: rawNode.description,
+        })
+      }
+    } else if (params.dataType === 'edge') {
+      const edgeData = params.data
+      if (edgeData) {
+        const sourceName = localNodes.find(n => n.id === edgeData.source)?.name || edgeData.source
+        const targetName = localNodes.find(n => n.id === edgeData.target)?.name || edgeData.target
+        // Find the actual edge to get description
+        const rawEdge = localEdges.find(
+          e => e.source === edgeData.source && e.target === edgeData.target
+        )
+        emit('edge-selected', {
+          id: `${edgeData.source}-${edgeData.target}`,
+          source: edgeData.source,
+          target: edgeData.target,
+          sourceName,
+          targetName,
+          relationship_name: edgeData.value || rawEdge?.relationship_name || '',
+          description: rawEdge?.description || '',
+        })
+      }
     }
   })
 
-  // Edge click
-  graph.on('edge:click', (evt: any) => {
-    const edgeId = evt.target?.id
-    if (!edgeId) return
-    const edgeData = graph.getEdgeData(edgeId)
-    if (edgeData) {
-      dimUnselected(edgeId, 'edge')
-      const d = edgeData.data as Record<string, unknown> | undefined
-      const srcNode = graph.getNodeData(edgeData.source)
-      const tgtNode = graph.getNodeData(edgeData.target)
-      const srcD = srcNode?.data as Record<string, unknown> | undefined
-      const tgtD = tgtNode?.data as Record<string, unknown> | undefined
-      emit('edge-selected', {
-        id: edgeId,
-        source: edgeData.source,
-        target: edgeData.target,
-        sourceName: (srcD?.label as string) || edgeData.source,
-        targetName: (tgtD?.label as string) || edgeData.target,
-        relationship_name: (d?.label as string) || '',
-        description: (d?.description as string) || '',
-      })
+  // Canvas blank click
+  chartInstance.value.getZr().on('click', (params: any) => {
+    // Only fire if the click was on the canvas background (not on a node/edge)
+    if (params.target === undefined) {
+      const point = chartInstance.value?.convertFromPixel('series', [params.offsetX, params.offsetY])
+      emit('canvas-click', point ? { x: point[0], y: point[1] } : { x: 0, y: 0 })
+      // Deselect — emit null for both
+      emit('node-selected', null)
+      emit('edge-selected', null)
     }
   })
 
-  // Canvas blank click — emit canvas coordinates so parent can addTempNode(x, y, id)
-  graph.on('canvas:click', (evt: any) => {
-    resetHighlight()
-    const clientX = evt.client?.x
-    const clientY = evt.client?.y
-    if (clientX != null && clientY != null) {
-      const [cx, cy] = graph.getCanvasByClient([clientX, clientY])
-      emit('canvas-click', { x: cx, y: cy })
-    } else {
-      emit('canvas-click', { x: 0, y: 0 })
-    }
-  })
-
-  graphInstance.value = graph
+  updateChart()
 }
 
-// ---- Highlight / dim ----
-
-function dimUnselected(selectedId: string, _type: 'node' | 'edge') {
-  const graph = graphInstance.value
-  if (!graph) return
-
-  const allNodes = graph.getNodeData()
-  const allEdges = graph.getEdgeData()
-
-  allNodes.forEach((n) => {
-    if (n.id !== selectedId) {
-      graph.setElementState(n.id, ['dim'])
-    } else {
-      graph.setElementState(n.id, ['selected'])
-    }
-  })
-
-  allEdges.forEach((e) => {
-    if (!e.id) return
-    if (e.id !== selectedId) {
-      graph.setElementState(e.id, ['dim'])
-    } else {
-      graph.setElementState(e.id, ['selected'])
-    }
-  })
-}
-
-function resetHighlight() {
-  const graph = graphInstance.value
-  if (!graph) return
-  const allNodes = graph.getNodeData()
-  const allEdges = graph.getEdgeData()
-  allNodes.forEach((n) => graph.setElementState(n.id, []))
-  allEdges.forEach((e) => { if (e.id) graph.setElementState(e.id, []) })
-}
-
-// ---- Data rendering ----
-
-function renderData(data: AppGraphData) {
-  const graph = graphInstance.value
-  if (!graph) return
-
-  const nodes = toG6Nodes(data.nodes)
-  const edges = toG6Edges(data.edges)
-
-  graph.setData({ nodes, edges })
-  graph.render()
-}
-
-// ---- Type filter ----
-
-function applyTypeFilter(visibleTypes: Set<string>) {
-  const graph = graphInstance.value
-  if (!graph) return
-
-  const allNodes = graph.getNodeData()
-  const hiddenNodeIds = new Set<string>()
-
-  allNodes.forEach((n) => {
-    const d = n.data as Record<string, unknown> | undefined
-    const nodeType = (d?.type as string) || ''
-    if (visibleTypes.has(nodeType)) {
-      graph.showElement(n.id)
-    } else {
-      graph.hideElement(n.id)
-      hiddenNodeIds.add(n.id)
-    }
-  })
-
-  // Edge visibility depends on both endpoint nodes
-  const allEdges = graph.getEdgeData()
-  allEdges.forEach((e) => {
-    if (!e.id) return
-    if (hiddenNodeIds.has(e.source) || hiddenNodeIds.has(e.target)) {
-      graph.hideElement(e.id)
-    } else {
-      graph.showElement(e.id)
-    }
-  })
+function updateChart() {
+  if (!chartInstance.value) return
+  const option = buildEChartsOption()
+  chartInstance.value.setOption(option, true) // true = notMerge, full replace
 }
 
 // ---- Watchers ----
 
 watch(() => props.data, (newData) => {
   if (newData) {
-    nextTick(() => renderData(newData))
+    // Deep clone so we can mutate locally for editing
+    localNodes = newData.nodes.map(n => ({ ...n }))
+    localEdges = newData.edges.map(e => ({ ...e }))
+    nextTick(() => updateChart())
   }
 }, { deep: false })
 
-watch(() => props.visibleTypes, (newTypes) => {
-  applyTypeFilter(newTypes)
+watch(() => props.visibleTypes, () => {
+  updateChart()
 }, { deep: true })
-
-watch(() => props.toolMode, (newMode) => {
-  const graph = graphInstance.value
-  if (!graph) return
-
-  // Toggle create-edge behavior via setBehaviors functional update
-  if (newMode === 'add-edge') {
-    graph.setBehaviors((prev) => {
-      // Guard against duplicate create-edge behavior
-      const alreadyHas = prev.some((b: any) =>
-        b.type === 'create-edge' || b === 'create-edge' || b.key === 'create-edge',
-      )
-      if (alreadyHas) return prev
-      return [...prev, {
-        type: 'create-edge',
-        key: 'create-edge',
-        trigger: 'click',
-        onFinish: (edge: any) => { emit('edge-created', edge) },
-      }]
-    })
-  } else {
-    graph.setBehaviors((prev) =>
-      prev.filter((b: any) => b.type !== 'create-edge' && b !== 'create-edge' && b.key !== 'create-edge'),
-    )
-  }
-
-  // Update cursor style
-  if (containerRef.value) {
-    containerRef.value.style.cursor = newMode === 'select' ? 'default' : 'crosshair'
-  }
-})
 
 // ---- Lifecycle ----
 
 onMounted(() => {
-  initGraph()
+  initChart()
   if (props.data) {
-    nextTick(() => renderData(props.data!))
+    localNodes = props.data.nodes.map(n => ({ ...n }))
+    localEdges = props.data.edges.map(e => ({ ...e }))
+    nextTick(() => updateChart())
   }
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
-  if (graphInstance.value) {
-    graphInstance.value.destroy()
+  if (chartInstance.value) {
+    chartInstance.value.dispose()
   }
   window.removeEventListener('resize', handleResize)
 })
 
 function handleResize() {
-  graphInstance.value?.resize()
+  chartInstance.value?.resize()
 }
 
 // ---- Expose methods for parent component ----
 
 defineExpose({
-  /** Zoom in by 1.2x */
-  zoomIn: () => graphInstance.value?.zoomBy(1.2),
-  /** Zoom out by 0.8x */
-  zoomOut: () => graphInstance.value?.zoomBy(0.8),
+  /** Zoom in */
+  zoomIn: () => {
+    if (!chartInstance.value) return
+    const opt = chartInstance.value.getOption() as any
+    if (opt?.series?.[0]) {
+      const z = opt.series[0].zoom || 1
+      chartInstance.value.setOption({ series: [{ zoom: z * 1.2 }] })
+    }
+  },
+  /** Zoom out */
+  zoomOut: () => {
+    if (!chartInstance.value) return
+    const opt = chartInstance.value.getOption() as any
+    if (opt?.series?.[0]) {
+      const z = opt.series[0].zoom || 1
+      chartInstance.value.setOption({ series: [{ zoom: z / 1.2 }] })
+    }
+  },
   /** Fit the graph to the viewport */
-  fitView: () => graphInstance.value?.fitView(),
+  fitView: () => {
+    if (!chartInstance.value) return
+    chartInstance.value.setOption({ series: [{ zoom: 1, center: null }] })
+  },
 
-  /** Add a temporary node at the given canvas position */
-  addTempNode: (x: number, y: number, tempId: string): void => {
-    const graph = graphInstance.value
-    if (!graph) return
-    graph.addNodeData([{
+  /** Add a temporary node — ECharts will place it via force layout */
+  addTempNode: (_x: number, _y: number, tempId: string): void => {
+    const newNode: GraphNode = {
       id: tempId,
-      data: { label: '新节点', type: 'Concept', description: '' },
-      style: { fill: '#94A3B8', stroke: '#E6A23C', lineWidth: 3, size: 40 },
-    }])
-    // Move the node to the click position
-    graph.translateElementTo(tempId, [x, y])
+      name: '新节点',
+      type: 'Concept',
+      description: '',
+      degree: 0,
+    }
+    localNodes.push(newNode)
+    updateChart()
   },
 
   /** Remove a node or edge by ID */
   removeItemById: (id: string, type: 'node' | 'edge'): void => {
-    const graph = graphInstance.value
-    if (!graph) return
     if (type === 'node') {
-      graph.removeNodeData([id])
+      localNodes = localNodes.filter(n => n.id !== id)
+      // Also remove connected edges
+      localEdges = localEdges.filter(e => e.source !== id && e.target !== id)
     } else {
-      graph.removeEdgeData([id])
+      // id is "source-target" format
+      localEdges = localEdges.filter(e => `${e.source}-${e.target}` !== id)
     }
+    updateChart()
   },
 
-  /** Update node data (optimistic update) */
+  /** Update node data locally */
   updateNodeData: (nodeId: string, fields: Partial<NodeEditData>): void => {
-    const graph = graphInstance.value
-    if (!graph) return
-    const existing = graph.getNodeData(nodeId)
-    if (!existing) return
-    const prevData = existing.data as Record<string, unknown> | undefined
-    const prevStyle = existing.style as Record<string, unknown> | undefined
-    const newType = fields.type ?? (prevData?.type as string | undefined)
-    graph.updateNodeData([{
-      id: nodeId,
-      data: {
-        ...prevData,
-        label: fields.name ?? prevData?.label,
-        type: newType,
-        description: fields.description ?? prevData?.description,
-      },
-      style: {
-        ...prevStyle,
-        fill: (newType ? TYPE_COLORS[newType] : prevStyle?.fill) as string,
-      },
-    }])
+    const node = localNodes.find(n => n.id === nodeId)
+    if (!node) return
+    if (fields.name !== undefined) node.name = fields.name
+    if (fields.type !== undefined) node.type = fields.type
+    if (fields.description !== undefined) node.description = fields.description
+    updateChart()
   },
 
-  /** Update edge data (optimistic update) */
+  /** Update edge data locally */
   updateEdgeData: (edgeId: string, fields: { relationship_name?: string; description?: string }): void => {
-    const graph = graphInstance.value
-    if (!graph) return
-    const existing = graph.getEdgeData(edgeId)
-    if (!existing) return
-    const prevData = existing.data as Record<string, unknown> | undefined
-    graph.updateEdgeData([{
-      id: edgeId,
-      data: {
-        ...prevData,
-        label: fields.relationship_name ?? prevData?.label,
-        description: fields.description ?? prevData?.description,
-      },
-    }])
+    const edge = localEdges.find(e => `${e.source}-${e.target}` === edgeId)
+    if (!edge) return
+    if (fields.relationship_name !== undefined) edge.relationship_name = fields.relationship_name
+    if (fields.description !== undefined) edge.description = fields.description
+    updateChart()
   },
 
   /** Get all edge IDs connected to a given node */
   getRelatedEdges: (nodeId: string): string[] => {
-    const graph = graphInstance.value
-    if (!graph) return []
-    const edges = graph.getRelatedEdgesData(nodeId)
-    return edges.map((e) => e.id).filter((id): id is string => id !== undefined)
+    return localEdges
+      .filter(e => e.source === nodeId || e.target === nodeId)
+      .map(e => `${e.source}-${e.target}`)
   },
 
-  /** Get the raw G6 graph instance (advanced usage) */
-  getGraph: () => graphInstance.value,
+  /** Get the raw ECharts instance */
+  getGraph: () => chartInstance.value,
 
-  /** Reset all highlight/dim states */
-  resetHighlight,
+  /** Reset highlight — ECharts handles this via emphasis.blur */
+  resetHighlight: () => {
+    // ECharts emphasis/blur is automatic; nothing to reset manually
+  },
 })
 </script>
 

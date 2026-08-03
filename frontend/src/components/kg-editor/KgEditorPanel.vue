@@ -86,11 +86,21 @@
       </div>
       <div class="panel-body">
         <el-form label-position="top" size="small">
-          <el-form-item v-if="edgeForm.sourceName" label="起始节点">
-            <el-input :model-value="edgeForm.sourceName" disabled />
+          <el-form-item label="起始节点">
+            <el-input
+              v-if="isNew"
+              v-model="edgeForm.source"
+              placeholder="输入节点 ID"
+            />
+            <el-input v-else :model-value="edgeForm.sourceName" disabled />
           </el-form-item>
-          <el-form-item v-if="edgeForm.targetName" label="目标节点">
-            <el-input :model-value="edgeForm.targetName" disabled />
+          <el-form-item label="目标节点">
+            <el-input
+              v-if="isNew"
+              v-model="edgeForm.target"
+              placeholder="输入节点 ID"
+            />
+            <el-input v-else :model-value="edgeForm.targetName" disabled />
           </el-form-item>
           <el-form-item label="关系名称">
             <el-input v-model="edgeForm.relationship_name" placeholder="输入关系名称" />

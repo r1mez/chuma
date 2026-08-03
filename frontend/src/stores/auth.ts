@@ -7,6 +7,8 @@ export interface UserInfo {
   email: string | null
   gender: string | null
   stu_level: string | null
+  class_id?: number | null
+  class_name?: string | null
   role: 'student' | 'teacher' | 'admin'
 }
 

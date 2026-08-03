@@ -43,6 +43,10 @@ async def get_current_user(
         user = await auth_service.get_student_by_id(user_id_int, db)
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+        # 查询学生所属班级名称（classes 表）
+        class_name = None
+        if user.class_id is not None:
+            class_name = await auth_service.get_class_name(user.class_id, db)
         return {
             "id": user_id_int,
             "user_type": user_type,
@@ -50,6 +54,8 @@ async def get_current_user(
             "email": user.stu_email,
             "gender": user.stu_gender,
             "stu_level": user.stu_level,
+            "class_id": user.class_id,
+            "class_name": class_name,
         }
     elif user_type == "teacher":
         user = await auth_service.get_teacher_by_id(user_id_int, db)

@@ -15,6 +15,7 @@
               <p><strong>姓名：</strong>{{ userName }}</p>
               <p><strong>Email：</strong>{{ userEmail }}</p>
               <p><strong>座右铭：</strong>{{ motto || '还没有设置座右铭' }}</p>
+              <p v-if="userClass"><strong>班级：</strong>{{ userClass }}</p>
               <p v-if="stuLevel" class="rating-row">
                 <strong>评级：</strong>
                 <span class="rating-badge" :style="{ color: ratingColor }">{{ stuLevel }}</span>
@@ -244,6 +245,7 @@ const userName = ref('加载中...')
 const userEmail = ref('')
 const userGender = ref<string | null>(null)
 const stuLevel = ref<string | null>(null)
+const userClass = ref<string | null>(null)
 
 // 座右铭仅存前端 localStorage，不从数据库获取
 const MOTTO_KEY = 'chuma_user_motto'
@@ -333,6 +335,7 @@ const loadUserInfo = async () => {
     userEmail.value = me.email || ''
     userGender.value = me.gender || null
     stuLevel.value = me.stu_level || null
+    userClass.value = me.class_name || null
     // 同步到 Store
     authStore.setUser({
       id: me.id,
@@ -340,6 +343,8 @@ const loadUserInfo = async () => {
       email: me.email,
       gender: me.gender,
       stu_level: me.stu_level,
+      class_id: me.class_id,
+      class_name: me.class_name,
       role: me.user_type as 'student' | 'teacher',
     })
   } catch {
@@ -349,6 +354,7 @@ const loadUserInfo = async () => {
       userEmail.value = authStore.user.email || ''
       userGender.value = authStore.user.gender
       stuLevel.value = authStore.user.stu_level || null
+      userClass.value = authStore.user.class_name || null
     }
   }
 }
@@ -452,7 +458,7 @@ const mockSubjectData: Record<string, { progress: number; latestMsg: string; rec
 }
 
 /** 截断题目描述，保留前 maxLen 个字符 */
-const truncateDesc = (desc: string, maxLen: number = 30): string => {
+const truncateDesc = (desc: string, maxLen: number = 28): string => {
   if (!desc) return '暂无记录'
   return desc.length > maxLen ? desc.slice(0, maxLen) + '...' : desc
 }

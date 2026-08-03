@@ -8,7 +8,7 @@
     <div class="chat-container">
       <div class="chat-messages">
         <div class="empty-state">
-          <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
+          <el-icon :size="48" color="#c0c4cc"><MessageCircle /></el-icon>
           <p>向 AI 班级分析助手提问，例如：</p>
           <div class="suggestion-chips">
             <el-tag
@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ChatDotRound } from 'lucide-vue-next'
+import { MessageCircle } from 'lucide-vue-next'
 
 const inputText = ref('')
 

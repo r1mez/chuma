@@ -1,5 +1,5 @@
 """Student 和 Teacher SQLAlchemy ORM 模型"""
-from sqlalchemy import BigInteger, Column, DateTime, String, func
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String, func
 from app.core.database import Base
 
 
@@ -12,6 +12,7 @@ class Student(Base):
     stu_email = Column(String(128), nullable=True, unique=True)
     stu_pwd = Column(String(256), nullable=True)
     stu_level = Column(String(32), nullable=True)
+    class_id = Column(BigInteger, ForeignKey("classes.class_id"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

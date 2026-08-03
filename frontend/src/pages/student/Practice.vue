@@ -108,11 +108,127 @@
         <div class="glass-card flex-card">
           <h3 class="title-blue">ai分析与解惑</h3>
           <div class="scroll-area">
-            <div class="ai-content" v-if="showAiAnalysis">
-              （AI 题目解析功能尚未实现，暂时留白）
+            <!-- 加载中 -->
+            <div v-if="aiLoading" class="ai-loading">
+              <div class="spinner-ring"></div>
+              <span>AI 正在深度剖析题目与知识图谱...</span>
             </div>
+
+            <!-- 分析结果 -->
+            <div v-else-if="showAiAnalysis && aiAnalysis" class="ai-content">
+              <template v-if="aiAnalysis.analysis">
+                <!-- 个性化作答剖析（结合学生提交的答案） -->
+                <div class="ai-section" v-if="aiAnalysis.analysis.personal">
+                  <h4 class="ai-section-title personal-title">个性化作答剖析</h4>
+                  <div class="ai-block">
+                    <span class="ai-label">你的作答：</span>
+                    <span>{{ aiAnalysis.analysis.personal.stu_answer || '（未作答）' }}</span>
+                    <span
+                      class="verdict-tag"
+                      :class="aiAnalysis.analysis.personal.is_correct ? 'correct' : 'wrong'"
+                    >
+                      {{ aiAnalysis.analysis.personal.is_correct ? '回答正确' : '回答错误' }}
+                    </span>
+                  </div>
+                  <div class="ai-block">
+                    <span class="ai-label">判定说明：</span>
+                    <span>{{ aiAnalysis.analysis.personal.verdict }}</span>
+                  </div>
+                  <div class="ai-block" v-if="!aiAnalysis.analysis.personal.is_correct">
+                    <span class="ai-label">你的知识误区：</span>
+                    <span>{{ aiAnalysis.analysis.personal.personal_misconception }}</span>
+                  </div>
+                  <div class="ai-block" v-if="!aiAnalysis.analysis.personal.is_correct">
+                    <span class="ai-label">针对性纠正：</span>
+                    <span>{{ aiAnalysis.analysis.personal.personal_correction }}</span>
+                  </div>
+                </div>
+
+                <!-- 维度 1：题目与答案深度剖析 -->
+                <div class="ai-section">
+                  <h4 class="ai-section-title">一、题目与答案深度剖析</h4>
+                  <div class="ai-block">
+                    <span class="ai-label">核心知识点：</span>
+                    <span>{{ aiAnalysis.analysis.aspect1.core_knowledge }}</span>
+                  </div>
+                  <div class="ai-block">
+                    <span class="ai-label">正确选项剖析：</span>
+                    <span>{{ aiAnalysis.analysis.aspect1.correct_analysis }}</span>
+                  </div>
+
+                  <div class="ai-block" v-if="aiAnalysis.analysis.aspect1.misconceptions && aiAnalysis.analysis.aspect1.misconceptions.length > 0">
+                    <span class="ai-label">错误选项误区拆解：</span>
+                    <div class="misconception-list">
+                      <div
+                        v-for="(mis, idx) in aiAnalysis.analysis.aspect1.misconceptions"
+                        :key="idx"
+                        class="misconception-item"
+                      >
+                        <div class="mis-option">{{ mis.option }}. {{ mis.content }}</div>
+                        <div class="mis-line"><span class="mis-tag wrong">为什么错</span>{{ mis.why_wrong }}</div>
+                        <div class="mis-line"><span class="mis-tag trap">知识误区</span>{{ mis.misconception }}</div>
+                        <div class="mis-line"><span class="mis-tag fix">如何纠正</span>{{ mis.correction }}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ai-block">
+                    <span class="ai-label">总结：</span>
+                    <span>{{ aiAnalysis.analysis.aspect1.summary }}</span>
+                  </div>
+                </div>
+
+                <!-- 维度 2：GraphRAG + 知识图谱局部网络视角 -->
+                <div class="ai-section">
+                  <h4 class="ai-section-title">二、知识图谱局部网络视角</h4>
+                  <div class="ai-block">
+                    <span class="ai-label">中心知识点：</span>
+                    <span>{{ aiAnalysis.analysis.aspect2.center_node.name }}</span>
+                    <span class="ai-type" v-if="aiAnalysis.analysis.aspect2.center_node.type">
+                      （{{ aiAnalysis.analysis.aspect2.center_node.type }}）
+                    </span>
+                  </div>
+                  <div class="ai-block" v-if="aiAnalysis.analysis.aspect2.center_node.description">
+                    <span class="ai-label">知识点描述：</span>
+                    <span>{{ aiAnalysis.analysis.aspect2.center_node.description }}</span>
+                  </div>
+
+                  <div class="ai-block" v-if="aiAnalysis.analysis.aspect2.neighbors && aiAnalysis.analysis.aspect2.neighbors.length > 0">
+                    <span class="ai-label">1 跳邻居知识点：</span>
+                    <div class="neighbor-list">
+                      <div
+                        v-for="(nb, idx) in aiAnalysis.analysis.aspect2.neighbors"
+                        :key="idx"
+                        class="neighbor-item"
+                      >
+                        <span class="neighbor-arrow">{{ nb.direction === 'out' ? '→' : '←' }}</span>
+                        <span class="neighbor-name">{{ nb.node_name }}</span>
+                        <span class="neighbor-rel">「{{ nb.relationship_name }}」</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ai-block">
+                    <span class="ai-label">知识网络关联分析：</span>
+                    <span>{{ aiAnalysis.analysis.aspect2.knowledge_network_analysis }}</span>
+                  </div>
+                  <div class="ai-block">
+                    <span class="ai-label">学习建议：</span>
+                    <span>{{ aiAnalysis.analysis.aspect2.learning_suggestion }}</span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 分析失败提示 -->
+              <div v-else class="ai-error">
+                <el-icon class="mr-2"><Warning /></el-icon>
+                <span>{{ aiAnalysis.error_message || 'AI 分析暂不可用' }}</span>
+              </div>
+            </div>
+
+            <!-- 未触发分析 -->
             <div class="flex items-center justify-center h-full" v-else>
-              <el-button type="primary" plain @click="triggerAiAnalysis" :disabled="!isAnswerSubmitted">
+              <el-button type="primary" plain @click="triggerAiAnalysis" :disabled="!isAnswerSubmitted || aiLoading">
                 {{ isAnswerSubmitted ? '获取 AI 分析' : '请先提交答案' }}
               </el-button>
             </div>
@@ -155,9 +271,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
 import { fetchQuestions, fetchQuestionById, submitExerciseRecord, type Question } from '@/api/practice'
+import { fetchQuestionAnalysis, type QuestionAnalysisResult } from '@/api/questionAnalysis'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const questions = ref<Question[]>([])
 const currentIndex = ref(0)
@@ -165,6 +284,9 @@ const loading = ref(true)
 const isAnswerSubmitted = ref(false)
 const showAiAnalysis = ref(false)
 const showSimilarQuestions = ref(false)
+
+// 学生已提交的答案字符串（用于 AI 个性化作答剖析）
+const submittedAnswer = ref('')
 
 // 全量 ID 数组缓存（用于仪表盘跳转后的前后切换）
 const cachedIdList = ref<number[]>([])
@@ -174,8 +296,9 @@ const currentQuestion = computed(() => {
   return questions.value[currentIndex.value] || null
 })
 
-// Mock AI 分析与解惑 (由于后端未实现，暂时留白)
-const aiAnalysis = ref('（AI 题目解析功能尚未实现，暂时留白）')
+// AI 分析与解惑（双维度：题目答案深度剖析 + 知识图谱局部网络视角）
+const aiAnalysis = ref<QuestionAnalysisResult | null>(null)
+const aiLoading = ref(false)
 const similarQuestions = ref<any[]>([])
 
 const userAnswer = ref('')
@@ -310,6 +433,9 @@ const submitAnswer = async () => {
     ? userAnswerArray.value.sort().join(',')
     : userAnswer.value
 
+  // 保存学生答案，供 AI 个性化作答剖析使用
+  submittedAnswer.value = answerStr
+
   try {
     await submitExerciseRecord({
       question_id: currentQuestion.value.question_id,
@@ -327,8 +453,33 @@ const submitAnswer = async () => {
   }
 }
 
-const triggerAiAnalysis = () => {
+const triggerAiAnalysis = async () => {
+  if (!currentQuestion.value) return
+  if (aiLoading.value) return
+
+  aiLoading.value = true
   showAiAnalysis.value = true
+  aiAnalysis.value = null
+  try {
+    const stuId = authStore.user?.id
+    const result = await fetchQuestionAnalysis(
+      currentQuestion.value.question_id,
+      submittedAnswer.value || undefined,
+      stuId,
+    )
+    aiAnalysis.value = result
+    if (result.status === 'db_error') {
+      ElMessage.error(result.error_message || 'AI 分析服务异常，请稍后重试')
+    } else if (result.status === 'no_data') {
+      ElMessage.warning(result.error_message || '题目数据不存在，无法分析')
+    }
+  } catch (error) {
+    console.error('获取 AI 分析失败:', error)
+    aiAnalysis.value = null
+    ElMessage.error('获取 AI 分析失败，请稍后重试')
+  } finally {
+    aiLoading.value = false
+  }
 }
 
 const triggerSimilarQuestions = () => {
@@ -341,6 +492,9 @@ const resetAnswer = () => {
   isAnswerSubmitted.value = false
   showAiAnalysis.value = false
   showSimilarQuestions.value = false
+  aiAnalysis.value = null
+  aiLoading.value = false
+  submittedAnswer.value = ''
 }
 
 const goBack = () => {
@@ -592,5 +746,163 @@ h3 {
 
 .mock-item {
   opacity: 0.5;
+}
+
+/* --- AI 分析与解惑样式 --- */
+.ai-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px 0;
+  color: #2980b9;
+  font-size: 0.95rem;
+}
+
+.spinner-ring {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(41, 128, 185, 0.2);
+  border-top-color: #2980b9;
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-section {
+  margin-bottom: 20px;
+}
+
+.ai-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2980b9;
+  margin: 0 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(41, 128, 185, 0.3);
+}
+
+.personal-title {
+  color: #8e44ad;
+  border-bottom-color: rgba(142, 68, 173, 0.3);
+}
+
+.verdict-tag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  vertical-align: middle;
+}
+
+.verdict-tag.correct { background: #27ae60; }
+.verdict-tag.wrong { background: #e74c3c; }
+
+.ai-block {
+  margin-bottom: 12px;
+  line-height: 1.7;
+  font-size: 0.92rem;
+  color: #333;
+}
+
+.ai-label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.ai-type {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+}
+
+.misconception-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.misconception-item {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.mis-option {
+  font-weight: 600;
+  color: #c0392b;
+  margin-bottom: 6px;
+}
+
+.mis-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.mis-tag {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.mis-tag.wrong { background: #e74c3c; }
+.mis-tag.trap { background: #f39c12; }
+.mis-tag.fix { background: #27ae60; }
+
+.neighbor-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.neighbor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.neighbor-arrow {
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.neighbor-name {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.neighbor-rel {
+  color: #7f8c8d;
+  font-size: 0.82rem;
+}
+
+.ai-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(231, 76, 60, 0.08);
+  color: #c0392b;
+  border-radius: 8px;
+  font-size: 0.92rem;
 }
 </style>

@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 class GraphQueryError(Exception):
     pass
 
-
+# 用来实际查找age图数据的函数
 def get_full_graph(graph_name: Optional[str] = None) -> dict[str, Any]:
     """获取完整图数据（节点 + 边 + 统计），自动去重"""
-    storage = AgeStorage(graph_name=graph_name)
+    storage = AgeStorage(graph_name=graph_name) # graph_name 传入 AgeStorage，Cypher 查询对应图
     try:
         conn = storage._get_conn()
     except AgeConnectionError as e:

@@ -7,6 +7,7 @@ import re
 from typing import Optional
 
 from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph3D, KGNode, KGEdge
+from app.kg_pipeline.pruning import filter_chunk_graph
 from app.engines.llm.client import LLMClient
 from app.engines.llm.profiles import ModelProfile, remote_profile
 from app.config import settings
@@ -160,4 +161,7 @@ class KGExtractor:
         except (KeyError, TypeError) as e:
             raise LlmExtractionError(f"Field validation failed: {e}") from e
 
-        return KnowledgeGraph3D(nodes=nodes, edges=edges)
+        kg = KnowledgeGraph3D(nodes=nodes, edges=edges)
+        if settings.KG_PRUNING_ENABLED:
+            kg = filter_chunk_graph(kg)
+        return kg

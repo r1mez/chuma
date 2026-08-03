@@ -12,8 +12,24 @@ class TestEntityType:
         assert EntityType.CHAPTER.value == "Chapter"
 
     def test_entity_types_count(self):
-        """EntityType 应有 9 种类型（原有 8 + 新增 Chapter）"""
-        assert len(EntityType) == 9
+        """EntityType 应有 8 种类型（6 核心 + Chapter + TERM 噪声桶）"""
+        assert len(EntityType) == 8
+
+    def test_core_types_present(self):
+        """核心类型应存在"""
+        for t in ("CONCEPT", "ALGORITHM", "DATA_STRUCTURE",
+                  "PROTOCOL", "PRINCIPLE", "TECHNOLOGY"):
+            assert hasattr(EntityType, t)
+
+    def test_removed_types_not_present(self):
+        """被删除的低价值类型不应存在"""
+        for t in ("OPERATION", "FUNCTION", "METHOD", "PROCESS",
+                  "STANDARD", "TOOL", "MODEL"):
+            assert not hasattr(EntityType, t)
+
+    def test_unknown_type_falls_back_to_term(self):
+        """未知类型降级为 TERM（噪声桶），供剪枝丢弃"""
+        assert EntityType("SomethingUnknown") is EntityType.TERM
 
 
 class TestDocumentChunk:
@@ -304,8 +320,8 @@ class TestGraphBuilderChapterMount:
         mount_edge = G.edges["3.1 栈", "链栈"]
         assert mount_edge["relationship_name"] == "包含"
 
-    def test_no_chunks_no_auto_mount(self):
-        """不传 chunks 时不自动挂载（向后兼容）"""
+    def test_no_chunks_isolated_node_pruned(self):
+        """不传 chunks 时，无章节节点则不剔除孤立节点（与无标题文档保护一致）"""
         builder = GraphBuilder()
         chunk_graphs = [
             KnowledgeGraph3D(
@@ -314,6 +330,7 @@ class TestGraphBuilderChapterMount:
             ),
         ]
         G = builder.build(chunk_graphs=chunk_graphs)
+        # 无 Chapter 节点 → 无挂载预期 → 孤立节点 TCP 被保留
         assert G.number_of_nodes() == 1
         assert G.number_of_edges() == 0
 

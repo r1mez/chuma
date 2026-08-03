@@ -10,26 +10,24 @@ from pydantic import BaseModel, Field
 
 
 class EntityType(str, Enum):
-    """预定义的计算机学科实体类型"""
-    CHAPTER = "Chapter"           # 章（标题层级第1层）
+    """预定义的计算机学科核心实体类型
+
+    只保留 6 种核心类型（LLM 可产出）+ Chapter（仅规则生成）+ TERM（噪声桶）。
+    被删除的低价值类型（Operation/Method/Process/Function/Standard/Tool/Model）
+    不再提取；Model 并入 Technology。
+    """
+    CHAPTER = "Chapter"           # 章（仅由 ChapterBuilder 规则生成，LLM 禁止产出）
     CONCEPT = "Concept"
     ALGORITHM = "Algorithm"
     DATA_STRUCTURE = "DataStructure"
     PROTOCOL = "Protocol"
     PRINCIPLE = "Principle"
-    TERM = "Term"
-    TECHNOLOGY = "Technology"
-    MODEL = "Model"
-    OPERATION = "Operation"       # 操作/运算
-    METHOD = "Method"             # 方法/方式
-    PROCESS = "Process"           # 流程/过程
-    FUNCTION = "Function"         # 函数/系统调用
-    STANDARD = "Standard"         # 标准/规范
-    TOOL = "Tool"                 # 软件工具/平台
+    TECHNOLOGY = "Technology"     # 技术/系统/模型（原 Technology + Model）
+    TERM = "Term"                 # 噪声/未知类型桶：LLM 不应产出，剪枝白名单丢弃
 
     @classmethod
     def _missing_(cls, value):
-        """未知类型时降级为 Term，不中断流水线"""
+        """未知类型降级为 TERM（噪声桶），不中断流水线，由剪枝阶段丢弃"""
         logger = __import__("logging").getLogger(__name__)
         logger.warning(f"[KG] Unknown entity type '{value}', falling back to 'Term'")
         return cls.TERM

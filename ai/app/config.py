@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     KG_MODEL_API_KEY: str = ""
     KG_MODEL_BASE_URL: str = ""
     KG_MODEL_NAME: str = ""
+    KG_PRUNING_ENABLED: bool = True  # 知识图谱后处理剪枝总开关
 
     # OCR 文档解析
     OCR_VLM_URL: str = ""

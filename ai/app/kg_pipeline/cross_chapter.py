@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 PROMPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
 
+# 每个章节对最多输出的依赖边数
+MAX_DEPS_PER_PAIR = 5
+
 
 def _kg_extraction_profile() -> ModelProfile:
     """KG 抽取专用 profile"""
@@ -166,8 +169,11 @@ class CrossChapterExtractor:
                 logger.warning(f"[CrossChapter] Failed for ({chapter_a}, {chapter_b}): {e}")
                 continue
 
-            # 5. 解析依赖关系
-            for dep in data.get("dependencies", []):
+            # 5. 解析依赖关系（dependencies 非 list 时容错，避免单个章节对使整个构建中止）
+            deps = data.get("dependencies", []) if isinstance(data, dict) else []
+            if not isinstance(deps, list):
+                deps = []
+            for dep in deps[:MAX_DEPS_PER_PAIR]:
                 source = dep.get("source", "")
                 target = dep.get("target", "")
                 relationship = dep.get("relationship", "依赖")

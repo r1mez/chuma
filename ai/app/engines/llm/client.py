@@ -135,8 +135,26 @@ class LLMClient:
                                 tool_calls=None,
                             )
 
+                    content = msg.get("content")
+
+                    # HTTP 200 但 content 为空（推理型模型只输出 reasoning_content 等）
+                    # 视为瞬时失败而非成功：重试，避免上游把空响应当作可解析内容。
+                    if not content and tool_calls is None:
+                        reason = (msg.get("reasoning_content") or "").strip()
+                        logger.warning(
+                            "LLM returned empty content (attempt %d/%d)%s",
+                            attempt + 1,
+                            p.max_retries + 1,
+                            f", reasoning: {reason[:200]}" if reason else "",
+                        )
+                        if attempt < p.max_retries:
+                            continue
+                        raise RuntimeError(
+                            "LLM returned empty content after all retries"
+                        )
+
                     return ChatResponse(
-                        content=msg.get("content"),
+                        content=content,
                         tool_calls=tool_calls,
                     )
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException):

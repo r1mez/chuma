@@ -50,7 +50,8 @@ GENERIC_NODE_NAMES: frozenset[str] = frozenset({
     "简介", "介绍", "说明", "总结", "结构",
 })
 
-# 全局节点规模上限（目标：整本教材 200~500）
+# 知识点节点规模上限（目标：整本教材 200~500）。
+# 章节节点不计入此上限，永远全保留。
 MAX_GLOBAL_NODES: int = 500
 
 _FULLWIDTH_TRANS = str.maketrans("（）：，。", "():,.")
@@ -136,11 +137,11 @@ def filter_chunk_graph(kg: KnowledgeGraph3D) -> KnowledgeGraph3D:
 
 
 def prune_global_graph(G: nx.DiGraph, max_nodes: int = MAX_GLOBAL_NODES) -> nx.DiGraph:
-    """全局剪枝（原地修改）：孤立节点剔除、关系词表兜底、规模上限截断
+    """全局剪枝（原地修改）：孤立节点剔除、关系词表兜底、知识点规模上限截断
 
     Args:
         G: 合并后的 NetworkX DiGraph（含章节节点 + 知识点节点）
-        max_nodes: 节点规模上限（默认 500）
+        max_nodes: 知识点节点规模上限（默认 500）。章节节点不计入此上限，永远全保留
 
     Returns:
         剪枝后的同一张图
@@ -159,7 +160,7 @@ def prune_global_graph(G: nx.DiGraph, max_nodes: int = MAX_GLOBAL_NODES) -> nx.D
         if normalize_relationship(data.get("relationship_name", "")) is None:
             G.remove_edge(u, v)
 
-    # 3. 规模上限：保护章节节点，按 (有描述, 度) 截断知识点
+    # 3. 规模上限：章节节点不计入预算（永远全保留），按 (有描述, 度) 截断知识点
     if G.number_of_nodes() <= max_nodes:
         return G
 
@@ -176,7 +177,7 @@ def prune_global_graph(G: nx.DiGraph, max_nodes: int = MAX_GLOBAL_NODES) -> nx.D
         ),
         reverse=True,
     )
-    keep = chapter_set | set(scored[: max(0, max_nodes - len(chapter_set))])
+    keep = chapter_set | set(scored[:max_nodes])
     for n in list(G.nodes):
         if n not in keep:
             G.remove_node(n)  # 同时删除关联边，无悬挂边

@@ -142,6 +142,7 @@ class TestPruneGlobalGraph:
         assert G.number_of_nodes() == 2
 
     def test_keeps_chapters_over_scale_cap(self):
+        """章节不计入上限：章节全保留，知识点最多保留 max_nodes 个"""
         G = nx.DiGraph()
         G.add_node("第1章", type="Chapter")
         G.add_node("第1.1节", type="Chapter")
@@ -150,8 +151,27 @@ class TestPruneGlobalGraph:
             G.add_node(f"kp{i}", type="Concept", description="x")
             G.add_edge("第1.1节", f"kp{i}", relationship_name="包含")
         prune_global_graph(G, max_nodes=5)
-        assert G.number_of_nodes() <= 5
         assert "第1章" in G  # 章节被保护
+        assert "第1.1节" in G
+        kp_kept = [n for n in G.nodes if n.startswith("kp")]
+        assert len(kp_kept) == 5  # 知识点独占 5 个预算
+        assert G.number_of_nodes() == 7  # 2 章节 + 5 知识点
+
+    def test_chapters_exceeding_cap_do_not_eat_kp_budget(self):
+        """回归测试：章节数超过上限时，知识点预算不被清零"""
+        G = nx.DiGraph()
+        for i in range(6):  # 章节数 > max_nodes=5
+            G.add_node(f"第{i}章", type="Chapter")
+        for i in range(5):
+            G.add_edge(f"第{i}章", f"第{i+1}章", relationship_name="包含")
+        for i in range(3):
+            G.add_node(f"kp{i}", type="Concept", description="x")
+            G.add_edge("第5章", f"kp{i}", relationship_name="包含")
+        prune_global_graph(G, max_nodes=5)
+        # 章节全保留
+        assert {f"第{i}章" for i in range(6)} <= set(G.nodes)
+        # 知识点未被清零（旧逻辑 max(0, 5-6)=0 会全删）
+        assert {f"kp{i}" for i in range(3)} <= set(G.nodes)
 
     def test_drops_non_vocabulary_edges(self):
         G = nx.DiGraph()

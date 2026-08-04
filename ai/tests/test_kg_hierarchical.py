@@ -524,10 +524,15 @@ class TestPipelineIntegration:
         mock_cross = AsyncMock()
         mock_cross.extract.return_value = []
 
+        # Mock pgvector ingestor（Step 7）
+        mock_ingestor = AsyncMock()
+        mock_ingestor.ingest.return_value = 0
+
         pipeline = KGPipeline(
             extractor=mock_extractor,
             storage=mock_storage,
             enable_cross_chapter=True,
+            ingestor=mock_ingestor,
         )
         pipeline.cross_chapter_extractor = mock_cross
 

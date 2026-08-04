@@ -62,22 +62,113 @@ def _build_chapter_context(chunk: DocumentChunk) -> str:
     )
 
 
+def _repair_json(raw: str) -> Optional[str]:
+    """尝试修复 LLM 常见的 JSON 格式错误
+
+    支持：
+    - 对象/数组末尾的尾随逗号
+    - 单引号 JSON（仅在全文无双引号时转换，避免破坏字符串内的单引号）
+
+    Args:
+        raw: 原始 JSON 字符串
+
+    Returns:
+        修复后的 JSON 字符串；无需修复时返回 None
+    """
+    repaired = raw
+    # 修复尾随逗号（逗号后紧跟 } 或 ]）
+    repaired = re.sub(r",\s*}", "}", repaired)
+    repaired = re.sub(r",\s*\]", "]", repaired)
+    # 单引号转换：仅在完全没有双引号时进行
+    if '"' not in repaired:
+        repaired = repaired.replace("'", '"')
+    if repaired != raw:
+        return repaired
+    return None
+
+
+def _extract_partial_json(raw: str) -> Optional[dict]:
+    """从损坏/截断的 JSON 中尽力提取 nodes/edges 数组
+
+    单个数组无法解析时跳过，能提取到任意非空数组即返回，
+    避免单个 chunk 的 LLM 输出瑕疵导致整本书构建失败。
+
+    Args:
+        raw: 无法整体解析的 LLM 响应文本
+
+    Returns:
+        含 nodes/edges 的 dict；未提取到任何非空数据时返回 None
+    """
+    result: dict = {"nodes": [], "edges": []}
+    found = False
+    for key in ("nodes", "edges"):
+        m = re.search(rf'"{key}"\s*:\s*\[(.*?)\]', raw, re.DOTALL)
+        if not m:
+            continue
+        inner = m.group(1)
+        candidate = _repair_json(f"[{inner}]") or f"[{inner}]"
+        try:
+            arr = json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(arr, list) and arr:
+            result[key] = arr
+            found = True
+    return result if found else None
+
+
 def _parse_llm_json_response(raw: str) -> dict:
     """从 LLM 响应中提取 JSON
 
     处理 LLM 返回 markdown 包裹的 JSON 代码块：
     ```json\n{"nodes": ...}\n```
     或裸 JSON。
+
+    Raises:
+        ValueError: 响应为空 / 不含 JSON 对象 / 所有修复手段均失败
     """
+    if not isinstance(raw, str):
+        raw = str(raw)
+
     code_block = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', raw, re.DOTALL)
     if code_block:
         raw = code_block.group(1).strip()
 
+    # 截取首个 { 之后的内容，去掉 JSON 前的解释文字
     brace_start = raw.find('{')
     if brace_start >= 0:
         raw = raw[brace_start:]
+    # 截取到最后一个 }，去掉 JSON 对象后的解释文字
+    brace_end = raw.rfind('}')
+    if brace_end >= 0:
+        raw = raw[:brace_end + 1]
 
-    return json.loads(raw)
+    if not raw.strip():
+        raise ValueError("Empty LLM response")
+
+    if '{' not in raw:
+        raise ValueError("No JSON object found in LLM response")
+
+    # 直接解析
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 修复常见错误后重试
+    repaired = _repair_json(raw)
+    if repaired is not None:
+        try:
+            return json.loads(repaired)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # 部分提取（截断/严重损坏时抢救 nodes/edges）
+    partial = _extract_partial_json(raw)
+    if partial is not None:
+        return partial
+
+    raise ValueError("JSON parse failed after all recovery attempts")
 
 
 class LlmExtractionError(Exception):

@@ -1,16 +1,22 @@
 """teacher service."""
+import logging
 from typing import List
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.classes import Class
 from app.models.course import Course
 from app.models.exercise_record import ExerciseRecord
+from app.models.kg_graph import KgGraph
 from app.models.learning import StudentCourseMastery
 from app.models.question import Question
 from app.models.teacher_relation import TeacherClass, TeacherCourse
 from app.models.user import Student
+
+logger = logging.getLogger(__name__)
 
 
 class TeacherService:
@@ -51,6 +57,73 @@ class TeacherService:
             {"course_id": course_id, "course_name": course_name}
             for course_id, course_name in rows
         ]
+
+    async def get_course_chapters(
+        self, tea_id: int, course_id: int, db: AsyncSession
+    ) -> List[dict]:
+        """返回某学科知识图谱中的章节列表。
+
+        数据对应关系（严格遵循建表脚本）：
+          teacher_course(tea_id, course_id) 校验教师-学科归属
+          courses.course_id -> courses.kg_id -> kg_graphs.graph_name
+          通过 AI 引擎 /kg/graph/data 查询该图，筛选 type == 'Chapter' 的节点。
+        """
+        # 1. 校验教师确实教授该学科
+        course_result = await db.execute(
+            select(TeacherCourse.course_id).where(
+                TeacherCourse.tea_id == tea_id,
+                TeacherCourse.course_id == course_id,
+            )
+        )
+        if course_result.first() is None:
+            return []
+
+        # 2. 获取学科对应的知识图谱 graph_name
+        kg_result = await db.execute(
+            select(Course.kg_id)
+            .where(Course.course_id == course_id)
+        )
+        kg_id = kg_result.scalar_one_or_none()
+        if kg_id is None:
+            return []
+
+        graph_result = await db.execute(
+            select(KgGraph.graph_name).where(KgGraph.id == kg_id)
+        )
+        graph_name = graph_result.scalar_one_or_none()
+        if not graph_name:
+            return []
+
+        # 3. 通过 AI 引擎查询图数据，筛选章节节点
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/kg/graph/data",
+                    params={"graph_name": graph_name},
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                )
+                if response.status_code >= 400:
+                    logger.warning(
+                        f"KG graph data request failed for {graph_name}: {response.status_code}"
+                    )
+                    return []
+                data = response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"KG graph data request error: {e}")
+            return []
+
+        nodes = data.get("nodes", []) if isinstance(data, dict) else []
+        chapters = [
+            {
+                "name": node.get("name") or node.get("id"),
+                "id": node.get("id"),
+            }
+            for node in nodes
+            if (node.get("type") or "").lower() == "chapter"
+        ]
+        # 按名称排序，保证展示稳定
+        chapters.sort(key=lambda item: item["name"] or "")
+        return chapters
 
     async def get_teacher_classes(self, tea_id: int, db: AsyncSession) -> List[dict]:
         """Return the class list managed by the teacher."""

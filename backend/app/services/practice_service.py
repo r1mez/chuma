@@ -59,14 +59,21 @@ class PracticeService:
     async def submit_exercise(
         self, stu_id: int, data: ExerciseRecordCreate, db: AsyncSession
     ) -> ExerciseRecordResponse:
-        """提交答案并存入 exercise_records，根据题目类型处理 do_score / do_isTrue。
+        """提交答案并存入 exercise_records，根据题目类型处理 do_score / do_isTrue / iserror_firstly。
 
-        规则：
-        - single_choice / multiple_choice / T_or_F：从数据库查询题目的 question_answer，
-          比较 question_answer == do_stu_answer，结果存入 do_isTrue，do_score 设为 None。
-        - Fill_blanks / Q_A：do_score 设为 10.0（满分），do_isTrue 设为 None。
+        规则（依据 questions.question_type）：
+        - single_choice / multiple_choice / T_or_F：do_isTrue 生效（比较答案），do_score 置 null；
+        - Fill_blanks：do_score 按空给分（满分/填空总数 × 填对数量），do_isTrue 置 null；
+        - Q_A：do_score 由大模型根据题目答案对比学生回答酌情给分（满分 10 分，float），do_isTrue 置 null。
+
+        iserror_firstly（首次作答是否错误）采用历史首次判定：
+        - 客观题：首次作答做错为 true；
+        - 主观题（Fill_blanks / Q_A）：首次作答得分低于 6 分为 true。
+        若该题此前已做过，则保留首次作答时的判定结果，不因本次重做而改变。
+
+        kg_id / kg_node_name 一律从 questions 表继承，不依赖前端传参。
         """
-        # 从数据库查询题目信息，获取正确答案
+        # 从数据库查询题目信息，获取正确答案与知识点归属
         question_result = await db.execute(
             select(Question).where(Question.question_id == data.question_id)
         )
@@ -74,20 +81,35 @@ class PracticeService:
         if question is None:
             raise ValueError(f"题目不存在: question_id={data.question_id}")
 
+        # 从题库继承知识点归属字段
+        kg_id = question.kg_id
+        kg_node_name = question.kg_node_name
+
         objective_types = {"single_choice", "multiple_choice", "T_or_F", "choice", "true_false"}
-        subjective_types = {"Fill_blanks", "Q_A", "fill_blanks", "q_a"}
+        fill_types = {"Fill_blanks", "fill_blanks"}
+        qa_types = {"Q_A", "q_a"}
 
         do_isTrue = None
         do_score = None
 
         if data.question_type in objective_types:
-            # 客观题：比较学生答案与正确答案
+            # 客观题：比较学生答案与正确答案，do_isTrue 生效，do_score 置 null
             do_isTrue = data.do_stu_answer.strip() == question.question_answer.strip()
             do_score = None
-        elif data.question_type in subjective_types:
-            # 主观题：给满分，不判定对错
+        elif data.question_type in fill_types:
+            # 填空题：按空给分，do_score 生效，do_isTrue 置 null
+            do_score = self._score_fill_blanks(
+                question.question_answer, data.do_stu_answer
+            )
             do_isTrue = None
-            do_score = 10.0
+        elif data.question_type in qa_types:
+            # 简答题：大模型评分，do_score 生效，do_isTrue 置 null
+            do_score = await self._score_qa(
+                question.question_description,
+                question.question_answer,
+                data.do_stu_answer,
+            )
+            do_isTrue = None
 
         # 检查是否已存在相同 question_id + stu_id 的记录
         existing_result = await db.execute(
@@ -99,30 +121,105 @@ class PracticeService:
         existing_record = existing_result.scalar_one_or_none()
 
         if existing_record:
-            # 已存在则更新作答内容和判定结果
+            # 已存在则更新作答内容和判定结果，但保留首次作答的 iserror_firstly
             existing_record.do_stu_answer = data.do_stu_answer
             existing_record.do_isTrue = do_isTrue
             existing_record.do_score = do_score
+            existing_record.kg_id = kg_id
+            existing_record.kg_node_name = kg_node_name
             await db.commit()
             await db.refresh(existing_record)
             return ExerciseRecordResponse.model_validate(existing_record)
         else:
-            # 不存在则创建新记录
+            # 不存在则创建新记录，本次即首次作答，判定 iserror_firstly
+            iserror_firstly = self._judge_first_error(
+                data.question_type, do_isTrue, do_score
+            )
             record = ExerciseRecord(
                 question_id=data.question_id,
                 stu_id=stu_id,
+                kg_id=kg_id,
                 course_id=data.course_id,
-                kg_node_name=data.kg_node_name,
+                kg_node_name=kg_node_name,
                 question_type=data.question_type,
                 question_difficulty=data.question_difficulty,
                 do_stu_answer=data.do_stu_answer,
                 do_score=do_score,
                 do_isTrue=do_isTrue,
+                iserror_firstly=iserror_firstly,
             )
             db.add(record)
             await db.commit()
             await db.refresh(record)
             return ExerciseRecordResponse.model_validate(record)
+
+    @staticmethod
+    def _score_fill_blanks(question_answer: str, stu_answer: str) -> float:
+        """填空题按空给分：得分 =（满分 10 / 填空总数）× 填对数量。
+
+        约定：question_answer 与 do_stu_answer 均用英文逗号 "," 分隔多个空，
+        逐空去除首尾空白后比对。
+        """
+        full_score = 10.0
+        blanks = [b.strip() for b in question_answer.split(",") if b.strip()]
+        if not blanks:
+            # 无空位可判，视为满分
+            return full_score
+        stu_blanks = [b.strip() for b in stu_answer.split(",")]
+        correct = 0
+        for i, blank in enumerate(blanks):
+            if i < len(stu_blanks) and stu_blanks[i] == blank:
+                correct += 1
+        return round(full_score / len(blanks) * correct, 2)
+
+    async def _score_qa(
+        self, question_description: str, question_answer: str, stu_answer: str
+    ) -> float:
+        """简答题大模型评分：根据题目答案对比学生回答酌情给分（满分 10 分，float）。
+
+        调用 AI 服务评分接口；若 AI 服务不可用，则降级为 0 分并记录日志。
+        """
+        try:
+            import httpx
+            from app.core.config import settings
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    f"{settings.AI_SERVICE_URL}/analysis/qa_score",
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                    json={
+                        "question_description": question_description,
+                        "question_answer": question_answer,
+                        "stu_answer": stu_answer,
+                    },
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                score = float(result.get("score", 0.0))
+                # 限制在 0~10 分范围内
+                return max(0.0, min(10.0, round(score, 2)))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(
+                f"[PracticeService] Q_A 大模型评分失败，降级为 0 分: {e}",
+                exc_info=True,
+            )
+            return 0.0
+
+    @staticmethod
+    def _judge_first_error(
+        question_type: str, do_isTrue: bool | None, do_score: float | None
+    ) -> bool:
+        """判定首次作答是否错误。
+
+        - 客观题：do_isTrue 为 False 即首次做错；
+        - 主观题（Fill_blanks / Q_A）：得分低于 6 分为首次做错。
+        """
+        objective_types = {"single_choice", "multiple_choice", "T_or_F", "choice", "true_false"}
+        if question_type in objective_types:
+            return do_isTrue is False
+        # 主观题：得分低于 6 分为错
+        return do_score is not None and do_score < 6.0
 
     async def get_student_exercise_records(
         self, stu_id: int, db: AsyncSession

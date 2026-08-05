@@ -43,6 +43,7 @@ export interface ExerciseRecord {
   do_stu_answer: string;
   do_score?: number | null;
   do_isTrue?: boolean | null;
+  iserror_firstly?: boolean | null;
   created_at: string;
 }
 

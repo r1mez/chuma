@@ -16,6 +16,7 @@ class ExerciseRecord(Base):
     do_stu_answer = Column(Text, nullable=False)
     do_score = Column(Float, nullable=True)
     do_isTrue = Column("do_istrue", Boolean, nullable=True)
+    iserror_firstly = Column(Boolean, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     __table_args__ = (
         Index("ix_exercise_records_stu_node", "stu_id", "kg_node_name"),

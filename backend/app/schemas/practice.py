@@ -44,6 +44,7 @@ class ExerciseRecordResponse(BaseModel):
     do_id: int
     question_id: int
     stu_id: int
+    kg_id: Optional[int] = None
     course_id: Optional[int] = None
     kg_node_name: Optional[str] = None
     question_type: Optional[str] = None
@@ -51,6 +52,7 @@ class ExerciseRecordResponse(BaseModel):
     do_stu_answer: str
     do_score: Optional[float] = None
     do_isTrue: Optional[bool] = None
+    iserror_firstly: Optional[bool] = None
     created_at: datetime
     class Config:
         from_attributes = True

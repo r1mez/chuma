@@ -3,21 +3,9 @@
     <div class="chat-header">
       <div>
         <h3>AI 助学</h3>
-        <span v-if="chatMode === 'agent'" class="mode-description">可查看任务规划、工具调用和知识来源</span>
+        <span class="mode-description">可查看任务规划、工具调用和知识来源</span>
       </div>
       <div class="header-actions">
-        <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
-          <GooeyNav
-            :items="navItems"
-            v-model="chatMode"
-            :particle-count="15"
-            :particle-distances="[90, 10]"
-            :particle-r="100"
-            :animation-time="600"
-            :time-variance="300"
-            :colors="[1, 2, 3, 1, 2, 3, 1, 4]"
-          />
-        </StarBorder>
         <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
           <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
             清空对话
@@ -32,7 +20,7 @@
           <div v-if="messages.length === 0" class="empty-state">
             <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
             <p>开始向 AI 助学提问吧！</p>
-            <p class="hint">智能体模式会展示任务规划、资料查询和答案生成进度</p>
+            <p class="hint">AI 助学将展示任务规划、资料查询和答案生成进度</p>
           </div>
           <ChatMessage
             v-for="msg in messages"
@@ -52,7 +40,6 @@
       </div>
 
       <ChatSubgraphPanel
-        v-if="chatMode === 'agent'"
         :visible="subgraphPanelVisible"
         :hit-nodes="kgHitNodes"
         :active-index="activeKgHitIndex"
@@ -76,7 +63,6 @@ import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
-import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
 import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
 import type { SuggestedQuestion } from '@/api/ai'
@@ -87,7 +73,6 @@ const {
   sendMessage,
   cancelCurrentRun,
   clearMessages,
-  chatMode,
   kgHitNodes,
   activeKgHitIndex,
   subgraphPanelVisible,
@@ -109,12 +94,6 @@ const lastMessageId = computed(() => messages.value[messages.value.length - 1]?.
 const activeSubgraph = computed(() => subgraphs.value[activeKgHitIndex.value] ?? null)
 const activeSubgraphLoading = computed(() => subgraphLoading.value[activeKgHitIndex.value] ?? false)
 const activeSubgraphError = computed(() => subgraphErrors.value[activeKgHitIndex.value] ?? null)
-
-const navItems = [
-  { label: '快速回答', value: 'quick' },
-  { label: '深度思考', value: 'deep' },
-  { label: '智能体模式', value: 'agent' },
-]
 
 function handleSelectQuestion(question: SuggestedQuestion) {
   nearBottom.value = true
@@ -176,10 +155,6 @@ watch(
 
 <style scoped>
 .chat-page {
-  --color-1: #ff6b6b;
-  --color-2: #4ecdc4;
-  --color-3: #45b7d1;
-  --color-4: #f9ca24;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -199,8 +174,7 @@ watch(
 .mode-description { display: block; margin-top: 2px; color: #94a3b8; font-size: 11px; }
 .header-actions { display: flex; gap: 16px; align-items: center; }
 .clear-btn { margin-left: 0; padding: 8px 16px; }
-.nav-wrapper, .nav-wrapper :deep(.inner-content) { border-radius: 9999px; }
-.nav-wrapper :deep(.inner-content), .clear-btn-wrapper :deep(.inner-content) { background: #e5e8e4; }
+.clear-btn-wrapper :deep(.inner-content) { background: #e5e8e4; }
 .chat-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .messages-shell { position: relative; flex: 1; min-width: 0; }
 .chat-messages { height: 100%; overflow-y: auto; padding: 20px; box-sizing: border-box; scroll-behavior: smooth; }

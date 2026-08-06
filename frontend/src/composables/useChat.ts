@@ -95,7 +95,7 @@ export function useChat() {
   const loading = ref(false)
   const streamingContent = ref('')
   const streamingReasoning = ref('')
-  const chatMode = ref<ChatMode>('quick')
+  const chatMode = ref<ChatMode>('agent')
   const kgGraphIds = ref<number[]>([])
   const kgHitNodes = ref<KgHitNode[]>([])
   const activeKgHitIndex = ref(0)

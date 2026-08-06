@@ -54,12 +54,14 @@
       <ChatSubgraphPanel
         v-if="chatMode === 'agent'"
         :visible="subgraphPanelVisible"
-        :hit-node-name="kgHitNode?.nodeName || ''"
-        :hit-node-type="kgHitNode?.nodeType || ''"
-        :subgraphs="subgraphs"
-        :loading="subgraphLoading"
-        :error="subgraphError"
+        :hit-nodes="kgHitNodes"
+        :active-index="activeKgHitIndex"
+        :subgraphs="activeSubgraph"
+        :loading="activeSubgraphLoading"
+        :error="activeSubgraphError"
         @close="closeSubgraphPanel"
+        @open="openSubgraphPanel"
+        @select-page="selectKgHitPage"
         @retry="handleRetrySubgraph"
       />
     </div>
@@ -86,12 +88,15 @@ const {
   cancelCurrentRun,
   clearMessages,
   chatMode,
-  kgHitNode,
+  kgHitNodes,
+  activeKgHitIndex,
   subgraphPanelVisible,
   closeSubgraphPanel,
+  openSubgraphPanel,
+  selectKgHitPage,
   subgraphs,
   subgraphLoading,
-  subgraphError,
+  subgraphErrors,
   extractSubgraphs,
   suggesting,
   selectSuggestedQuestion,
@@ -101,6 +106,9 @@ const messagesRef = ref<HTMLElement>()
 const nearBottom = ref(true)
 const showJumpToLatest = ref(false)
 const lastMessageId = computed(() => messages.value[messages.value.length - 1]?.id)
+const activeSubgraph = computed(() => subgraphs.value[activeKgHitIndex.value] ?? null)
+const activeSubgraphLoading = computed(() => subgraphLoading.value[activeKgHitIndex.value] ?? false)
+const activeSubgraphError = computed(() => subgraphErrors.value[activeKgHitIndex.value] ?? null)
 
 const navItems = [
   { label: '快速回答', value: 'quick' },
@@ -122,7 +130,8 @@ function handleSend(content: string) {
 }
 
 function handleRetrySubgraph() {
-  if (kgHitNode.value) extractSubgraphs(kgHitNode.value)
+  const hitNode = kgHitNodes.value[activeKgHitIndex.value]
+  if (hitNode) extractSubgraphs(hitNode, activeKgHitIndex.value)
 }
 
 function handleMessagesScroll() {

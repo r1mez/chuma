@@ -4,9 +4,9 @@
       <!-- Header -->
       <div class="panel-header">
         <div class="hit-node-info">
-          <span class="hit-node-name">{{ hitNodeName }}</span>
+          <span class="hit-node-name">{{ currentHit?.nodeName || '' }}</span>
           <el-tag size="small" :color="typeColor" effect="dark" style="margin-left: 8px">
-            {{ hitNodeType }}
+            {{ currentHit?.nodeType || '' }}
           </el-tag>
         </div>
         <div class="header-actions">
@@ -43,6 +43,18 @@
 
       <!-- Subgraph content -->
       <div v-else-if="subgraphs" class="panel-body">
+        <div v-if="hitNodes.length > 1" class="hit-pagination">
+          <span class="page-caption">命中节点</span>
+          <el-pagination
+            small
+            background
+            layout="prev, pager, next"
+            :current-page="activeIndex + 1"
+            :page-size="1"
+            :total="hitNodes.length"
+            @current-change="(page: number) => $emit('select-page', page - 1)"
+          />
+        </div>
         <div class="chart-container">
           <SubgraphChart
             :nodes="subgraphs.nodes"
@@ -71,6 +83,16 @@
     </div>
   </transition>
 
+  <button
+    v-if="!visible && hitNodes.length"
+    class="subgraph-panel-toggle"
+    type="button"
+    title="展开知识图谱"
+    @click="$emit('open')"
+  >
+    知识图谱 <span aria-hidden="true">‹</span>
+  </button>
+
   <!-- 全屏模态框 -->
   <el-dialog
     v-model="fullscreenDialogVisible"
@@ -83,9 +105,9 @@
       <!-- Header -->
       <div class="fullscreen-header">
         <div class="fullscreen-hit-info">
-          <span class="fullscreen-hit-name">{{ hitNodeName }}</span>
+          <span class="fullscreen-hit-name">{{ currentHit?.nodeName || '' }}</span>
           <el-tag size="small" :color="typeColor" effect="dark" style="margin-left: 8px">
-            {{ hitNodeType }}
+            {{ currentHit?.nodeType || '' }}
           </el-tag>
         </div>
         <el-button
@@ -135,12 +157,13 @@ import { ref, computed, watch } from 'vue'
 import { Close, WarningFilled, FullScreen } from '@element-plus/icons-vue'
 import SubgraphChart from '@/components/SubgraphChart.vue'
 import type { SubgraphData, SubgraphNode } from '@/composables/useSubgraph'
+import type { KgHitNode } from '@/composables/useChat'
 import { TYPE_COLORS } from '@/constants/knowledgeColors'
 
 const props = defineProps<{
   visible: boolean
-  hitNodeName: string
-  hitNodeType: string
+  hitNodes: KgHitNode[]
+  activeIndex: number
   subgraphs: SubgraphData | null
   loading: boolean
   error: string | null
@@ -148,13 +171,16 @@ const props = defineProps<{
 
 defineEmits<{
   close: []
+  open: []
   retry: []
+  'select-page': [index: number]
 }>()
 
 const selectedDetail = ref<SubgraphNode | null>(null)
 const fullscreenDialogVisible = ref(false)
 
-const typeColor = computed(() => TYPE_COLORS[props.hitNodeType] || '#94A3B8')
+const currentHit = computed(() => props.hitNodes[props.activeIndex])
+const typeColor = computed(() => TYPE_COLORS[currentHit.value?.nodeType || ''] || '#94A3B8')
 
 function onNodeClick(node: SubgraphNode) {
   selectedDetail.value = node
@@ -223,6 +249,30 @@ watch(() => props.subgraphs, (sg) => {
   padding: 12px 16px;
   overflow-y: auto;
 }
+
+.hit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.page-caption { color: #64748b; font-size: 12px; white-space: nowrap; }
+
+.subgraph-panel-toggle {
+  align-self: center;
+  padding: 10px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #475569;
+  box-shadow: -4px 4px 14px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  font-size: 12px;
+  writing-mode: vertical-rl;
+}
+.subgraph-panel-toggle span { font-size: 20px; line-height: 1; }
 
 .error-state {
   display: flex;

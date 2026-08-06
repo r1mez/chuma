@@ -97,12 +97,12 @@ export function useChat() {
   const streamingReasoning = ref('')
   const chatMode = ref<ChatMode>('quick')
   const kgGraphIds = ref<number[]>([])
-  const kgHitNode = ref<KgHitNode | null>(null)
+  const kgHitNodes = ref<KgHitNode[]>([])
+  const activeKgHitIndex = ref(0)
   const subgraphPanelVisible = ref(false)
-  const subgraphManuallyClosed = ref(false)
   const suggesting = ref(false)
   const currentController = ref<AbortController | null>(null)
-  const { subgraphs, subgraphLoading, subgraphError, extractSubgraphs, clearSubgraphs } = useSubgraph()
+  const { subgraphs, subgraphLoading, subgraphErrors, extractSubgraphs, clearSubgraphs } = useSubgraph()
 
   function findMessage(messageId: string) {
     return messages.value.find(message => message.id === messageId)
@@ -115,16 +115,19 @@ export function useChat() {
     graph_name?: string
   }) {
     if (!data.node_id || !data.node_name || !data.node_type || !data.graph_name) return
-    if (subgraphManuallyClosed.value) return
-
-    kgHitNode.value = {
+    const hitNode: KgHitNode = {
       nodeId: data.node_id,
       nodeName: data.node_name,
       nodeType: data.node_type,
       graphName: data.graph_name,
     }
+    const existingIndex = kgHitNodes.value.findIndex(node =>
+      node.nodeId === hitNode.nodeId && node.graphName === hitNode.graphName,
+    )
+    const index = existingIndex >= 0 ? existingIndex : kgHitNodes.value.push(hitNode) - 1
+    activeKgHitIndex.value = index
     subgraphPanelVisible.value = true
-    extractSubgraphs(kgHitNode.value)
+    if (!subgraphs.value[index] && !subgraphLoading.value[index]) extractSubgraphs(hitNode, index)
     suggesting.value = true
   }
 
@@ -401,7 +404,14 @@ export function useChat() {
 
   function closeSubgraphPanel() {
     subgraphPanelVisible.value = false
-    subgraphManuallyClosed.value = true
+  }
+
+  function openSubgraphPanel() {
+    subgraphPanelVisible.value = true
+  }
+
+  function selectKgHitPage(index: number) {
+    if (index >= 0 && index < kgHitNodes.value.length) activeKgHitIndex.value = index
   }
 
   function selectSuggestedQuestion(question: SuggestedQuestion) {
@@ -411,9 +421,9 @@ export function useChat() {
   function clearMessages() {
     cancelCurrentRun()
     messages.value = []
-    kgHitNode.value = null
+    kgHitNodes.value = []
+    activeKgHitIndex.value = 0
     subgraphPanelVisible.value = false
-    subgraphManuallyClosed.value = false
     clearSubgraphs()
   }
 
@@ -425,12 +435,15 @@ export function useChat() {
     clearMessages,
     chatMode,
     kgGraphIds,
-    kgHitNode,
+    kgHitNodes,
+    activeKgHitIndex,
     subgraphPanelVisible,
     closeSubgraphPanel,
+    openSubgraphPanel,
+    selectKgHitPage,
     subgraphs,
     subgraphLoading,
-    subgraphError,
+    subgraphErrors,
     extractSubgraphs,
     suggesting,
     selectSuggestedQuestion,

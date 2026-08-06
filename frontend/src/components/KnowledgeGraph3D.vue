@@ -99,27 +99,41 @@ function initChart() {
 
       // 决定颜色 (实体化处理，不再使用透明度)
       const baseColorStr = isFocused ? '#FF8C00' : getColor(node.type)
-      const sphereColor = new THREE.Color(baseColorStr)
-      if (isDimmed) {
-        sphereColor.multiplyScalar(0.3) // 暗淡状态下，直接让颜色变暗，而不是变透明
-      }
 
-      // 绘制主球体 (使用 Phong 材质增加反光质感，完全实体化)
+      // 绘制主球体（普通实体球体，掌握度通过球体中央的百分比数字展示）
       const radius = Math.max(4, Math.min(10, 3 + (node.degree || 0) * 0.5))
       const currentRadius = isHovered ? radius * 1.2 : radius
       const geometry = new THREE.SphereGeometry(currentRadius, 32, 32)
-      const material = new THREE.MeshPhongMaterial({ 
-        color: sphereColor, 
-        transparent: false, // 彻底关闭透明，保证球体是实心的
-        opacity: 1,
-        shininess: isDimmed ? 10 : 60, // 高光反光
-        emissive: sphereColor,
-        emissiveIntensity: isFocused || isHovered ? 0.5 : (isDimmed ? 0.0 : 0.1)
+
+      // 掌握度（0~1），默认 0
+      const mastery = Math.max(0, Math.min(1, node.mastery || 0))
+
+      // 普通材质：暗淡状态下整体压暗
+      const material = new THREE.MeshPhongMaterial({
+        color: baseColorStr,
+        emissive: baseColorStr,
+        emissiveIntensity: isFocused || isHovered ? 0.6 : (isDimmed ? 0.05 : 0.15),
+        shininess: 30,
       })
       const sphere = new THREE.Mesh(geometry, material)
       group.add(sphere)
 
-      // 绘制文字标签
+      // 在球体中央显示掌握度百分比数字
+      try {
+        const SpriteTextClass = (SpriteText as any).default || SpriteText
+        const pctSprite = new SpriteTextClass(`${Math.round(mastery * 100)}%`)
+        pctSprite.color = '#FFFFFF'
+        pctSprite.textHeight = isFocused || isHovered ? 5 : 4
+        pctSprite.position.set(0, 0, 0) // 放在球体中心
+        pctSprite.material.depthWrite = false // 防止文字遮挡
+        pctSprite.material.depthTest = false // 始终绘制在球体之上，保证百分比数字可见
+        pctSprite.material.opacity = isDimmed ? 0.5 : 1
+        group.add(pctSprite)
+      } catch (e) {
+        console.error('SpriteText percent render error:', e)
+      }
+
+      // 绘制名称文字标签（放在球体下方）
       if (props.showLabels) {
         try {
           const SpriteTextClass = (SpriteText as any).default || SpriteText

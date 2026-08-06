@@ -190,6 +190,7 @@ import BorderGlow from '@/components/BorderGlow.vue'
 
 import { parseHierarchy, getVisibleData, tryDrillInto } from '@/utils/kgHierarchy'
 import type { GraphNode, GraphData } from '@/api/knowledge'
+import { fetchMasteryHierarchy } from '@/api/learning'
 
 const route = useRoute()
 const $router = useRouter()
@@ -198,6 +199,39 @@ const graphRef3D = ref<InstanceType<typeof KnowledgeGraph3D>>()
 const graphRef2D = ref<InstanceType<typeof KnowledgeGraph2D>>()
 const { showLabels, handleSearch } = useGraph()
 const selectedGraphId = ref<number | null>(null)
+
+// 掌握度映射：节点名 → 掌握度(0~1)，用于节点球"装水"可视化
+const masteryMap = ref<Record<string, number>>({})
+
+// 根据当前图谱的 course_id 加载掌握度层级树，并构建 节点名→掌握度 映射
+async function loadMastery() {
+  masteryMap.value = {}
+  const graph = store.graphList.find(g => g.id === selectedGraphId.value)
+  if (!graph || graph.course_id == null) return
+  try {
+    const hierarchy = await fetchMasteryHierarchy(graph.course_id)
+    const map: Record<string, number> = {}
+    const walk = (degree: number, name: string) => {
+      map[name] = Math.max(0, Math.min(1, degree / 5))
+    }
+    for (const chapter of hierarchy.chapters) {
+      walk(chapter.degree, chapter.name)
+      for (const section of chapter.sections) {
+        walk(section.degree, section.name)
+        for (const kp of section.knowledge_points) {
+          walk(kp.degree, kp.name)
+        }
+      }
+      for (const kp of chapter.knowledge_points) {
+        walk(kp.degree, kp.name)
+      }
+    }
+    masteryMap.value = map
+  } catch (e) {
+    console.error('加载掌握度失败:', e)
+    masteryMap.value = {}
+  }
+}
 
 // 钻取状态
 const drillPath = ref<GraphNode[]>([])
@@ -252,8 +286,17 @@ const currentGraphData = computed<GraphData | null>(() => {
   if (!store.graphData || !hierarchy.value) return store.graphData
   const base = getVisibleData(store.graphData, drillPath.value, hierarchy.value)
 
-  // 如果没有展开的节点，直接返回基础数据
-  if (expandedNodeMap.value.size === 0) return base
+  // 注入掌握度（节点名 → 掌握度 0~1），用于节点球"装水"可视化
+  const injectMastery = (nodes: GraphNode[]) =>
+    nodes.map(n => ({ ...n, mastery: masteryMap.value[n.name] ?? 0 }))
+
+  // 如果没有展开的节点，直接返回基础数据（注入掌握度）
+  if (expandedNodeMap.value.size === 0) {
+    return {
+      ...base,
+      nodes: injectMastery(base.nodes),
+    }
+  }
 
   // 合并展开节点
   const baseNodeIds = new Set(base.nodes.map(n => n.id))
@@ -277,7 +320,7 @@ const currentGraphData = computed<GraphData | null>(() => {
   }
 
   return {
-    nodes: mergedNodes,
+    nodes: injectMastery(mergedNodes),
     edges: mergedEdges,
     stats: {
       total_nodes: mergedNodes.length,
@@ -595,6 +638,7 @@ function onGraphSelect(graphId: number) {
   if (graph && graph.status === 'completed') {
     $router.push({ query: { graphId } })
   }
+  loadMastery()
 }
 
 async function handleDelete() {
@@ -681,12 +725,14 @@ async function selectGraphByCourse(courseId: number) {
 watch(() => [route.query.graphId, route.query.module], () => {
   drillPath.value = []
   loadGraphByRoute()
+  loadMastery()
 })
 
 onMounted(async () => {
   await store.loadGraphList()
   drillPath.value = []
   await loadGraphByRoute()
+  await loadMastery()
 })
 </script>
 

@@ -29,11 +29,23 @@ async def agent_chat_stream(req: AgentChatRequest):
 
     async def event_stream():
         try:
-            async for event in agent.run(req.message, req.history, req.kg_graph_ids, req.graph_names):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            async for event in agent.run(
+                req.message,
+                req.history,
+                req.kg_graph_ids,
+                req.graph_names,
+                req.message_id,
+            ):
+                event_id = event.get("event_id", "")
+                event_name = event.get("event", "message")
+                yield (
+                    f"id: {event_id}\n"
+                    f"event: {event_name}\n"
+                    f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                )
         except Exception as e:
             logger.error(f"Agent stream error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': '智能体服务暂时不可用'}, ensure_ascii=False)}\n\n"
         finally:
             yield "data: [DONE]\n\n"
 

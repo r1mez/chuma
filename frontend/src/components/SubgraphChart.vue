@@ -28,6 +28,13 @@ const chartRef = ref<HTMLElement>()
 const chartInstance = shallowRef<echarts.ECharts>()
 let resizeObserver: ResizeObserver | null = null
 
+// ECharts' force layout seeds node positions from the current canvas size.
+// Never initialise it while the surrounding panel is collapsed or unmeasured,
+// otherwise every node can receive (almost) the same x coordinate and remain
+// trapped in a one-dimensional layout after a later resize.
+const MIN_RENDER_WIDTH = 160
+const MIN_RENDER_HEIGHT = 160
+
 // Size scaling based on fullscreen mode
 const sizeScale = props.fullscreen ? 1.5 : 1
 const fontScale = props.fullscreen ? 1.2 : 1
@@ -45,8 +52,12 @@ function getNodeColor(node: SubgraphNode): string {
   return TYPE_COLORS[node.type] || '#94A3B8'
 }
 
-function initChart() {
-  if (!chartRef.value) return
+function hasRenderableSize(element: HTMLElement): boolean {
+  return element.clientWidth >= MIN_RENDER_WIDTH && element.clientHeight >= MIN_RENDER_HEIGHT
+}
+
+function initChart(): boolean {
+  if (!chartRef.value || chartInstance.value || !hasRenderableSize(chartRef.value)) return false
   chartInstance.value = echarts.init(chartRef.value)
 
   chartInstance.value.on('click', (params: any) => {
@@ -56,11 +67,11 @@ function initChart() {
   })
 
   updateChart()
+  return true
 }
 
 function updateChart() {
   if (!chartInstance.value) return
-  if (!props.nodes.length && !props.edges.length) return
 
   // Build node set including hit node
   const hitNodePlaceholder: SubgraphNode = {
@@ -146,8 +157,8 @@ function updateChart() {
   }))
 
   const forceParams = props.fullscreen
-    ? { repulsion: 600, edgeLength: 150, gravity: 0.08 }
-    : { repulsion: 300, edgeLength: 100, gravity: 0.15 }
+    ? { initLayout: 'circular', repulsion: 600, edgeLength: 150, gravity: 0.08 }
+    : { initLayout: 'circular', repulsion: 300, edgeLength: 100, gravity: 0.15 }
 
   const option = {
     backgroundColor: 'transparent',
@@ -190,12 +201,23 @@ watch(() => [props.nodes, props.edges, props.hitNodeId, props.roam, props.fullsc
 }, { deep: true })
 
 onMounted(() => {
-  initChart()
   if (chartRef.value) {
-    resizeObserver = new ResizeObserver(() => {
-      chartInstance.value?.resize()
+    resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry || !chartRef.value || !hasRenderableSize(chartRef.value)) return
+
+      if (!chartInstance.value) {
+        initChart()
+        return
+      }
+
+      chartInstance.value.resize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      })
     })
     resizeObserver.observe(chartRef.value)
+    initChart()
   }
 })
 

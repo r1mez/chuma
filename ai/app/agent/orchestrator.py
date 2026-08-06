@@ -3,8 +3,12 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
+from uuid import uuid4
 
+from app.agent.schemas import ToolExecutionResult
 from app.agent.suggestions import generate_suggested_questions
 from app.agent.tool_registry import ToolRegistry
 from app.engines.llm.client import LLMClient
@@ -235,21 +239,35 @@ class AgentOrchestrator:
         history: list[dict],
         kg_graph_ids: list[int] | None = None,
         graph_names: list[str] | None = None,
+        message_id: str | None = None,
     ) -> AsyncIterator[dict]:
-        """执行 Agent 循环，流式输出 SSE 事件
-
-        Yields:
-            {"type": "tool_used", "tool": str, "query": str}
-            {"type": "tool_result", "tool": str, "preview": str}
-            {"type": "kg_hit", "node_id": str, "node_name": str, "node_type": str, "graph_name": str}
-            {"type": "content", "content": str}
-            {"type": "done"}
-            {"type": "error", "content": str}
-        """
+        """执行 Agent 循环，输出不包含私有推理的 v2 生命周期事件。"""
         # Set contextvars for downstream use (system prompt reads these)
         from app.agent.context import current_kg_graph_ids, current_graph_names
         current_kg_graph_ids.set(kg_graph_ids or [])
         current_graph_names.set(graph_names or [])
+
+        run_id = f"run_{uuid4().hex}"
+        resolved_message_id = message_id or f"msg_{uuid4().hex}"
+        sequence = 0
+        run_started = time.perf_counter()
+
+        def now_iso() -> str:
+            return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        def event(name: str, data: dict | None = None) -> dict:
+            nonlocal sequence
+            sequence += 1
+            return {
+                "version": 2,
+                "event": name,
+                "event_id": f"evt_{uuid4().hex}",
+                "run_id": run_id,
+                "message_id": resolved_message_id,
+                "seq": sequence,
+                "timestamp": now_iso(),
+                "data": data or {},
+            }
 
         # Build initial messages — prompt is dynamic so it captures MCP tools too
         messages: list[dict] = [
@@ -262,8 +280,25 @@ class AgentOrchestrator:
         self._messages = messages  # Store for suggestions context
 
         tools = ToolRegistry.get_definitions()
+        planning_started = time.perf_counter()
+        planning_completed = False
+        processing_step: tuple[str, float] | None = None
 
         try:
+            yield event("run.started", {
+                "summary": "正在分析问题并选择合适的资料来源",
+            })
+            yield event("step.started", {
+                "step": {
+                    "id": "planning",
+                    "kind": "planning",
+                    "title": "分析任务",
+                    "description": "理解问题并准备执行步骤",
+                    "status": "running",
+                    "started_at": now_iso(),
+                },
+            })
+
             # Agent loop
             for turn in range(MAX_TURNS):
                 response = await self.llm.chat(
@@ -272,8 +307,37 @@ class AgentOrchestrator:
                     temperature=0.7,
                 )
 
+                if processing_step:
+                    processing_id, processing_started = processing_step
+                    yield event("step.completed", {
+                        "step_id": processing_id,
+                        "duration_ms": round((time.perf_counter() - processing_started) * 1000),
+                    })
+                    processing_step = None
+
                 # Process tool calls (priority over content, per spec)
                 if response.tool_calls:
+                    planned_steps = []
+                    for index, tc in enumerate(response.tool_calls):
+                        step_id = tc.id or f"tool_{turn}_{index}"
+                        ui = ToolRegistry.get_ui_presentation(tc.name, tc.arguments)
+                        planned_steps.append({
+                            "id": step_id,
+                            "kind": "tool",
+                            "title": ui["display_name"],
+                            "description": ui["purpose"],
+                        })
+
+                    yield event("plan.updated", {
+                        "summary": "将查询相关资料，再根据结果整理回答",
+                        "steps": planned_steps,
+                    })
+                    if not planning_completed:
+                        yield event("step.completed", {
+                            "step_id": "planning",
+                            "duration_ms": round((time.perf_counter() - planning_started) * 1000),
+                        })
+                        planning_completed = True
 
                     # First append assistant message with tool_calls
                     assistant_msg: dict = {
@@ -294,13 +358,20 @@ class AgentOrchestrator:
                     messages.append(assistant_msg)
 
                     # Execute each tool call
-                    for tc in response.tool_calls:
-                        # Notify frontend
-                        yield {
-                            "type": "tool_used",
-                            "tool": tc.name,
-                            "query": str(tc.arguments.get("query", tc.arguments)),
-                        }
+                    for index, tc in enumerate(response.tool_calls):
+                        step_id = tc.id or f"tool_{turn}_{index}"
+                        ui = ToolRegistry.get_ui_presentation(tc.name, tc.arguments)
+                        yield event("step.started", {
+                            "step": {
+                                "id": step_id,
+                                "kind": "tool",
+                                "title": ui["display_name"],
+                                "description": ui["purpose"],
+                                "status": "running",
+                                "started_at": now_iso(),
+                                "tool": ui,
+                            },
+                        })
 
                         # Execute with timeout
                         try:
@@ -309,74 +380,196 @@ class AgentOrchestrator:
                                 timeout=TOOL_TIMEOUT,
                             )
                         except asyncio.TimeoutError:
-                            result = "工具调用超时"
+                            result = ToolExecutionResult(
+                                raw="工具调用超时",
+                                success=False,
+                                summary="工具执行超时",
+                                duration_ms=round(TOOL_TIMEOUT * 1000),
+                                metrics={},
+                                error_code="TOOL_TIMEOUT",
+                                error_message="查询用时过长，已停止本次工具调用",
+                                retryable=True,
+                            )
                         except Exception as e:
                             logger.error(f"Tool execution error: {e}")
-                            result = f"执行出错: {str(e)}"
+                            result = ToolExecutionResult(
+                                raw=f"执行出错: {str(e)}",
+                                success=False,
+                                summary="工具执行未成功",
+                                duration_ms=0,
+                                metrics={},
+                                error_code="TOOL_EXECUTION_ERROR",
+                                error_message="工具执行未成功，请稍后重试",
+                                retryable=True,
+                            )
 
-                        # Result preview (first 80 chars)
-                        preview = result[:80] + "..." if len(result) > 80 else result
-                        yield {
-                            "type": "tool_result",
-                            "tool": tc.name,
-                            "preview": preview.replace("\n", " "),
-                        }
+                        if result.success:
+                            yield event("step.completed", {
+                                "step_id": step_id,
+                                "duration_ms": result.duration_ms,
+                                "result": {
+                                    "summary": result.summary,
+                                    "metrics": result.metrics,
+                                },
+                            })
+                        else:
+                            yield event("step.failed", {
+                                "step_id": step_id,
+                                "duration_ms": result.duration_ms,
+                                "result": {"summary": result.summary},
+                                "error": {
+                                    "message": result.error_message or "工具执行未成功",
+                                    "code": result.error_code,
+                                    "retryable": result.retryable,
+                                },
+                            })
 
                         # Emit kg_hit event when search_kg returns results
-                        if tc.name == "search_kg" and not result.startswith("未在知识图谱中找到"):
+                        if tc.name == "search_kg" and result.success and not result.raw.startswith("未在知识图谱中找到"):
                             g_names = current_graph_names.get()
-                            hit_node = _parse_first_kg_node(result, g_names)
+                            hit_node = _parse_first_kg_node(result.raw, g_names)
                             if hit_node:
                                 self._kg_hit_info = hit_node  # Store for suggestions
-                                yield {
-                                    "type": "kg_hit",
+                                yield event("knowledge.hit", {
                                     "node_id": hit_node["id"],
                                     "node_name": hit_node["name"],
                                     "node_type": hit_node["type"],
                                     "graph_name": hit_node["graph_name"],
-                                }
+                                })
 
                         # Append tool result
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": result,
+                            "content": result.raw,
                         })
+
+                    processing_id = f"processing_{turn}"
+                    processing_started = time.perf_counter()
+                    processing_step = (processing_id, processing_started)
+                    yield event("step.started", {
+                        "step": {
+                            "id": processing_id,
+                            "kind": "processing",
+                            "title": "整理查询结果",
+                            "description": "核对工具返回的信息并准备下一步",
+                            "status": "running",
+                            "started_at": now_iso(),
+                        },
+                    })
 
                     # Continue loop for next LLM call
                     continue
 
                 # No tool calls — this is the final answer
+                if not planning_completed:
+                    yield event("plan.updated", {
+                        "summary": "问题信息已经足够，将直接组织回答",
+                    })
+                    yield event("step.completed", {
+                        "step_id": "planning",
+                        "duration_ms": round((time.perf_counter() - planning_started) * 1000),
+                    })
+                    planning_completed = True
+
+                generation_started = time.perf_counter()
+                yield event("step.started", {
+                    "step": {
+                        "id": "generating",
+                        "kind": "generating",
+                        "title": "生成最终回答",
+                        "description": "根据已获取的信息整理清晰回答",
+                        "status": "running",
+                        "started_at": now_iso(),
+                    },
+                })
                 # Stream it to the user (pass tools with tool_choice=none to prevent
                 # DeepSeek from emitting DSML tool-call markers in the content stream)
                 async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                     if chunk.get("content"):
-                        yield {"type": "content", "content": chunk["content"]}
+                        yield event("answer.delta", {"delta": chunk["content"]})
+
+                yield event("step.completed", {
+                    "step_id": "generating",
+                    "duration_ms": round((time.perf_counter() - generation_started) * 1000),
+                })
 
                 # Emit suggested questions if a kg_hit occurred
-                suggestions_event = await self._emit_suggestions()
-                if suggestions_event:
-                    yield suggestions_event
+                if self._kg_hit_info:
+                    suggesting_started = time.perf_counter()
+                    yield event("step.started", {
+                        "step": {
+                            "id": "suggesting",
+                            "kind": "suggesting",
+                            "title": "生成后续学习建议",
+                            "description": "根据命中知识点推荐下一步问题",
+                            "status": "running",
+                            "started_at": now_iso(),
+                        },
+                    })
+                    suggestions_event = await self._emit_suggestions()
+                    if suggestions_event:
+                        yield event("suggestions.ready", {
+                            "questions": suggestions_event["questions"],
+                        })
+                    yield event("step.completed", {
+                        "step_id": "suggesting",
+                        "duration_ms": round((time.perf_counter() - suggesting_started) * 1000),
+                    })
 
-                yield {"type": "done"}
+                yield event("run.completed", {
+                    "duration_ms": round((time.perf_counter() - run_started) * 1000),
+                })
                 return
 
             # Max turns reached without convergence — force final answer
             logger.warning(f"Agent reached max turns ({MAX_TURNS}), forcing final answer")
             messages.append({"role": "system", "content": FORCE_ANSWER_PROMPT})
 
+            if processing_step:
+                processing_id, processing_started = processing_step
+                yield event("step.completed", {
+                    "step_id": processing_id,
+                    "duration_ms": round((time.perf_counter() - processing_started) * 1000),
+                })
+
+            generation_started = time.perf_counter()
+            yield event("step.started", {
+                "step": {
+                    "id": "generating",
+                    "kind": "generating",
+                    "title": "生成最终回答",
+                    "description": "根据已有信息整理回答",
+                    "status": "running",
+                    "started_at": now_iso(),
+                },
+            })
+
             async for chunk in self.llm.stream(messages, temperature=0.7, tools=tools, tool_choice="none"):
                 if chunk.get("content"):
-                    yield {"type": "content", "content": chunk["content"]}
+                    yield event("answer.delta", {"delta": chunk["content"]})
+
+            yield event("step.completed", {
+                "step_id": "generating",
+                "duration_ms": round((time.perf_counter() - generation_started) * 1000),
+            })
 
             # Emit suggested questions if a kg_hit occurred
             suggestions_event = await self._emit_suggestions()
             if suggestions_event:
-                yield suggestions_event
+                yield event("suggestions.ready", {"questions": suggestions_event["questions"]})
 
-            yield {"type": "done"}
+            yield event("run.completed", {
+                "duration_ms": round((time.perf_counter() - run_started) * 1000),
+            })
 
         except Exception as e:
             logger.error(f"Agent run failed: {e}")
-            yield {"type": "error", "content": f"Agent 处理异常: {str(e)}"}
-            yield {"type": "done"}
+            yield event("run.failed", {
+                "duration_ms": round((time.perf_counter() - run_started) * 1000),
+                "error": {
+                    "message": "智能体执行遇到问题，请稍后重试",
+                    "code": "AGENT_EXECUTION_ERROR",
+                    "retryable": True,
+                },
+            })

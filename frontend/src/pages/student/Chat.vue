@@ -1,11 +1,13 @@
 <template>
   <div class="chat-page">
-    <!-- 顶部栏 -->
     <div class="chat-header">
-      <h3>AI 助学</h3>
+      <div>
+        <h3>AI 助学</h3>
+        <span v-if="chatMode === 'agent'" class="mode-description">可查看任务规划、工具调用和知识来源</span>
+      </div>
       <div class="header-actions">
         <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper">
-          <GooeyNav 
+          <GooeyNav
             :items="navItems"
             v-model="chatMode"
             :particle-count="15"
@@ -24,23 +26,31 @@
       </div>
     </div>
 
-    <!-- 消息列表 + 子图面板 -->
     <div class="chat-body">
-      <div class="chat-messages" ref="messagesRef">
-        <div v-if="messages.length === 0" class="empty-state">
-          <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-          <p>开始向 AI 助学提问吧！</p>
-          <p class="hint">支持 408 考研、数据库原理等计算机科学问题</p>
+      <div class="messages-shell">
+        <div class="chat-messages" ref="messagesRef" @scroll="handleMessagesScroll">
+          <div v-if="messages.length === 0" class="empty-state">
+            <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
+            <p>开始向 AI 助学提问吧！</p>
+            <p class="hint">智能体模式会展示任务规划、资料查询和答案生成进度</p>
+          </div>
+          <ChatMessage
+            v-for="msg in messages"
+            :key="msg.id"
+            :message="msg"
+            :loading="loading && msg.id === lastMessageId"
+            :suggesting="suggesting && msg.id === lastMessageId && msg.mode === 'agent'"
+            @select-question="handleSelectQuestion"
+          />
         </div>
-        <ChatMessage
-          v-for="(msg, i) in messages"
-          :key="i"
-          :message="msg"
-          :loading="loading && i === messages.length - 1"
-          :suggesting="suggesting && i === messages.length - 1 && chatMode === 'agent'"
-          @select-question="handleSelectQuestion"
-        />
+        <transition name="jump">
+          <button v-if="showJumpToLatest" class="jump-latest" type="button" @click="scrollToLatest(true)">
+            返回最新
+            <span aria-hidden="true">↓</span>
+          </button>
+        </transition>
       </div>
+
       <ChatSubgraphPanel
         v-if="chatMode === 'agent'"
         :visible="subgraphPanelVisible"
@@ -54,13 +64,12 @@
       />
     </div>
 
-    <!-- 输入框 -->
-    <ChatInput :loading="loading" @send="sendMessage" />
+    <ChatInput :loading="loading" @send="handleSend" @cancel="cancelCurrentRun" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
@@ -71,12 +80,27 @@ import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
 import type { SuggestedQuestion } from '@/api/ai'
 
 const {
-  messages, loading, sendMessage, clearMessages, chatMode,
-  kgHitNode, subgraphPanelVisible, closeSubgraphPanel,
-  subgraphs, subgraphLoading, subgraphError, extractSubgraphs,
-  suggesting, selectSuggestedQuestion,
+  messages,
+  loading,
+  sendMessage,
+  cancelCurrentRun,
+  clearMessages,
+  chatMode,
+  kgHitNode,
+  subgraphPanelVisible,
+  closeSubgraphPanel,
+  subgraphs,
+  subgraphLoading,
+  subgraphError,
+  extractSubgraphs,
+  suggesting,
+  selectSuggestedQuestion,
 } = useChat()
+
 const messagesRef = ref<HTMLElement>()
+const nearBottom = ref(true)
+const showJumpToLatest = ref(false)
+const lastMessageId = computed(() => messages.value[messages.value.length - 1]?.id)
 
 const navItems = [
   { label: '快速回答', value: 'quick' },
@@ -85,34 +109,59 @@ const navItems = [
 ]
 
 function handleSelectQuestion(question: SuggestedQuestion) {
+  nearBottom.value = true
+  showJumpToLatest.value = false
   selectSuggestedQuestion(question)
 }
 
-function handleRetrySubgraph() {
-  if (kgHitNode.value) {
-    extractSubgraphs(kgHitNode.value)
-  }
+function handleSend(content: string) {
+  nearBottom.value = true
+  showJumpToLatest.value = false
+  sendMessage(content)
+  scrollToLatest(true)
 }
 
-// 自动滚动到底部
+function handleRetrySubgraph() {
+  if (kgHitNode.value) extractSubgraphs(kgHitNode.value)
+}
+
+function handleMessagesScroll() {
+  const element = messagesRef.value
+  if (!element) return
+  const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight
+  nearBottom.value = distanceToBottom < 96
+  if (nearBottom.value) showJumpToLatest.value = false
+}
+
+async function scrollToLatest(force = false) {
+  await nextTick()
+  const element = messagesRef.value
+  if (!element) return
+  if (!force && !nearBottom.value) {
+    showJumpToLatest.value = true
+    return
+  }
+  element.scrollTo({ top: element.scrollHeight, behavior: force ? 'smooth' : 'auto' })
+  nearBottom.value = true
+  showJumpToLatest.value = false
+}
+
 watch(
   () => messages.value.length,
-  async () => {
-    await nextTick()
-    if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-    }
-  },
+  () => scrollToLatest(),
 )
-// 流式输出时也要滚动
+
 watch(
-  () => messages.value[messages.value.length - 1]?.content,
-  async () => {
-    await nextTick()
-    if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-    }
+  () => {
+    const last = messages.value[messages.value.length - 1]
+    return [
+      last?.content.length || 0,
+      last?.agentRun?.steps.length || 0,
+      last?.agentRun?.steps.map(step => step.status).join(',') || '',
+      last?.suggestedQuestions?.length || 0,
+    ]
   },
+  () => scrollToLatest(),
 )
 </script>
 
@@ -137,74 +186,49 @@ watch(
   backdrop-filter: blur(10px);
   color: #1f2937;
 }
-.chat-header h3 {
-  margin: 0;
-  font-size: 16px;
-}
-.header-actions {
+.chat-header h3 { margin: 0; font-size: 16px; }
+.mode-description { display: block; margin-top: 2px; color: #94a3b8; font-size: 11px; }
+.header-actions { display: flex; gap: 16px; align-items: center; }
+.clear-btn { margin-left: 0; padding: 8px 16px; }
+.nav-wrapper, .nav-wrapper :deep(.inner-content) { border-radius: 9999px; }
+.nav-wrapper :deep(.inner-content), .clear-btn-wrapper :deep(.inner-content) { background: #e5e8e4; }
+.chat-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.messages-shell { position: relative; flex: 1; min-width: 0; }
+.chat-messages { height: 100%; overflow-y: auto; padding: 20px; box-sizing: border-box; scroll-behavior: smooth; }
+.chat-messages::-webkit-scrollbar { width: 8px; }
+.chat-messages::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.02); border-radius: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 4px; }
+.chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6b7280; }
+.empty-state p { margin: 8px 0 0; font-size: 14px; color: #4b5563; }
+.hint { font-size: 12px !important; color: #9ca3af !important; }
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
   display: flex;
-  gap: 16px;
   align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #dbe3ec;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #475569;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  font-size: 12px;
 }
-.clear-btn {
-  margin-left: 0;
-  padding: 8px 16px;
+.jump-enter-active, .jump-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.jump-enter-from, .jump-leave-to { opacity: 0; transform: translate(-50%, 8px); }
+@media (max-width: 800px) {
+  .chat-header { align-items: flex-start; gap: 8px; }
+  .header-actions { gap: 8px; }
+  .mode-description { display: none; }
+  .chat-messages { padding: 14px 10px; }
 }
-.nav-wrapper :deep(.inner-content) {
-  background: #e5e8e4;
-  border-radius: 9999px; /* 让边框适配胶囊形状 */
-}
-.nav-wrapper {
-  border-radius: 9999px; /* 外层也改为胶囊状 */
-}
-.clear-btn-wrapper :deep(.inner-content) {
-  background: #e5e8e4;
-}
-.chat-body {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-/* 自定义滚动条样式 */
-.chat-messages::-webkit-scrollbar {
-  width: 8px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #6b7280;
-}
-.empty-state p {
-  margin: 8px 0 0;
-  font-size: 14px;
-  color: #4b5563;
-}
-.hint {
-  font-size: 12px !important;
-  color: #9ca3af;
+@media (prefers-reduced-motion: reduce) {
+  .chat-messages { scroll-behavior: auto; }
+  .jump-enter-active, .jump-leave-active { transition: none; }
 }
 </style>

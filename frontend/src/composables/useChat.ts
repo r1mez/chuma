@@ -184,6 +184,7 @@ export function useChat() {
         if (step.tool && data.result) {
           step.tool.resultSummary = data.result.summary
           step.tool.metrics = data.result.metrics
+          step.tool.documentExcerpt = data.result.document_excerpt
         }
         break
       }

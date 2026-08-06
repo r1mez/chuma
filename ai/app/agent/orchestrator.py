@@ -20,6 +20,11 @@ FORCE_ANSWER_PROMPT = "请基于已有信息直接回答用户问题，不要再
 
 MAX_TURNS = 10
 TOOL_TIMEOUT = 10.0
+TOOL_TIMEOUTS = {
+    # A cold semantic KG lookup may need to build node-name indexes for several
+    # selected graphs. Subsequent calls reuse the process-local indexes.
+    "search_kg": 30.0,
+}
 
 
 def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict | None:
@@ -374,17 +379,18 @@ class AgentOrchestrator:
                         })
 
                         # Execute with timeout
+                        tool_timeout = TOOL_TIMEOUTS.get(tc.name, TOOL_TIMEOUT)
                         try:
                             result = await asyncio.wait_for(
                                 ToolRegistry.execute(tc.name, tc.arguments, self.user_id),
-                                timeout=TOOL_TIMEOUT,
+                                timeout=tool_timeout,
                             )
                         except asyncio.TimeoutError:
                             result = ToolExecutionResult(
                                 raw="工具调用超时",
                                 success=False,
                                 summary="工具执行超时",
-                                duration_ms=round(TOOL_TIMEOUT * 1000),
+                                duration_ms=round(tool_timeout * 1000),
                                 metrics={},
                                 error_code="TOOL_TIMEOUT",
                                 error_message="查询用时过长，已停止本次工具调用",
@@ -404,13 +410,18 @@ class AgentOrchestrator:
                             )
 
                         if result.success:
+                            # Only document retrieval results are user-facing source
+                            # material. Other raw tool responses stay in the model context.
+                            result_data = {
+                                "summary": result.summary,
+                                "metrics": result.metrics,
+                            }
+                            if tc.name == "read_document":
+                                result_data["document_excerpt"] = result.raw
                             yield event("step.completed", {
                                 "step_id": step_id,
                                 "duration_ms": result.duration_ms,
-                                "result": {
-                                    "summary": result.summary,
-                                    "metrics": result.metrics,
-                                },
+                                "result": result_data,
                             })
                         else:
                             yield event("step.failed", {

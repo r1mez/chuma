@@ -2,6 +2,7 @@
 import logging
 
 from app.agent.context import current_graph_names
+from app.agent.node_semantic_search import semantic_search_nodes
 from app.agent.tool_registry import ToolRegistry
 from app.kg_pipeline.queries import search_nodes, GraphQueryError
 
@@ -49,11 +50,31 @@ async def search_kg(user_id: int, query: str, top_k: int = 10) -> str:
                     continue
             nodes = all_nodes
 
+        semantic_fallback = False
+        if not nodes:
+            try:
+                # The exact/substring lookup missed. Compare the query embedding
+                # with every node-name embedding and take the nearest node.
+                nodes = await semantic_search_nodes(
+                    query,
+                    graph_names=graph_names or None,
+                    top_k=1,
+                )
+                semantic_fallback = bool(nodes)
+            except Exception as e:
+                # Embedding is a fallback only. Keep the original not-found
+                # response if the embedding service is temporarily unavailable.
+                logger.warning("search_kg semantic fallback failed: %s", e)
+
         if not nodes:
             return f"未在知识图谱中找到与 '{query}' 相关的概念。建议尝试其他关键词。"
 
         limited = nodes[:top_k]
-        output_lines = [f"知识图谱查询结果（关键词: {query}，共 {len(nodes)} 个结果，展示前 {len(limited)} 个）:\n"]
+        fallback_note = "（节点名语义降级命中）" if semantic_fallback else ""
+        output_lines = [
+            f"知识图谱查询结果{fallback_note}（关键词: {query}，"
+            f"共 {len(nodes)} 个结果，展示前 {len(limited)} 个）:\n"
+        ]
 
         for node in limited:
             output_lines.append(

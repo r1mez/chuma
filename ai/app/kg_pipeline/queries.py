@@ -1,6 +1,7 @@
 """AGE 图数据只读查询封装"""
 
 import logging
+import json
 from typing import Any, Optional
 
 from app.kg_pipeline.storage import AgeStorage, AgeConnectionError
@@ -130,6 +131,53 @@ def search_nodes(query: str, graph_name: Optional[str] = None) -> list[dict]:
     return results
 
 
+def list_nodes(graph_name: Optional[str] = None) -> list[dict]:
+    """Return every entity node in one graph for semantic-name matching.
+
+    This fetches nodes only (rather than calling ``get_full_graph``), because
+    the semantic fallback does not need edges and may run on large graphs.
+    """
+    storage = AgeStorage(graph_name=graph_name)
+    effective_graph_name = storage._graph_name
+    try:
+        conn = storage._get_conn()
+    except AgeConnectionError as e:
+        raise GraphQueryError(f"Cannot connect to AGE: {e}") from e
+    try:
+        with conn.cursor() as cur:
+            cur.execute("LOAD 'age';")
+            cur.execute("SET search_path TO ag_catalog, public;")
+            cur.execute(
+                f"SELECT * FROM cypher('{storage._graph_name}', $$ "
+                f"MATCH (n:Entity) "
+                f"RETURN n.id, n.name, n.type, n.description "
+                f"$$) AS (id agtype, name agtype, type agtype, description agtype)"
+            )
+            rows = cur.fetchall()
+    except Exception as e:
+        logger.error(f"Graph node listing failed: {e}")
+        raise GraphQueryError(str(e)) from e
+    finally:
+        conn.close()
+
+    seen: set[str] = set()
+    results = []
+    for row in rows:
+        node_id = _strip_agtype(row[0])
+        if node_id in seen:
+            continue
+        seen.add(node_id)
+        results.append({
+            "id": node_id,
+            "name": _strip_agtype(row[1]) or node_id,
+            "type": _strip_agtype(row[2]),
+            "description": _strip_agtype(row[3]),
+            "graph_name": effective_graph_name,
+        })
+    results.sort(key=lambda node: (node["id"], node["name"]))
+    return results
+
+
 def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
@@ -140,5 +188,10 @@ def _strip_agtype(value) -> str:
         return ""
     s = str(value)
     if s.startswith('"') and s.endswith('"'):
-        s = s[1:-1]
+        # agtype strings use JSON escaping. Plain quote stripping leaves values
+        # such as ``fs\\_struct`` escaped and later lookups fail to match them.
+        try:
+            return str(json.loads(s))
+        except (json.JSONDecodeError, TypeError):
+            s = s[1:-1]
     return s

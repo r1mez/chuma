@@ -15,6 +15,7 @@ export interface AgentToolPresentation {
   purpose?: string
   inputSummary?: AgentToolField[]
   resultSummary?: string
+  documentExcerpt?: string
   metrics?: Record<string, number | string>
 }
 
@@ -87,6 +88,7 @@ export interface AgentEventData {
   result?: {
     summary: string
     metrics?: Record<string, number | string>
+    document_excerpt?: string
   }
   error?: AgentStepError
   node_id?: string

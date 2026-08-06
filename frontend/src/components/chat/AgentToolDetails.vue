@@ -11,6 +11,10 @@
       <span class="result-label">结果</span>
       <span>{{ tool.resultSummary }}</span>
     </div>
+    <div v-if="tool.documentExcerpt" class="document-excerpt">
+      <span class="excerpt-label">教材原文</span>
+      <pre>{{ tool.documentExcerpt }}</pre>
+    </div>
   </div>
 </template>
 
@@ -47,4 +51,23 @@ defineProps<{ tool: AgentToolPresentation }>()
   border-top: 1px solid #e2e8f0;
 }
 .result-label { color: #94a3b8; flex-shrink: 0; }
+.document-excerpt {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+.excerpt-label { display: block; margin-bottom: 6px; color: #94a3b8; }
+.document-excerpt pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 </style>

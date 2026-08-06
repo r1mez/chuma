@@ -182,14 +182,13 @@ watch(() => props.subgraphs, (sg) => {
 }
 
 .slide-enter-active, .slide-leave-active {
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  will-change: transform, opacity;
   overflow: hidden;
 }
 .slide-enter-from, .slide-leave-to {
-  width: 0;
-  min-width: 0;
+  transform: translateX(100%);
   opacity: 0;
-  overflow: hidden;
 }
 
 .panel-header {

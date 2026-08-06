@@ -39,7 +39,7 @@ const hasDetails = computed(() => !!(props.step.description || props.step.tool |
 
 watch(() => props.step.status, status => {
   if (status === 'running' || status === 'failed') expanded.value = true
-  else if (status === 'success') expanded.value = false
+  else if (status === 'success') expanded.value = Boolean(props.step.tool?.documentExcerpt)
 })
 
 function formatDuration(milliseconds: number): string {

@@ -52,6 +52,9 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     }
     loading.value = true
     error.value = null
+    // Avoid searching a previous graph after a failed graph switch.
+    graphData.value = null
+    selectedNode.value = null
     try {
       const data = await fetchGraphData(graphName)
       if (!data.nodes || data.nodes.length === 0) {
@@ -62,6 +65,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
       }
       currentGraphName.value = graphName || null
     } catch (e: any) {
+      currentGraphName.value = null
       if (e.message?.includes?.('Network') || e.code === 'ERR_NETWORK') {
         error.value = { type: 'network', message: '无法连接服务器' }
       } else {

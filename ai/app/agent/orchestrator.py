@@ -21,7 +21,7 @@ TOOL_TIMEOUT = 10.0
 def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict | None:
     """Parse nodes from search_kg output text and return the best one by type priority.
 
-    Expected format: "- {name} [{type}] (id:{id}): {description}"
+    Expected format: "- {name} [{type}] (id:{id}, graph:{graph_name}): {description}"
     Type priority: Algorithm > DataStructure > Concept > Principle > Protocol > Term > Technology > Model > Chapter > others
     This ensures we pick a real knowledge point (e.g. "冒泡排序 [Algorithm]") over a
     chapter heading (e.g. "8.3.1 冒泡排序 [Chapter]").
@@ -38,14 +38,14 @@ def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict 
     DEFAULT_PRIORITY = 5
 
     # Parse ALL node lines from the text
-    pattern = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^)]+)\):\s+(.*)'
+    pattern = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^,\)]+),\s*graph:([^\)]+)\):\s+(.*)'
     candidates: list[dict] = []
     for match in re.finditer(pattern, tool_result_text):
         candidates.append({
             "id": match.group(3),
             "name": match.group(1),
             "type": match.group(2),
-            "graph_name": graph_names[0] if graph_names else "",
+            "graph_name": match.group(4).strip() or (graph_names[0] if graph_names else ""),
         })
 
     if candidates:
@@ -53,14 +53,25 @@ def _parse_first_kg_node(tool_result_text: str, graph_names: list[str]) -> dict 
         candidates.sort(key=lambda n: (TYPE_PRIORITY.get(n["type"], DEFAULT_PRIORITY), len(n["name"])))
         return candidates[0]
 
-    # Fallback: try without id (old format)
-    pattern_old = r'-\s+(.+?)\s+\[(\w+)\]:\s+(.*)'
+    # Fallback: accept the pre-graph format emitted by older AI processes.
+    pattern_old = r'-\s+(.+?)\s+\[(\w+)\]\s+\(id:([^\)]+)\):\s+(.*)'
     match_old = re.search(pattern_old, tool_result_text)
     if match_old:
         return {
-            "id": "",
+            "id": match_old.group(3),
             "name": match_old.group(1),
             "type": match_old.group(2),
+            "graph_name": graph_names[0] if graph_names else "",
+        }
+
+    # Last-resort fallback for very old results without an id.
+    pattern_very_old = r'-\s+(.+?)\s+\[(\w+)\]:\s+(.*)'
+    match_very_old = re.search(pattern_very_old, tool_result_text)
+    if match_very_old:
+        return {
+            "id": "",
+            "name": match_very_old.group(1),
+            "type": match_very_old.group(2),
             "graph_name": graph_names[0] if graph_names else "",
         }
 

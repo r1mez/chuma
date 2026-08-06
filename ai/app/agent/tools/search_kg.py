@@ -57,7 +57,11 @@ async def search_kg(user_id: int, query: str, top_k: int = 10) -> str:
 
         for node in limited:
             output_lines.append(
-                f"- {node['name']} [{node.get('type', 'Concept')}] (id:{node['id']}): {node.get('description', '无描述')}"
+                # Preserve the source graph because the agent forwards this
+                # result as the graph_name in the kg_hit event.
+                f"- {node['name']} [{node.get('type', 'Concept')}] "
+                f"(id:{node['id']}, graph:{node.get('graph_name', '')}): "
+                f"{node.get('description', '无描述')}"
             )
 
         return "\n".join(output_lines)

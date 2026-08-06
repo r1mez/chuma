@@ -36,12 +36,18 @@ class LearningService:
         result = await db.execute(
             select(StudentKnowledgeMastery).where(
                 StudentKnowledgeMastery.stu_id == stu_id,
+                StudentKnowledgeMastery.course_id == data.course_id,
                 StudentKnowledgeMastery.kg_node_name == data.kg_node_name,
             )
         )
         mastery = result.scalar_one_or_none()
         if mastery is None:
-            mastery = StudentKnowledgeMastery(stu_id=stu_id, kg_node_name=data.kg_node_name, kg_degree=data.kg_degree)
+            mastery = StudentKnowledgeMastery(
+                stu_id=stu_id,
+                course_id=data.course_id,
+                kg_node_name=data.kg_node_name,
+                kg_degree=data.kg_degree,
+            )
             db.add(mastery)
         else:
             mastery.kg_degree = data.kg_degree

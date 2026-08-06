@@ -1,5 +1,5 @@
 """学习管理路由"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user_optional
@@ -8,6 +8,7 @@ from app.schemas.learning import (
     StudentKnowledgeMasteryCreate, StudentKnowledgeMasteryResponse,
 )
 from app.services.learning_service import LearningService
+from app.services.mastery_service import MasteryService
 
 router = APIRouter()
 
@@ -64,3 +65,22 @@ async def set_knowledge_mastery(
     stu_id = current_user.get("id")
     service = LearningService()
     return await service.set_knowledge_mastery(stu_id, data, db)
+
+
+@router.get("/mastery/hierarchy")
+async def get_mastery_hierarchy(
+    course_id: int = Query(..., description="学科 ID"),
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取某学科下学生的掌握度层级树（学科→章节→小节→知识点）。
+
+    掌握度由做题记录自动聚合：
+    - 知识点掌握度：做题时更新（客观题 5/0 分，主观题按得分映射，加权平均）
+    - 小节掌握度 = 该小节下所有知识点掌握度的平均值
+    - 章节掌握度 = 该章节下所有小节掌握度的平均值
+    - 学科掌握度 = 该学科下所有知识点掌握度的平均值
+    """
+    stu_id = current_user.get("id")
+    service = MasteryService()
+    return await service.get_mastery_hierarchy(stu_id, course_id, db)

@@ -1,6 +1,7 @@
 """Practice 业务逻辑层 — 题库与做题记录"""
+import logging
 from typing import Optional
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.question import Question
 from app.models.exercise_record import ExerciseRecord
@@ -13,9 +14,17 @@ from app.schemas.practice import (
     ExerciseRecordListResponse,
 )
 
+logger = logging.getLogger(__name__)
+
+OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "T_or_F", "choice", "true_false"}
+FILL_TYPES = {"Fill_blanks", "fill_Blanks", "fill_blanks"}
+QA_TYPES = {"Q_A", "q_a"}
+PASS_SCORE = 6.0
+
 
 class PracticeService:
     async def create_question(self, data: QuestionCreate, db: AsyncSession) -> QuestionResponse:
+        kg_id = await self._get_course_kg_id(data.course_id, db)
         question = Question(
             question_description=data.question_description,
             question_answer=data.question_answer,
@@ -24,6 +33,7 @@ class PracticeService:
             question_difficulty=data.question_difficulty,
             question_explanation=data.question_explanation,
             course_id=data.course_id,
+            kg_id=kg_id,
             kg_node_name=data.kg_node_name,
         )
         db.add(question)
@@ -81,28 +91,27 @@ class PracticeService:
         if question is None:
             raise ValueError(f"题目不存在: question_id={data.question_id}")
 
-        # 从题库继承知识点归属字段
-        kg_id = question.kg_id
+        # 做题记录中的归属信息一律以题库为准，避免前端传参污染闭环。
+        course_id = question.course_id
+        kg_id = question.kg_id or await self._get_course_kg_id(course_id, db)
         kg_node_name = question.kg_node_name
-
-        objective_types = {"single_choice", "multiple_choice", "T_or_F", "choice", "true_false"}
-        fill_types = {"Fill_blanks", "fill_blanks"}
-        qa_types = {"Q_A", "q_a"}
+        question_type = question.question_type
+        question_difficulty = question.question_difficulty
 
         do_isTrue = None
         do_score = None
 
-        if data.question_type in objective_types:
+        if question_type in OBJECTIVE_TYPES:
             # 客观题：比较学生答案与正确答案，do_isTrue 生效，do_score 置 null
-            do_isTrue = data.do_stu_answer.strip() == question.question_answer.strip()
+            do_isTrue = self._answers_equal(question.question_answer, data.do_stu_answer, question_type)
             do_score = None
-        elif data.question_type in fill_types:
+        elif question_type in FILL_TYPES:
             # 填空题：按空给分，do_score 生效，do_isTrue 置 null
             do_score = self._score_fill_blanks(
                 question.question_answer, data.do_stu_answer
             )
             do_isTrue = None
-        elif data.question_type in qa_types:
+        elif question_type in QA_TYPES:
             # 简答题：大模型评分，do_score 生效，do_isTrue 置 null
             do_score = await self._score_qa(
                 question.question_description,
@@ -110,6 +119,8 @@ class PracticeService:
                 data.do_stu_answer,
             )
             do_isTrue = None
+        else:
+            raise ValueError(f"不支持的题目类型: {question_type}")
 
         # 检查是否已存在相同 question_id + stu_id 的记录
         existing_result = await db.execute(
@@ -127,22 +138,36 @@ class PracticeService:
             existing_record.do_score = do_score
             existing_record.kg_id = kg_id
             existing_record.kg_node_name = kg_node_name
+            existing_record.course_id = course_id
+            existing_record.question_type = question_type
+            existing_record.question_difficulty = question_difficulty
             await db.commit()
             await db.refresh(existing_record)
+            # 更新知识点掌握度（做题闭环）
+            await self._update_mastery(
+                stu_id=stu_id,
+                course_id=course_id,
+                kg_id=kg_id,
+                kg_node_name=kg_node_name,
+                question_type=question_type,
+                do_score=do_score,
+                do_isTrue=do_isTrue,
+                db=db,
+            )
             return ExerciseRecordResponse.model_validate(existing_record)
         else:
             # 不存在则创建新记录，本次即首次作答，判定 iserror_firstly
             iserror_firstly = self._judge_first_error(
-                data.question_type, do_isTrue, do_score
+                question_type, do_isTrue, do_score
             )
             record = ExerciseRecord(
                 question_id=data.question_id,
                 stu_id=stu_id,
                 kg_id=kg_id,
-                course_id=data.course_id,
+                course_id=course_id,
                 kg_node_name=kg_node_name,
-                question_type=data.question_type,
-                question_difficulty=data.question_difficulty,
+                question_type=question_type,
+                question_difficulty=question_difficulty,
                 do_stu_answer=data.do_stu_answer,
                 do_score=do_score,
                 do_isTrue=do_isTrue,
@@ -151,7 +176,83 @@ class PracticeService:
             db.add(record)
             await db.commit()
             await db.refresh(record)
+            # 更新知识点掌握度（做题闭环）
+            await self._update_mastery(
+                stu_id=stu_id,
+                course_id=course_id,
+                kg_id=kg_id,
+                kg_node_name=kg_node_name,
+                question_type=question_type,
+                do_score=do_score,
+                do_isTrue=do_isTrue,
+                db=db,
+            )
             return ExerciseRecordResponse.model_validate(record)
+
+    async def _update_mastery(
+        self,
+        stu_id: int,
+        course_id: int,
+        kg_id: int | None,
+        kg_node_name: str | None,
+        question_type: str,
+        do_score: float | None,
+        do_isTrue: bool | None,
+        db: AsyncSession,
+    ) -> None:
+        """做题提交后更新学生知识点掌握度（闭环：做题→知识点→小节→章节→学科）。
+
+        掌握度更新失败不应阻断做题提交，仅记录日志。
+        """
+        try:
+            from app.services.mastery_service import MasteryService
+            await MasteryService().update_knowledge_mastery(
+                stu_id=stu_id,
+                course_id=course_id,
+                kg_id=kg_id,
+                kg_node_name=kg_node_name,
+                question_type=question_type,
+                do_score=do_score,
+                do_isTrue=do_isTrue,
+                db=db,
+            )
+        except Exception as e:
+            logger.error(
+                f"[PracticeService] 更新知识点掌握度失败 stu_id={stu_id} "
+                f"kg_node_name={kg_node_name}: {e}",
+                exc_info=True,
+            )
+
+    async def _get_course_kg_id(self, course_id: int, db: AsyncSession) -> int | None:
+        result = await db.execute(select(Course.kg_id).where(Course.course_id == course_id))
+        return result.scalar_one_or_none()
+
+    @classmethod
+    def _answers_equal(cls, standard_answer: str, stu_answer: str, question_type: str) -> bool:
+        if question_type == "multiple_choice":
+            return (
+                cls._normalize_choice_answer(standard_answer, split_chars=True)
+                == cls._normalize_choice_answer(stu_answer, split_chars=True)
+            )
+        return standard_answer.strip().casefold() == stu_answer.strip().casefold()
+
+    @staticmethod
+    def _normalize_choice_answer(answer: str, split_chars: bool = False) -> tuple[str, ...]:
+        cleaned = (
+            answer.replace("，", ",")
+            .replace("、", ",")
+            .replace("；", ",")
+            .replace(";", ",")
+            .replace("|", ",")
+            .replace(" ", "")
+        )
+        if "," in cleaned:
+            parts = [part.strip().casefold() for part in cleaned.split(",") if part.strip()]
+        elif split_chars:
+            parts = [ch.casefold() for ch in cleaned if ch.strip()]
+        else:
+            parts = [cleaned.casefold()] if cleaned else []
+        return tuple(sorted(parts))
 
     @staticmethod
     def _score_fill_blanks(question_answer: str, stu_answer: str) -> float:
@@ -300,7 +401,7 @@ class PracticeService:
                 and_(
                     ExerciseRecord.stu_id == stu_id,
                     ExerciseRecord.course_id == course_id,
-                    ExerciseRecord.do_isTrue == False,  # noqa: E712
+                    self._wrong_record_condition(),
                 )
             )
             .order_by(ExerciseRecord.created_at.desc())
@@ -339,7 +440,7 @@ class PracticeService:
             .where(
                 and_(
                     ExerciseRecord.stu_id == stu_id,
-                    ExerciseRecord.do_isTrue == False,  # noqa: E712
+                    self._wrong_record_condition(),
                 )
             )
             .order_by(ExerciseRecord.created_at.desc())
@@ -369,6 +470,13 @@ class PracticeService:
                 )
             )
         return grouped
+
+    @staticmethod
+    def _wrong_record_condition():
+        return or_(
+            ExerciseRecord.do_isTrue.is_(False),
+            ExerciseRecord.do_score < PASS_SCORE,
+        )
 
     async def get_random_new_question(
         self, stu_id: int, course_id: int, db: AsyncSession

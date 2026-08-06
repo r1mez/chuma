@@ -14,6 +14,7 @@ class KgGraph(Base):
     graph_name = Column(String(128), nullable=False, unique=True)
     original_filename = Column(String(256), nullable=False)
     file_path = Column(String(512))
+    course_id = Column(BigInteger, nullable=True, index=True)
     node_count = Column(Integer, default=0)
     edge_count = Column(Integer, default=0)
     chunk_count = Column(Integer, default=0)

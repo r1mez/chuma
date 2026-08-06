@@ -19,7 +19,7 @@ import tempfile
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.core.config import settings
 from app.core.database import async_session
@@ -63,13 +63,14 @@ async def _proxy(request: Request, method: str, path: str, extra_params: dict | 
 @router.post("/build")
 async def start_kg_build(
     file: UploadFile = File(...),
+    course_id: int | None = Form(None),
     current_user: dict = Depends(get_current_user_optional),
 ):
     """提交知识图谱构建任务 — 创建元数据记录后转发到 AI 引擎
 
     流程：
       1. 保存上传文件到临时目录
-      2. 创建 KgGraph 元数据记录（status=pending）
+      2. 创建 KgGraph 元数据记录（status=pending），绑定 course_id（学科）
       3. 将 kg_graph_id 映射存入 Redis（供 status 轮询使用）
       4. 转发到 AI 引擎 /kg/build，携带 graph_name
       5. 返回 task_id + kg_graph_id 给前端
@@ -88,6 +89,7 @@ async def start_kg_build(
             original_filename=file.filename or "upload",
             file_path=file_path,
             db=db,
+            course_id=course_id,
         )
 
     # 转发到 AI 引擎，携带 graph_name

@@ -616,6 +616,13 @@ async function handleDelete() {
 }
 
 async function loadGraphByRoute() {
+  // 优先处理学科跳转：module 为学科（course_id），通过 kg_graphs.course_id 找到对应图谱
+  const moduleId = route.query.module ? Number(route.query.module) : null
+  if (moduleId) {
+    await selectGraphByCourse(moduleId)
+    return
+  }
+
   const graphId = route.query.graphId ? Number(route.query.graphId) : null
   if (graphId) {
     store.currentGraphId = graphId
@@ -649,7 +656,29 @@ async function loadGraphByRoute() {
   }
 }
 
-watch(() => route.query.graphId, () => {
+/**
+ * 根据学科（course_id）选择对应知识图谱。
+ * 通过 kg_graphs.course_id 建立 学科 → 图谱 的映射关系。
+ */
+async function selectGraphByCourse(courseId: number) {
+  const graph = store.graphList.find(g => g.course_id === courseId)
+  if (!graph) {
+    store.error = { type: 'not_found', message: '该学科还没有绑定知识图谱，请先上传文档构建' }
+    return
+  }
+
+  store.currentGraphId = graph.id
+  selectedGraphId.value = graph.id
+  if (graph.status === 'completed') {
+    await store.loadGraphData(graph.graph_name)
+  } else if (graph.status === 'failed') {
+    store.error = { type: 'not_found', message: '该图谱构建失败，请重新上传文档' }
+  } else {
+    store.error = { type: 'not_found', message: '该图谱还没有构建完成' }
+  }
+}
+
+watch(() => [route.query.graphId, route.query.module], () => {
   drillPath.value = []
   loadGraphByRoute()
 })

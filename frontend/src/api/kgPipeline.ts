@@ -24,9 +24,12 @@ export interface KgBuildResult {
   error?: string
 }
 
-export async function submitKgBuild(file: File): Promise<TaskSubmitResponse> {
+export async function submitKgBuild(file: File, courseId?: number): Promise<TaskSubmitResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  if (courseId != null) {
+    formData.append('course_id', String(courseId))
+  }
   return request.post('/kg/build', formData) as unknown as TaskSubmitResponse
 }
 

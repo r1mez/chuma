@@ -22,10 +22,10 @@ export function useKgPipeline() {
   const pollingTimers = ref<Map<string, number>>(new Map())
   const activePolling = new Set<string>()
 
-  async function submitTask(file: File): Promise<void> {
+  async function submitTask(file: File, courseId?: number): Promise<void> {
     submitCount.value++
     try {
-      const response = await submitKgBuild(file)
+      const response = await submitKgBuild(file, courseId)
 
       const task: KgTask = {
         taskId: response.task_id,

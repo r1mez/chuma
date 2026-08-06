@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+# 支持从环境变量或.env文件读取字符串形式的DEBUG配置，兼容多种常用真假标识格式并自动转换为布尔值
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

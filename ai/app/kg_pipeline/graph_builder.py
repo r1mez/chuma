@@ -8,6 +8,7 @@ from typing import Optional
 
 import networkx as nx
 
+from app.config import settings
 from app.kg_pipeline.models import (
     DocumentChunk,
     EntityType,
@@ -15,6 +16,7 @@ from app.kg_pipeline.models import (
     KGNode,
     KnowledgeGraph3D,
 )
+from app.kg_pipeline.pruning import prune_global_graph
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,10 @@ class GraphBuilder:
         # 3. 自动挂载：为每个知识点添加"所属章节叶节点 → 知识点"的包含边
         if chunks:
             self._auto_mount_chapters(G, chunk_graphs, chunks)
+
+        # 4. 全局剪枝：孤立节点剔除、关系词表兜底、规模上限
+        if settings.KG_PRUNING_ENABLED:
+            G = prune_global_graph(G)
 
         return G
 

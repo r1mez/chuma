@@ -39,8 +39,14 @@
         @input="adjustHeight"
         :disabled="loading"
       ></textarea>
-      <button id="sendButton" @click="handleSend" :disabled="loading || !input.trim()">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 664 663">
+      <button
+        id="sendButton"
+        @click="loading ? emit('cancel') : handleSend()"
+        :disabled="!loading && !input.trim()"
+        :title="loading ? '停止执行' : '发送'"
+      >
+        <span v-if="loading" class="stop-icon" aria-label="停止执行" />
+        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 664 663">
           <path
             fill="none"
             d="M646.293 331.888L17.7538 17.6187L155.245 331.888M646.293 331.888L17.753 646.157L155.245 331.888M646.293 331.888L318.735 330.228L155.245 331.888"
@@ -62,7 +68,10 @@
 import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps<{ loading: boolean }>()
-const emit = defineEmits<{ send: [content: string] }>()
+const emit = defineEmits<{
+  send: [content: string]
+  cancel: []
+}>()
 
 const input = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -246,6 +255,13 @@ watch(input, () => {
 
 #sendButton svg path {
   transition: all 0.3s;
+}
+
+.stop-icon {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: #475569;
 }
 
 #sendButton:hover svg path {

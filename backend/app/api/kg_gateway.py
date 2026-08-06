@@ -6,6 +6,12 @@
   3. GET  /build/result    — 获取构建结果
   4. GET  /graph/data      — 代理查询图数据
   5. GET  /graph/search    — 代理搜索节点
+  6. POST /graph/node      — 创建节点
+  7. PUT  /graph/node/{id} — 更新节点
+  8. DELETE /graph/node/{id} — 删除节点
+  9. POST /graph/edge      — 创建边
+ 10. PUT  /graph/edge      — 更新边
+ 11. DELETE /graph/edge    — 删除边
 """
 
 import os
@@ -35,7 +41,7 @@ async def _proxy(request: Request, method: str, path: str, extra_params: dict | 
     if extra_params:
         params.update(extra_params)
     kwargs: dict = {"headers": _ai_headers(), "params": params, "timeout": 60.0}
-    if method == "POST":
+    if method in ("POST", "PUT"):
         kwargs["json"] = await request.json()
 
     async with httpx.AsyncClient() as client:
@@ -205,3 +211,43 @@ async def get_graph_data(request: Request):
 async def search_graph_nodes(request: Request):
     """搜索知识图谱节点"""
     return await _proxy(request, "GET", "/kg/graph/search")
+
+
+# ---------------------------------------------------------------------------
+# 节点/边 CRUD — 代理转发到 AI 引擎
+# ---------------------------------------------------------------------------
+
+@router.post("/graph/node")
+async def create_node(request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """创建节点 — 代理到 AI 引擎"""
+    return await _proxy(request, "POST", "/kg/graph/node")
+
+
+@router.put("/graph/node/{node_id}")
+async def update_node(node_id: str, request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """更新节点 — 代理到 AI 引擎"""
+    return await _proxy(request, "PUT", f"/kg/graph/node/{node_id}")
+
+
+@router.delete("/graph/node/{node_id}")
+async def delete_node(node_id: str, request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """删除节点 — 代理到 AI 引擎"""
+    return await _proxy(request, "DELETE", f"/kg/graph/node/{node_id}")
+
+
+@router.post("/graph/edge")
+async def create_edge(request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """创建边 — 代理到 AI 引擎"""
+    return await _proxy(request, "POST", "/kg/graph/edge")
+
+
+@router.put("/graph/edge")
+async def update_edge(request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """更新边 — 代理到 AI 引擎"""
+    return await _proxy(request, "PUT", "/kg/graph/edge")
+
+
+@router.delete("/graph/edge")
+async def delete_edge(request: Request, current_user: dict = Depends(get_current_user_optional)):
+    """删除边 — 代理到 AI 引擎"""
+    return await _proxy(request, "DELETE", "/kg/graph/edge")

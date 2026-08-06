@@ -1,8 +1,8 @@
 """统一 LLM 客户端 — 一个 deep module，所有 LLM 调用的唯一入口
 
 Interface:
-    chat(messages, temperature, profile?, tools?) -> ChatResponse
-    stream(messages, temperature, profile?, tools?) -> AsyncIterator[dict]
+    chat(messages, temperature, profile?, tools?, response_format?) -> ChatResponse
+    stream(messages, temperature, profile?, tools?, tool_choice?) -> AsyncIterator[dict]
 
 Caller 只需要知道：传入消息，选择 profile（默认 remote）。
 内部实现隐藏了：HTTP 客户端管理、auth header 注入、重试、超时、错误处理。
@@ -135,8 +135,26 @@ class LLMClient:
                                 tool_calls=None,
                             )
 
+                    content = msg.get("content")
+
+                    # HTTP 200 但 content 为空（推理型模型只输出 reasoning_content 等）
+                    # 视为瞬时失败而非成功：重试，避免上游把空响应当作可解析内容。
+                    if not content and tool_calls is None:
+                        reason = (msg.get("reasoning_content") or "").strip()
+                        logger.warning(
+                            "LLM returned empty content (attempt %d/%d)%s",
+                            attempt + 1,
+                            p.max_retries + 1,
+                            f", reasoning: {reason[:200]}" if reason else "",
+                        )
+                        if attempt < p.max_retries:
+                            continue
+                        raise RuntimeError(
+                            "LLM returned empty content after all retries"
+                        )
+
                     return ChatResponse(
-                        content=msg.get("content"),
+                        content=content,
                         tool_calls=tool_calls,
                     )
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException):
@@ -151,8 +169,13 @@ class LLMClient:
         temperature: float = 0.7,
         profile: ModelProfile | None = None,
         tools: list[dict] | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncIterator[dict]:
         """流式输出 — 逐 chunk 返回 text/reasoning，或累积 tool_calls
+
+        Args:
+            tool_choice: 传递给 API 的 tool_choice 值（如 "none"）。仅在 tools
+                非空时生效；为 None 时默认 "auto"（允许模型自行决定是否调用工具）。
 
         Yields dict with keys:
             - content: str       — 正式回答内容
@@ -169,7 +192,7 @@ class LLMClient:
             }
             if tools:
                 payload["tools"] = tools
-                payload["tool_choice"] = "auto"
+                payload["tool_choice"] = tool_choice if tool_choice is not None else "auto"
 
             print(f"--- Sending LLM request to: {p.base_url}/chat/completions ---")
 

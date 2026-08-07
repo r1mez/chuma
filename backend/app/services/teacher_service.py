@@ -15,6 +15,7 @@ from app.models.learning import StudentCourseMastery
 from app.models.question import Question
 from app.models.teacher_relation import TeacherClass, TeacherCourse
 from app.models.user import Student
+from app.services.mastery_service import MasteryService
 
 logger = logging.getLogger(__name__)
 
@@ -397,3 +398,100 @@ class TeacherService:
         ]
         items.sort(key=lambda item: (-item["count"], item["name"] or ""))
         return items
+
+    async def get_student_knowledge_graph(
+        self, tea_id: int, student_id: int, course_id: int, db: AsyncSession
+    ) -> dict:
+        """返回某学生在某学科下的个人知识图谱（图数据 + 掌握度层级树）。
+
+        严格对应关系（遵循建表脚本）：
+          - teacher_class(tea_id, class_id)  校验教师-班级归属
+          - teacher_course(tea_id, course_id) 校验教师-学科归属
+          - students.class_id == class_id     校验学生-班级归属
+        三者同时满足，教师才能查看该学生的知识图谱，否则返回空结果。
+
+        返回结构：
+          {
+            "graph": { nodes, edges, stats },   # 该学科知识图谱全量数据
+            "mastery": { course_id, course_name, course_degree,
+                         course_process, chapters }  # 该学生掌握度层级树
+          }
+        """
+        # 1. 校验学生存在及其所属班级
+        student_result = await db.execute(
+            select(Student.stu_id, Student.class_id).where(
+                Student.stu_id == student_id
+            )
+        )
+        student_row = student_result.first()
+        if student_row is None:
+            return {}
+        stu_id, stu_class_id = student_row
+        if stu_class_id is None:
+            return {}
+
+        # 2. 严格校验教师-班级-学科归属：教师必须同时教授该学生所在班级与该学科
+        if not await self._teacher_has_access_to_class_and_course(
+            tea_id, class_id=stu_class_id, course_id=course_id, db=db
+        ):
+            return {}
+
+        # 3. 获取该学科知识图谱 graph_name
+        kg_result = await db.execute(
+            select(Course.kg_id).where(Course.course_id == course_id)
+        )
+        kg_id = kg_result.scalar_one_or_none()
+        if kg_id is None:
+            return {}
+        graph_result = await db.execute(
+            select(KgGraph.graph_name).where(KgGraph.id == kg_id)
+        )
+        graph_name = graph_result.scalar_one_or_none()
+        if not graph_name:
+            return {}
+
+        # 4. 通过 AI 引擎查询图数据
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/kg/graph/data",
+                    params={"graph_name": graph_name},
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                )
+                if response.status_code >= 400:
+                    logger.warning(
+                        f"KG graph data request failed for {graph_name}: {response.status_code}"
+                    )
+                    return {}
+                data = response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"KG graph data request error: {e}")
+            return {}
+
+        nodes = data.get("nodes", []) if isinstance(data, dict) else []
+        edges = data.get("edges", []) if isinstance(data, dict) else []
+        if not nodes:
+            return {}
+
+        # 5. 计算该学生的掌握度层级树
+        mastery_service = MasteryService()
+        mastery = await mastery_service.get_mastery_hierarchy(stu_id, course_id, db)
+
+        # 6. 组装图数据统计
+        type_counter: dict = {}
+        for node in nodes:
+            node_type = node.get("type") or "unknown"
+            type_counter[node_type] = type_counter.get(node_type, 0) + 1
+
+        return {
+            "graph": {
+                "nodes": nodes,
+                "edges": edges,
+                "stats": {
+                    "total_nodes": len(nodes),
+                    "total_edges": len(edges),
+                    "node_types": type_counter,
+                },
+            },
+            "mastery": mastery,
+        }

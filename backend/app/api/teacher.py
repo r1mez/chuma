@@ -115,6 +115,27 @@ async def get_learning_alerts():
     pass
 
 
+@router.get("/students/{student_id}/knowledge-graph")
+async def get_student_knowledge_graph(
+    student_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """获取某学生在某学科下的个人知识图谱（图数据 + 掌握度层级树）。
+
+    严格对应关系：当前教师必须同时教授该学生所在班级与该学科，
+    否则返回空结果，防止越权查看其他班级/学科学生的知识图谱。
+    """
+    if current_user["user_type"] != "teacher":
+        return {}
+
+    service = TeacherService()
+    return await service.get_student_knowledge_graph(
+        current_user["id"], student_id, course_id, db
+    )
+
+
 @router.get("/students/{student_id}/profile")
 async def get_student_profile(student_id: int):
     """Get a student profile."""

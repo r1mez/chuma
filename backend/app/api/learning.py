@@ -44,6 +44,21 @@ async def get_learning_progress(
 async def get_learning_history():
     return {"message": "history endpoint - not in scope"}
 
+@router.get("/dashboard-progress")
+async def get_dashboard_progress(
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return course_process for each course of the current student.
+    Format: { course_id: course_process, ... }
+    course_process is null-safe, returns 0.
+    """
+    stu_id = current_user.get("id")
+    service = LearningService()
+    course_masteries = await service.get_student_course_mastery(stu_id, db)
+    return {str(m.course_id): m.course_process if m.course_process is not None else 0.0 for m in course_masteries}
+
 
 @router.post("/mastery/course", response_model=StudentCourseMasteryResponse)
 async def set_course_mastery(

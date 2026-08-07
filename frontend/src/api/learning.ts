@@ -37,3 +37,11 @@ export interface MasteryHierarchy {
 export function fetchMasteryHierarchy(courseId: number): Promise<MasteryHierarchy> {
   return request.get('/learning/mastery/hierarchy', { params: { course_id: courseId } })
 }
+
+/** 获取当前学生各学科的 course_process 进度（供仪表盘使用）。
+ *  返回格式：{ [course_id]: course_process }
+ *  course_process 为 0~1 的浮点数，null 时返回 0。
+ */
+export function fetchDashboardProgress(): Promise<Record<number, number>> {
+  return request.get('/learning/dashboard-progress')
+}

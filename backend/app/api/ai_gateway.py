@@ -163,6 +163,32 @@ async def stu_analysis(request: Request):
                 exc_info=True,
             )
 
+        # ── 同步综合评级到 students.stu_level ──
+        # 将 AI 分析得出的综合评级（A/B/C/D/E）写入学生表，并更新 updated_at
+        rating = analysis.get("comprehensive_rating")
+        if rating:
+            try:
+                from sqlalchemy import select
+                from app.core.database import async_session
+                from app.models.user import Student
+
+                async with async_session() as db:
+                    stu_result = await db.execute(
+                        select(Student).where(Student.stu_id == stu_id)
+                    )
+                    student = stu_result.scalar_one_or_none()
+                    if student is not None:
+                        student.stu_level = rating
+                        # updated_at 由 onupdate=func.now() 自动更新为当前时间
+                        await db.commit()
+            except Exception as e:
+                # 更新评级失败不应阻断分析结果返回，仅记录日志
+                import logging
+                logging.getLogger(__name__).error(
+                    f"[AI Gateway] 更新学生评级失败 stu_id={stu_id}: {e}",
+                    exc_info=True,
+                )
+
     return result
 
 

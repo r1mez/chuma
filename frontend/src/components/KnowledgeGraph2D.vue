@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div ref="chartRef" class="kg-chart-2d" />
 </template>
 
@@ -69,8 +69,8 @@ function buildChartNode(node: GraphNode): ChartNodePayload {
         },
         name: {
           color: '#334155',
-          fontSize: 11,
-          fontWeight: 500,
+          fontSize: 12,
+          fontWeight: 700,
           align: 'center',
           width: Math.max(88, Math.round(symbolSize * 2.4)),
           overflow: 'break',

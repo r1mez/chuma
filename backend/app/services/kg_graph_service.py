@@ -46,6 +46,7 @@ class KgGraphService:
         original_filename: str,
         file_path: str,
         db: AsyncSession,
+        course_id: int | None = None,
     ) -> KgGraphResponse:
         """创建图谱元数据记录"""
         graph_name = self._generate_graph_name(original_filename)
@@ -53,6 +54,7 @@ class KgGraphService:
             original_filename=original_filename,
             file_path=file_path,
             graph_name=graph_name,
+            course_id=course_id,
             status="pending",
         )
         db.add(kg_graph)

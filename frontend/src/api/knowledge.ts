@@ -40,6 +40,7 @@ export interface KgGraphInfo {
   id: number
   graph_name: string
   original_filename: string
+  course_id: number | null
   node_count: number
   edge_count: number
   chunk_count: number

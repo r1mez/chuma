@@ -10,6 +10,7 @@ class KgGraphCreate(BaseModel):
     original_filename: str
     file_path: str
     graph_name: str
+    course_id: int | None = None
 
 
 class KgGraphResponse(BaseModel):
@@ -17,6 +18,7 @@ class KgGraphResponse(BaseModel):
     id: int
     graph_name: str
     original_filename: str
+    course_id: int | None = None
     node_count: int
     edge_count: int
     chunk_count: int

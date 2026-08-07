@@ -4,6 +4,23 @@
 
     <el-card class="upload-card">
       <template #header><span>上传文档</span></template>
+      <div class="course-select-row">
+        <span class="course-select-label">所属学科：</span>
+        <el-select
+          v-model="selectedCourseId"
+          placeholder="选择学科（可选）"
+          clearable
+          size="default"
+          style="width: 260px"
+        >
+          <el-option
+            v-for="c in courses"
+            :key="c.course_id"
+            :label="c.course_name"
+            :value="c.course_id"
+          />
+        </el-select>
+      </div>
       <el-upload
         v-model:file-list="fileList"
         action="#"
@@ -73,20 +90,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { useKgPipeline, type KgTask } from '@/composables/useKgPipeline'
+import { fetchCourses, type Course } from '@/api/practice'
 import StarBorder from '@/components/StarBorder.vue'
 import BorderGlow from '@/components/BorderGlow.vue'
 
 const router = useRouter()
 const { tasks, isSubmitting, submitTask, removeTask } = useKgPipeline()
 const fileList = ref<UploadFile[]>([])
+const courses = ref<Course[]>([])
+const selectedCourseId = ref<number | null>(null)
 
 const ALLOWED_EXTS = ['.pdf', '.md', '.txt', '.markdown']
+
+onMounted(async () => {
+  try {
+    courses.value = await fetchCourses()
+  } catch {
+    courses.value = []
+  }
+})
 
 function beforeUpload(file: File): boolean {
   const ext = file.name.toLowerCase().split('.').pop()
@@ -109,7 +137,7 @@ async function handleSubmit(): Promise<void> {
   }
   for (const file of files) {
     try {
-      await submitTask(file)
+      await submitTask(file, selectedCourseId.value ?? undefined)
     } catch (e: any) {
       ElMessage.error(e?.message || '提交失败')
     }
@@ -159,6 +187,8 @@ function elapsed(task: KgTask): string {
 :deep(.el-upload-dragger) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); }
 :deep(.el-upload-dragger:hover) { border-color: #409eff; }
 .upload-card, .tasks-card { margin-bottom: 20px; }
+.course-select-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.course-select-label { color: #4b5563; font-size: 14px; white-space: nowrap; }
 .upload-area { width: 100%; }
 .upload-icon { font-size: 48px; color: #9ca3af; margin-bottom: 10px; }
 .upload-text { color: #4b5563; }

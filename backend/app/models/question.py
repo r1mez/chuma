@@ -15,6 +15,7 @@ class Question(Base):
     question_difficulty = Column(SmallInteger, nullable=False)
     question_explanation = Column(Text, nullable=True)
     course_id = Column(BigInteger, ForeignKey("courses.course_id"), nullable=False, index=True)
+    kg_id = Column(BigInteger, ForeignKey("kg_graphs.id"), nullable=True, index=True)
     kg_node_name = Column(String(128), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

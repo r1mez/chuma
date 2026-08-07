@@ -236,6 +236,7 @@ import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, 
 import { fetchCurrentUser, updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { fetchStuAnalysis, type StuAnalysisResult } from '@/api/analysis'
+import { fetchDashboardProgress } from '@/api/learning'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -311,6 +312,8 @@ const triggerAnalysis = async () => {
       analysisError.value = result.error
     } else {
       analysisResult.value = result
+      // 分析完成后刷新个人信息，同步展示最新评级（stu_level 已写回数据库）
+      await loadUserInfo()
     }
   } catch (err: any) {
     console.error('AI 分析失败:', err)
@@ -468,15 +471,19 @@ onMounted(async () => {
   await loadUserInfo()
 
   try {
-    const courses = await fetchCourses()
+    const [courses, progressMap] = await Promise.all([fetchCourses(), fetchDashboardProgress()])
     if (courses && courses.length > 0) {
       // 先构建基础学科列表
       const baseSubjects = courses.map((course: Course) => {
         const mock = mockSubjectData[course.course_name] || { progress: 0, latestMsg: '暂无记录', recordMsg: '暂无记录' }
+        // 学科进度取自 student_course_mastery.course_process（0~1），
+        // 表中无该学科记录或进度为 0 时，一律默认为 0
+        const rawProcess = progressMap[course.course_id]
+        const progress = rawProcess != null ? Math.round(rawProcess * 100) : 0
         return {
           id: course.course_id,
           name: course.course_name,
-          progress: mock.progress,
+          progress,
           latestMsg: mock.latestMsg,
           recordMsg: mock.recordMsg,
           newQuestionId: null as number | null,

@@ -30,6 +30,12 @@ export interface DifficultKnowledgePoint {
   ratio: number
 }
 
+export interface DifficultChapter {
+  name: string
+  count: number
+  ratio: number
+}
+
 export function getTeacherCourses() {
   return request.get<TeacherCourse[]>('/teacher/courses')
 }
@@ -51,6 +57,15 @@ export function getClassStudents(classId: number, courseId: number) {
 export function getDifficultKnowledge(classId: number, courseId: number) {
   return request.get<DifficultKnowledgePoint[]>(
     `/teacher/classes/${classId}/difficult-knowledge`,
+    {
+      params: { course_id: courseId },
+    },
+  )
+}
+
+export function getDifficultChapters(classId: number, courseId: number) {
+  return request.get<DifficultChapter[]>(
+    `/teacher/classes/${classId}/difficult-chapters`,
     {
       params: { course_id: courseId },
     },

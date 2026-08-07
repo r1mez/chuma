@@ -233,3 +233,167 @@ class TeacherService:
         ]
         items.sort(key=lambda item: (-item["count"], item["name"]))
         return items[:20]
+
+    async def get_difficult_chapters(
+        self, tea_id: int, class_id: int, course_id: int, db: AsyncSession
+    ) -> List[dict]:
+        """返回该班级该学科下所有学生错题知识点归类到顶层章节后的疑难章节分布。
+
+        归类规则（严格遵循知识图谱分层结构）：
+          - 章节(Chapter)节点通过「包含」边形成层级：章节 -> 小节 -> 知识点
+          - 非 Chapter 节点视为知识点，挂载到其所属章节下
+          - 当某小节(Chapter)下没有知识点时，该小节本身视为知识点
+          - 所有错题知识点最终向上归类到其所属的顶层章节
+        返回各顶层章节的错题知识点数量与占比，用于疑难章节饼状图。
+        """
+        # 1. 校验教师-班级-学科归属
+        if not await self._teacher_has_access_to_class_and_course(
+            tea_id, class_id, course_id, db
+        ):
+            return []
+
+        # 2. 统计该班级该学科下所有学生的错题知识点数量
+        knowledge_name = func.coalesce(
+            func.nullif(func.trim(ExerciseRecord.kg_node_name), ""),
+            func.nullif(func.trim(Question.kg_node_name), ""),
+        )
+        stmt = (
+            select(
+                knowledge_name.label("knowledge_name"),
+                func.count(ExerciseRecord.do_id).label("count"),
+            )
+            .join(Student, Student.stu_id == ExerciseRecord.stu_id)
+            .join(Question, Question.question_id == ExerciseRecord.question_id)
+            .where(
+                Student.class_id == class_id,
+                ExerciseRecord.course_id == course_id,
+                ExerciseRecord.do_isTrue.is_(False),
+                knowledge_name.isnot(None),
+            )
+            .group_by(knowledge_name)
+        )
+        result = await db.execute(stmt)
+        rows = result.all()
+        if not rows:
+            return []
+
+        # 3. 获取该学科知识图谱全量数据（节点 + 边）
+        kg_result = await db.execute(
+            select(Course.kg_id).where(Course.course_id == course_id)
+        )
+        kg_id = kg_result.scalar_one_or_none()
+        if kg_id is None:
+            return []
+        graph_result = await db.execute(
+            select(KgGraph.graph_name).where(KgGraph.id == kg_id)
+        )
+        graph_name = graph_result.scalar_one_or_none()
+        if not graph_name:
+            return []
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/kg/graph/data",
+                    params={"graph_name": graph_name},
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                )
+                if response.status_code >= 400:
+                    logger.warning(
+                        f"KG graph data request failed for {graph_name}: {response.status_code}"
+                    )
+                    return []
+                data = response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"KG graph data request error: {e}")
+            return []
+
+        nodes = data.get("nodes", []) if isinstance(data, dict) else []
+        edges = data.get("edges", []) if isinstance(data, dict) else []
+
+        # 4. 构建章节层级结构
+        node_map = {}
+        for node in nodes:
+            node_id = node.get("id")
+            if node_id is not None:
+                node_map[node_id] = node
+
+        # 章节父子关系：Chapter -> Chapter（「包含」边）
+        chapter_children = {}  # parent_id -> [child_id]
+        # 知识点归属：Chapter -> [知识点节点 id]
+        chapter_knowledge_points = {}  # chapter_id -> [kp_id]
+        for edge in edges:
+            rel = (edge.get("relationship_name") or "").strip()
+            if rel != "包含":
+                continue
+            src = edge.get("source")
+            tgt = edge.get("target")
+            src_node = node_map.get(src)
+            tgt_node = node_map.get(tgt)
+            if src_node is None or tgt_node is None:
+                continue
+            src_is_chapter = (src_node.get("type") or "").lower() == "chapter"
+            tgt_is_chapter = (tgt_node.get("type") or "").lower() == "chapter"
+            if src_is_chapter and tgt_is_chapter:
+                chapter_children.setdefault(src, []).append(tgt)
+            elif src_is_chapter and not tgt_is_chapter:
+                chapter_knowledge_points.setdefault(src, []).append(tgt)
+
+        # 5. 将错题知识点归类到顶层章节
+        # 建立「知识点节点 id -> 所属顶层章节 id」的映射
+        kp_to_top = {}
+
+        def resolve_top(chapter_id: int, visited: set) -> int:
+            """沿章节父子链向上找到顶层章节。"""
+            if chapter_id in visited:
+                return chapter_id
+            visited.add(chapter_id)
+            for parent_id, children in chapter_children.items():
+                if chapter_id in children:
+                    return resolve_top(parent_id, visited)
+            return chapter_id
+
+        # 知识点节点 -> 所属章节 -> 顶层章节
+        for chapter_id, kp_ids in chapter_knowledge_points.items():
+            top_id = resolve_top(chapter_id, set())
+            for kp_id in kp_ids:
+                kp_to_top[kp_id] = top_id
+
+        # 章节归类统计
+        chapter_count = {}  # top_chapter_id -> count
+        for name, count in rows:
+            # 按名称在节点中查找（可能多个同名节点，取第一个）
+            matched = None
+            for node in nodes:
+                if (node.get("name") or node.get("id")) == name:
+                    matched = node
+                    break
+            if matched is None:
+                continue
+            node_id = matched.get("id")
+            node_type = (matched.get("type") or "").lower()
+            if node_type == "chapter":
+                # 小节本身视为知识点：无论其下是否挂有知识点，错题记录指向章节本身时，
+                # 一律向上归类到该章节所属的顶层章节
+                top_id = resolve_top(node_id, set())
+            else:
+                top_id = kp_to_top.get(node_id)
+                if top_id is None:
+                    continue
+            chapter_count[top_id] = chapter_count.get(top_id, 0) + count
+
+        if not chapter_count:
+            return []
+
+        total_count = sum(chapter_count.values())
+        items = [
+            {
+                "name": node_map.get(chapter_id, {}).get("name")
+                or node_map.get(chapter_id, {}).get("id"),
+                "count": count,
+                "ratio": round(count / total_count, 4),
+            }
+            for chapter_id, count in chapter_count.items()
+        ]
+        items.sort(key=lambda item: (-item["count"], item["name"] or ""))
+        return items

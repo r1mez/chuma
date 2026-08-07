@@ -83,6 +83,26 @@ async def list_difficult_knowledge(
     )
 
 
+@router.get("/classes/{class_id}/difficult-chapters")
+async def list_difficult_chapters(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Get difficult-chapter pie-chart data for a class and subject.
+
+    统计该班级该学科下所有学生错题知识点，归类到知识图谱顶层章节后返回分布占比。
+    """
+    if current_user["user_type"] != "teacher":
+        return []
+
+    service = TeacherService()
+    return await service.get_difficult_chapters(
+        current_user["id"], class_id, course_id, db
+    )
+
+
 @router.get("/analytics/{class_id}")
 async def get_class_analytics(class_id: int):
     """Get the class analytics report."""

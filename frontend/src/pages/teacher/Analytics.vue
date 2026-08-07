@@ -43,7 +43,7 @@
         </div>
       </el-card>
 
-      <el-card class="teacher-card w-[40%] max-lg:w-full" shadow="never">
+      <el-card class="teacher-card flex-1 max-lg:w-full" shadow="never">
         <template #header>
           <div class="flex items-center justify-between">
             <span class="text-sm font-bold text-slate-800">学生进度与评级</span>
@@ -76,13 +76,22 @@
 
       <el-card class="teacher-card flex-1 max-lg:w-full" shadow="never">
         <template #header>
-          <span class="text-sm font-bold text-slate-800">疑难章节分布图</span>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-slate-800">疑难章节分布图</span>
+            <span class="text-xs text-slate-500">
+              {{ difficultChapterList.length > 0 ? `共 ${difficultChapterList.length} 个章节` : '暂无数据' }}
+            </span>
+          </div>
         </template>
 
-        <div class="flex h-[280px] items-center justify-center rounded-xl bg-slate-50/80">
+        <div v-if="difficultChapterList.length > 0" ref="chapterChartRef" class="h-[280px] w-full"></div>
+        <div
+          v-else
+          class="flex h-[280px] items-center justify-center rounded-xl bg-slate-50/80"
+        >
           <div class="flex flex-col items-center text-sm text-slate-400">
             <el-icon :size="32" class="mb-2"><PieChart /></el-icon>
-            ECharts 饼图渲染区
+            当前班级该学科暂无疑难章节数据
           </div>
         </div>
       </el-card>
@@ -200,12 +209,15 @@ import {
   type ComponentPublicInstance,
 } from 'vue'
 import { PieChart, Share } from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
 import {
   getClassStudents,
+  getDifficultChapters,
   getDifficultKnowledge,
   getTeacherClasses,
   getTeacherCourses,
   type ClassStudent,
+  type DifficultChapter,
   type DifficultKnowledgePoint,
   type TeacherClass,
   type TeacherCourse,
@@ -217,9 +229,13 @@ const classList = ref<TeacherClass[]>([])
 const courseList = ref<TeacherCourse[]>([])
 const studentList = ref<ClassStudent[]>([])
 const wordCloudList = ref<DifficultKnowledgePoint[]>([])
+const difficultChapterList = ref<DifficultChapter[]>([])
 const studentDialogVisible = ref(false)
 const teacherSuggestion = ref('')
 const currentStudent = ref<ClassStudent | null>(null)
+
+const chapterChartRef = ref<HTMLElement | null>(null)
+let chapterChartInstance: echarts.ECharts | null = null
 
 const cloudContainerRef = ref<HTMLElement | null>(null)
 const cloudItemRefs = ref<Array<HTMLElement | null>>([])
@@ -330,7 +346,79 @@ const loadWordCloud = async () => {
 }
 
 const loadDashboardData = async () => {
-  await Promise.all([loadStudents(), loadWordCloud()])
+  await Promise.all([loadStudents(), loadWordCloud(), loadDifficultChapters()])
+}
+
+const renderChapterChart = async () => {
+  await nextTick()
+  if (difficultChapterList.value.length === 0) return
+  const el = chapterChartRef.value
+  if (!el) return
+
+  if (!chapterChartInstance) {
+    chapterChartInstance = echarts.init(el)
+  }
+  chapterChartInstance.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: any) => {
+        const item = params.data
+        return `${item.name}<br/>错题知识点数：${item.count}<br/>占比：${(item.ratio * 100).toFixed(1)}%`
+      },
+    },
+    legend: {
+      orient: 'vertical',
+      right: 8,
+      bottom: 8,
+      type: 'scroll',
+      textStyle: { fontSize: 12 },
+    },
+    series: [
+      {
+        name: '疑难章节',
+        type: 'pie',
+        radius: ['42%', '70%'],
+        center: ['38%', '50%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 6,
+          borderColor: '#fff',
+          borderWidth: 2,
+        },
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%',
+          fontSize: 11,
+        },
+        emphasis: {
+          label: { show: true, fontWeight: 'bold' },
+        },
+        data: difficultChapterList.value.map((item) => ({
+          name: item.name,
+          value: item.count,
+          ratio: item.ratio,
+        })),
+      },
+    ],
+  })
+}
+
+const loadDifficultChapters = async () => {
+  if (selectedClass.value === null || selectedCourse.value === null) {
+    difficultChapterList.value = []
+    return
+  }
+
+  try {
+    difficultChapterList.value = await getDifficultChapters(
+      selectedClass.value,
+      selectedCourse.value,
+    )
+    await renderChapterChart()
+  } catch (error) {
+    console.error('加载疑难章节分布失败:', error)
+    difficultChapterList.value = []
+  }
 }
 
 const setCloudItemRef = (
@@ -460,6 +548,7 @@ const handleResize = () => {
   if (wordCloudList.value.length === 0) return
   window.requestAnimationFrame(() => {
     computeCloudLayout()
+    chapterChartInstance?.resize()
   })
 }
 
@@ -474,6 +563,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  chapterChartInstance?.dispose()
+  chapterChartInstance = null
 })
 </script>
 

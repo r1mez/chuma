@@ -3,7 +3,7 @@
     <div class="page-container glass-card">
       <!-- 顶部标题 -->
       <div class="header">
-        <div class="title-badge">{{ studentName }}学生-学习规划</div>
+        <div class="title-badge">{{ studentName }}——建议学习规划</div>
         <el-button
           v-if="!planLoading"
           type="primary"

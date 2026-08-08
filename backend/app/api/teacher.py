@@ -83,6 +83,26 @@ async def list_difficult_knowledge(
     )
 
 
+@router.get("/classes/{class_id}/difficult-chapters")
+async def list_difficult_chapters(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Get difficult-chapter pie-chart data for a class and subject.
+
+    统计该班级该学科下所有学生错题知识点，归类到知识图谱顶层章节后返回分布占比。
+    """
+    if current_user["user_type"] != "teacher":
+        return []
+
+    service = TeacherService()
+    return await service.get_difficult_chapters(
+        current_user["id"], class_id, course_id, db
+    )
+
+
 @router.get("/analytics/{class_id}")
 async def get_class_analytics(class_id: int):
     """Get the class analytics report."""
@@ -93,6 +113,27 @@ async def get_class_analytics(class_id: int):
 async def get_learning_alerts():
     """Get learning risk alerts."""
     pass
+
+
+@router.get("/students/{student_id}/knowledge-graph")
+async def get_student_knowledge_graph(
+    student_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """获取某学生在某学科下的个人知识图谱（图数据 + 掌握度层级树）。
+
+    严格对应关系：当前教师必须同时教授该学生所在班级与该学科，
+    否则返回空结果，防止越权查看其他班级/学科学生的知识图谱。
+    """
+    if current_user["user_type"] != "teacher":
+        return {}
+
+    service = TeacherService()
+    return await service.get_student_knowledge_graph(
+        current_user["id"], student_id, course_id, db
+    )
 
 
 @router.get("/students/{student_id}/profile")

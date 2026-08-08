@@ -48,6 +48,18 @@
             </div>
           </div>
         </div>
+
+        <div v-if="canPractice" class="practice-section">
+          <el-button
+            type="primary"
+            plain
+            class="practice-button"
+            @click="$emit('practice')"
+          >
+            查看关联题目
+          </el-button>
+          <p class="practice-hint">查看与“{{ node.name }}”关联的题目合集</p>
+        </div>
       </div>
     </div>
   </transition>
@@ -62,9 +74,10 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 const props = defineProps<{
   node: GraphNode
   relationNodeIds?: Set<string>
+  courseId?: number | null
 }>()
 
-defineEmits<{ close: [] }>()
+defineEmits<{ close: []; practice: [] }>()
 
 const store = useKnowledgeStore()
 
@@ -76,6 +89,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const typeColor = computed(() => TYPE_COLORS[props.node.type] || '#94A3B8')
 const masteryPercentage = computed(() => Math.round(Math.max(0, Math.min(1, props.node.mastery || 0)) * 100))
+const canPractice = computed(() => props.courseId != null)
 
 const relations = computed(() => {
   const edges = store.graphData?.edges ?? []
@@ -138,6 +152,9 @@ const relations = computed(() => {
 .attr-item { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
 .attr-key { color: #94A3B8; }
 .attr-value { color: #F4F4F4; }
+.practice-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid #2a2a3e; }
+.practice-button { width: 100%; }
+.practice-hint { margin: 8px 0 0; color: #94A3B8; font-size: 12px; line-height: 1.5; text-align: center; }
 .slide-enter-active, .slide-leave-active { transition: all 0.3s ease; }
 .slide-enter-from, .slide-leave-to { transform: translateX(100%); opacity: 0; }
 </style>

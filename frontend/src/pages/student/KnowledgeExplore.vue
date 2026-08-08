@@ -169,7 +169,9 @@
             v-if="store.selectedNode"
             :node="store.selectedNode"
             :relation-node-ids="visibleRelationNodeIds"
+            :course-id="currentCourseId"
             @close="store.selectNode(null)"
+            @practice="goToNodePractice"
           />
           <!-- 知识点层空状态 -->
           <div
@@ -209,6 +211,9 @@ const store = useKnowledgeStore()
 const graphRef2D = ref<InstanceType<typeof KnowledgeGraph2D>>()
 const { showLabels, handleSearch } = useGraph()
 const selectedGraphId = ref<number | null>(null)
+const currentCourseId = computed(() => (
+  store.graphList.find(graph => graph.id === selectedGraphId.value)?.course_id ?? null
+))
 
 // 掌握度映射：节点名 → 掌握度(0~1)，用于节点球"装水"可视化
 const masteryMap = ref<Record<string, number>>({})
@@ -392,6 +397,23 @@ function handleNodeDoubleClick(node: GraphNode) {
     return
   }
   store.selectNode(node)
+}
+
+function goToNodePractice() {
+  const node = store.selectedNode
+  const courseId = currentCourseId.value
+  if (!node || courseId == null) {
+    ElMessage.warning('当前节点暂无对应题目合集')
+    return
+  }
+
+  $router.push({
+    path: '/student/practice/panel',
+    query: {
+      module: String(courseId),
+      kgNodeName: node.name,
+    },
+  })
 }
 
 function querySearch(query: string, cb: (results: any[]) => void) {

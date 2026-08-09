@@ -87,19 +87,40 @@
       <div class="panel-body">
         <el-form label-position="top" size="small">
           <el-form-item label="起始节点">
-            <el-input
+            <el-select
               v-if="isNew"
               v-model="edgeForm.source"
-              placeholder="输入节点 ID"
-            />
+              filterable
+              placeholder="搜索并选择起始节点"
+              style="width: 100%"
+              @change="syncEdgeNodeNames"
+            >
+              <el-option
+                v-for="node in graphNodes"
+                :key="node.id"
+                :label="`${node.name} · ${node.type}`"
+                :value="node.id"
+              />
+            </el-select>
             <el-input v-else :model-value="edgeForm.sourceName" disabled />
           </el-form-item>
           <el-form-item label="目标节点">
-            <el-input
+            <el-select
               v-if="isNew"
               v-model="edgeForm.target"
-              placeholder="输入节点 ID"
-            />
+              filterable
+              placeholder="搜索并选择目标节点"
+              style="width: 100%"
+              @change="syncEdgeNodeNames"
+            >
+              <el-option
+                v-for="node in graphNodes"
+                :key="node.id"
+                :label="`${node.name} · ${node.type}`"
+                :value="node.id"
+                :disabled="node.id === edgeForm.source"
+              />
+            </el-select>
             <el-input v-else :model-value="edgeForm.targetName" disabled />
           </el-form-item>
           <el-form-item label="关系名称">
@@ -139,7 +160,7 @@
 import { ref, reactive, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
-import type { GraphStats } from '@/api/knowledge'
+import type { GraphNode, GraphStats } from '@/api/knowledge'
 import {
   createNode, updateNode, deleteNode,
   createEdge, updateEdge, deleteEdge,
@@ -158,6 +179,7 @@ const props = defineProps<{
   isNew: boolean
   graphName: string
   graphStats: GraphStats | null
+  graphNodes: GraphNode[]
   selectedNode: NodeEditData | null
   selectedEdge: EdgeEditData | null
 }>()
@@ -212,6 +234,11 @@ watch(() => props.selectedEdge, (edge) => {
     edgeForm.description = edge.description
   }
 }, { immediate: true })
+
+function syncEdgeNodeNames() {
+  edgeForm.sourceName = props.graphNodes.find(node => node.id === edgeForm.source)?.name || ''
+  edgeForm.targetName = props.graphNodes.find(node => node.id === edgeForm.target)?.name || ''
+}
 
 // ---- 保存节点 ----
 

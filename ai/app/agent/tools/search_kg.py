@@ -31,9 +31,12 @@ async def search_kg(user_id: int, query: str, top_k: int = 10) -> str:
     """查询知识图谱中的概念节点和关系"""
     try:
         graph_names = current_graph_names.get()
-        # 空列表或无图谱 → 回退到默认
+        # 空列表或无图谱 → 从数据库解析真实存在的图谱
         if not graph_names:
-            nodes = search_nodes(query)
+            from app.kg_pipeline.graph_registry import list_graph_names
+            graph_names = list_graph_names(status=None)
+        if not graph_names:
+            nodes = []
         else:
             all_nodes: list[dict] = []
             seen: set[str] = set()

@@ -26,8 +26,10 @@ async def search_node_embeddings(
         return []
 
     selected_graphs = list(graph_names or [])
-    if not selected_graphs and settings.AGE_GRAPH_NAME:
-        selected_graphs = [settings.AGE_GRAPH_NAME]
+    if not selected_graphs:
+        # 从数据库 kg_graphs 表解析真实存在的图谱，而非硬编码默认图
+        from app.kg_pipeline.graph_registry import list_graph_names
+        selected_graphs = list_graph_names(status=None)
     if not selected_graphs:
         return []
 

@@ -251,7 +251,12 @@ class RagPipeline:
                 cur.execute("LOAD 'age'")
                 cur.execute("SET search_path TO ag_catalog, public")
 
-                graph_name = _age_escape(settings.AGE_GRAPH_NAME)
+                # 从数据库 kg_graphs 表解析真实存在的图谱，而非硬编码默认图
+                from app.kg_pipeline.graph_registry import resolve_default_graph
+                resolved = resolve_default_graph()
+                if not resolved:
+                    return {"entity_degrees": {}, "max_degree": 0}
+                graph_name = _age_escape(resolved)
 
                 # 查询实体出度
                 entity_degrees = {}

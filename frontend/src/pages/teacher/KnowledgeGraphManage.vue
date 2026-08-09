@@ -49,19 +49,66 @@
         <KgEditorToolbar
           v-model:toolMode="toolMode"
           v-model:visibleTypes="visibleTypes"
-          :graphStats="graphData?.stats ?? null"
+          :graphStats="scopedGraphData?.stats ?? null"
           @zoom-in="canvasRef?.zoomIn()"
           @zoom-out="canvasRef?.zoomOut()"
           @fit-view="canvasRef?.fitView()"
         />
+        <div v-if="graphData" class="scope-toolbar">
+          <div class="scope-breadcrumb">
+            <el-button size="small" text type="primary" @click="resetEditorScope">全部章节</el-button>
+            <template v-for="(node, index) in editorPath" :key="node.id">
+              <span class="scope-separator">/</span>
+              <el-button size="small" text @click="setEditorPath(index + 1)">{{ node.name }}</el-button>
+            </template>
+            <template v-if="focusNodeId">
+              <span class="scope-separator">/</span>
+              <el-tag type="warning" closable @close="focusNodeId = null">局部：{{ focusNodeName }}</el-tag>
+            </template>
+          </div>
+          <el-select
+            v-model="searchNodeId"
+            filterable
+            clearable
+            placeholder="搜索节点并局部编辑"
+            size="small"
+            class="scope-search"
+            @change="focusSearchNode"
+          >
+            <el-option
+              v-for="node in searchableNodes"
+              :key="node.id"
+              :label="`${node.name} · ${node.type}`"
+              :value="node.id"
+            />
+          </el-select>
+          <el-select
+            v-model="selectedRelations"
+            multiple
+            collapse-tags
+            clearable
+            placeholder="关系类型（空为全部）"
+            size="small"
+            class="relation-filter"
+          >
+            <el-option v-for="relation in availableRelations" :key="relation" :label="relation" :value="relation" />
+          </el-select>
+          <span class="scope-count">
+            当前 {{ scopedGraphData?.nodes.length || 0 }} 个节点 / {{ scopedGraphData?.edges.length || 0 }} 条边
+          </span>
+          <el-tooltip content="单击节点或边编辑；双击章节进入下一级；双击知识点查看局部关系">
+            <el-tag type="info" plain>双击钻取</el-tag>
+          </el-tooltip>
+        </div>
         <div class="kg-editor-main">
           <div class="kg-editor-canvas-wrapper" v-loading="graphLoading">
             <KgEditorCanvas
               ref="canvasRef"
-              :data="graphData"
+              :data="scopedGraphData"
               :toolMode="toolMode"
               :visibleTypes="visibleTypes"
               @node-selected="onNodeSelected"
+              @node-double-click="onNodeDoubleClick"
               @edge-selected="onEdgeSelected"
               @canvas-click="onCanvasClick"
               @edge-created="onEdgeCreated"
@@ -71,7 +118,8 @@
             :mode="panelMode"
             :isNew="isNewItem"
             :graphName="currentGraph.graph_name"
-            :graphStats="graphData?.stats ?? null"
+            :graphStats="scopedGraphData?.stats ?? null"
+            :graphNodes="graphData?.nodes ?? []"
             :selectedNode="selectedNode"
             :selectedEdge="selectedEdge"
             @cancel-edit="onCancelEdit"
@@ -92,10 +140,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useKnowledgeStore } from '@/stores/knowledge'
-import { fetchGraphStats, fetchGraphData, type KgGraphInfo, type GraphData } from '@/api/knowledge'
+import {
+  fetchGraphStats,
+  fetchGraphData,
+  type KgGraphInfo,
+  type GraphData,
+  type GraphNode,
+} from '@/api/knowledge'
+import { getVisibleData, parseHierarchy } from '@/utils/kgHierarchy'
+import { rankNeighborIds } from '@/utils/kgProjection'
 import KgEditorToolbar from '@/components/kg-editor/KgEditorToolbar.vue'
 import KgEditorCanvas from '@/components/kg-editor/KgEditorCanvas.vue'
 import KgEditorPanel from '@/components/kg-editor/KgEditorPanel.vue'
@@ -115,6 +171,70 @@ const panelMode = ref<'overview' | 'node' | 'edge'>('overview')
 const isNewItem = ref(false)
 const selectedNode = ref<NodeEditData | null>(null)
 const selectedEdge = ref<EdgeEditData | null>(null)
+const editorPath = ref<GraphNode[]>([])
+const focusNodeId = ref<string | null>(null)
+const searchNodeId = ref<string | null>(null)
+const selectedRelations = ref<string[]>([])
+
+const editorHierarchy = computed(() => graphData.value ? parseHierarchy(graphData.value) : null)
+const availableRelations = computed(() => Array.from(new Set(
+  (graphData.value?.edges || []).map(edge => edge.relationship_name),
+)).sort((left, right) => left.localeCompare(right, 'zh-CN')))
+const searchableNodes = computed(() => (graphData.value?.nodes || [])
+  .slice()
+  .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')))
+const focusNodeName = computed(() => graphData.value?.nodes.find(
+  node => node.id === focusNodeId.value,
+)?.name || '')
+
+function withStats(data: GraphData): GraphData {
+  const nodeTypes: Record<string, number> = {}
+  for (const node of data.nodes) nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1
+  return {
+    nodes: data.nodes,
+    edges: data.edges,
+    stats: {
+      total_nodes: data.nodes.length,
+      total_edges: data.edges.length,
+      node_types: nodeTypes,
+    },
+  }
+}
+
+const scopedGraphData = computed<GraphData | null>(() => {
+  if (!graphData.value || !editorHierarchy.value) return graphData.value
+  const relationAllowed = (relation: string) => (
+    selectedRelations.value.length === 0 || selectedRelations.value.includes(relation)
+  )
+
+  if (focusNodeId.value) {
+    const incidentEdges = graphData.value.edges.filter(edge => (
+      relationAllowed(edge.relationship_name)
+      && (edge.source === focusNodeId.value || edge.target === focusNodeId.value)
+    ))
+    const neighbors = incidentEdges.map(edge => (
+      edge.source === focusNodeId.value ? edge.target : edge.source
+    ))
+    const rankedNeighbors = rankNeighborIds(
+      focusNodeId.value,
+      neighbors,
+      graphData.value,
+      15,
+    )
+    const nodeIds = new Set([focusNodeId.value, ...rankedNeighbors])
+    return withStats({
+      nodes: graphData.value.nodes.filter(node => nodeIds.has(node.id)),
+      edges: incidentEdges.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target)),
+      stats: graphData.value.stats,
+    })
+  }
+
+  const base = getVisibleData(graphData.value, editorPath.value, editorHierarchy.value)
+  return withStats({
+    ...base,
+    edges: base.edges.filter(edge => relationAllowed(edge.relationship_name)),
+  })
+})
 
 // ---- Canvas ref ----
 const canvasRef = ref<InstanceType<typeof KgEditorCanvas>>()
@@ -184,6 +304,9 @@ async function loadGraph(graphName: string) {
   selectedEdge.value = null
   isNewItem.value = false
   toolMode.value = 'select'
+  editorPath.value = []
+  focusNodeId.value = null
+  searchNodeId.value = null
 
   try {
     const data = await fetchGraphData(graphName)
@@ -192,8 +315,11 @@ async function loadGraph(graphName: string) {
       ElMessage.info('该图谱暂无数据')
     } else {
       graphData.value = data
-      // 初始化类型筛选：全部勾选
-      visibleTypes.value = new Set()
+      // 由章节作用域控制密度，类型筛选默认不再隐藏知识点。
+      visibleTypes.value = new Set(Object.keys(data.stats.node_types))
+      selectedRelations.value = ['包含', '依赖', '前提'].filter(
+        relation => data.edges.some(edge => edge.relationship_name === relation),
+      )
     }
   } catch {
     graphData.value = null
@@ -217,6 +343,62 @@ function onNodeSelected(node: NodeEditData | null) {
   isNewItem.value = false
   panelMode.value = node ? 'node' : 'overview'
 }
+
+function findChapterPath(chapterId: string): GraphNode[] {
+  const hierarchy = editorHierarchy.value
+  if (!hierarchy) return []
+  const top = hierarchy.topLevelChapters.find(node => node.id === chapterId)
+  if (top) return [top]
+  for (const parent of hierarchy.topLevelChapters) {
+    const child = (hierarchy.chapterChildren.get(parent.id) || []).find(
+      node => node.id === chapterId,
+    )
+    if (child) return [parent, child]
+  }
+  const node = hierarchy.nodeMap.get(chapterId)
+  return node ? [node] : []
+}
+
+function onNodeDoubleClick(node: GraphNode) {
+  if (node.type === 'Chapter') {
+    editorPath.value = findChapterPath(node.id)
+    focusNodeId.value = null
+  } else {
+    focusNodeId.value = node.id
+  }
+  selectedNode.value = null
+  selectedEdge.value = null
+  panelMode.value = 'overview'
+}
+
+function resetEditorScope() {
+  editorPath.value = []
+  focusNodeId.value = null
+  searchNodeId.value = null
+}
+
+function setEditorPath(length: number) {
+  editorPath.value = editorPath.value.slice(0, length)
+  focusNodeId.value = null
+}
+
+function focusSearchNode(nodeId?: string) {
+  focusNodeId.value = nodeId || null
+  if (nodeId) {
+    const node = graphData.value?.nodes.find(item => item.id === nodeId)
+    if (node?.type === 'Chapter') {
+      editorPath.value = findChapterPath(node.id)
+      focusNodeId.value = null
+    }
+  }
+}
+
+watch(editorPath, () => {
+  focusNodeId.value = null
+  selectedNode.value = null
+  selectedEdge.value = null
+  panelMode.value = 'overview'
+}, { deep: true })
 
 function onEdgeSelected(edge: EdgeEditData | null) {
   selectedEdge.value = edge
@@ -294,6 +476,12 @@ function onNodeSaved(data: NodeEditData) {
   } else if (selectedNode.value) {
     // 编辑节点：更新画布上的数据
     canvasRef.value?.updateNodeData(selectedNode.value.id, data)
+    const sourceNode = graphData.value?.nodes.find(node => node.id === selectedNode.value?.id)
+    if (sourceNode) {
+      sourceNode.name = data.name
+      sourceNode.type = data.type
+      sourceNode.description = data.description
+    }
   }
   selectedNode.value = data
   isNewItem.value = false
@@ -308,6 +496,13 @@ function onNodeDeleted(nodeId: string) {
   })
   // 移除节点
   canvasRef.value?.removeItemById(nodeId, 'node')
+  if (graphData.value) {
+    graphData.value = withStats({
+      nodes: graphData.value.nodes.filter(node => node.id !== nodeId),
+      edges: graphData.value.edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId),
+      stats: graphData.value.stats,
+    })
+  }
   selectedNode.value = null
   panelMode.value = 'overview'
   canvasRef.value?.resetHighlight()
@@ -324,6 +519,13 @@ function onEdgeSaved(data: EdgeEditData) {
       relationship_name: data.relationship_name,
       description: data.description,
     })
+    const sourceEdge = graphData.value?.edges.find(edge => (
+      edge.source === selectedEdge.value?.source && edge.target === selectedEdge.value?.target
+    ))
+    if (sourceEdge) {
+      sourceEdge.relationship_name = data.relationship_name
+      sourceEdge.description = data.description
+    }
   }
   selectedEdge.value = data
   isNewItem.value = false
@@ -333,6 +535,13 @@ function onEdgeSaved(data: EdgeEditData) {
 function onEdgeDeleted(source: string, target: string) {
   const edgeId = `${source}-${target}`
   canvasRef.value?.removeItemById(edgeId, 'edge')
+  if (graphData.value) {
+    graphData.value = withStats({
+      nodes: graphData.value.nodes,
+      edges: graphData.value.edges.filter(edge => edge.source !== source || edge.target !== target),
+      stats: graphData.value.stats,
+    })
+  }
   selectedEdge.value = null
   panelMode.value = 'overview'
   canvasRef.value?.resetHighlight()
@@ -490,6 +699,35 @@ async function handleDeleteEdge() {
   display: flex;
   flex: 1;
   min-height: 0;
+}
+.scope-toolbar {
+  min-height: 42px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+.scope-breadcrumb {
+  display: flex;
+  align-items: center;
+  min-width: 180px;
+}
+.scope-separator {
+  color: #94a3b8;
+}
+.scope-search {
+  width: 230px;
+}
+.relation-filter {
+  width: 210px;
+}
+.scope-count {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .kg-editor-canvas-wrapper {
   flex: 1;

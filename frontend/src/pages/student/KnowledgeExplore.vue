@@ -74,6 +74,18 @@
       <!-- 图谱视图 -->
       <template v-else-if="store.graphData">
         <div class="kg-toolbar">
+          <div class="chapter-selector">
+            <el-cascader
+              v-model="chapterPathIds"
+              :options="chapterOptions"
+              :props="chapterSelectorProps"
+              clearable
+              filterable
+              size="small"
+              placeholder="选择章 / 节"
+              @change="onChapterPathChange"
+            />
+          </div>
           <div class="kg-search-wrapper">
             <el-autocomplete
               v-model="store.searchQuery"
@@ -86,6 +98,10 @@
             />
           </div>
           <div class="kg-controls">
+            <span v-if="drillPath.length" class="current-scope-summary">{{ currentScopeSummary }}</span>
+            <el-tooltip content="单击查看详情；双击章/节进入下一级；知识点不再展开局部图">
+              <el-tag type="info" plain size="small">双击钻取</el-tag>
+            </el-tooltip>
             <el-switch v-model="showLabels" active-text="标签" size="small" />
             <el-button-group size="small">
               <el-button :icon="ZoomIn" @click="zoomIn" />
@@ -117,11 +133,18 @@
               v-for="(color, type) in TYPE_COLORS"
               :key="type"
               class="legend-item"
-              :class="{ inactive: store.activeTypes.has(type) }"
-              @click="store.toggleType(type)"
+              style="cursor: default"
             >
               <span class="legend-dot" :style="{ background: color }" />
               <span class="legend-label">{{ type }}</span>
+            </div>
+            <div class="legend-item relation-legend-item">
+              <span class="relation-line dependency-line" />
+              <span class="legend-label">依赖 / 前提</span>
+            </div>
+            <div class="legend-item relation-legend-item">
+              <span class="relation-line semantic-line" />
+              <span class="legend-label">其他关系（按类型着色）</span>
             </div>
           </template>
           <template v-else>
@@ -134,34 +157,25 @@
 
         <!-- 图容器 + 详情面板 -->
         <div class="kg-chart-wrapper">
-          <KnowledgeGraph3D
-            v-if="isKnowledgePointLevel"
-            ref="graphRef3D"
-            :data="currentGraphData!"
-            :show-labels="showLabels"
-            :active-types="store.activeTypes"
-            :expanded-node-ids="allExpandedNodeIds"
-            :anchor-node-ids="anchorNodeIds"
-            :highlighted-node-ids="highlightedNodeIds"
-            :node-fx-map="nodeFxMap"
-            @node-click="handleNodeClick"
-            @node-dbl-click="handleNodeDblClick"
-          />
           <KnowledgeGraph2D
-            v-else
             ref="graphRef2D"
             :data="currentGraphData!"
             :show-labels="showLabels"
+            :show-mastery-wave="isKnowledgePointLevel"
             @node-click="handleNodeClick"
+            @node-dbl-click="handleNodeDoubleClick"
           />
           <GraphDetailPanel
             v-if="store.selectedNode"
             :node="store.selectedNode"
+            :relation-node-ids="visibleRelationNodeIds"
+            :course-id="currentCourseId"
             @close="store.selectNode(null)"
+            @practice="goToNodePractice"
           />
           <!-- 知识点层空状态 -->
           <div
-            v-if="isKnowledgePointLevel && currentGraphData && currentGraphData.nodes.length <= 1"
+            v-if="isKnowledgePointLevel && currentGraphData && currentGraphData.nodes.length === 0"
             class="kg-empty-overlay"
           >
             <div class="kg-empty-text">
@@ -181,7 +195,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { Search, ZoomIn, ZoomOut, Refresh, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useKnowledgeStore } from '@/stores/knowledge'
-import KnowledgeGraph3D from '@/components/KnowledgeGraph3D.vue'
 import KnowledgeGraph2D from '@/components/KnowledgeGraph2D.vue'
 import GraphDetailPanel from '@/components/GraphDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
@@ -195,10 +208,12 @@ import { fetchMasteryHierarchy } from '@/api/learning'
 const route = useRoute()
 const $router = useRouter()
 const store = useKnowledgeStore()
-const graphRef3D = ref<InstanceType<typeof KnowledgeGraph3D>>()
 const graphRef2D = ref<InstanceType<typeof KnowledgeGraph2D>>()
 const { showLabels, handleSearch } = useGraph()
 const selectedGraphId = ref<number | null>(null)
+const currentCourseId = computed(() => (
+  store.graphList.find(graph => graph.id === selectedGraphId.value)?.course_id ?? null
+))
 
 // 掌握度映射：节点名 → 掌握度(0~1)，用于节点球"装水"可视化
 const masteryMap = ref<Record<string, number>>({})
@@ -235,38 +250,19 @@ async function loadMastery() {
 
 // 钻取状态
 const drillPath = ref<GraphNode[]>([])
+const chapterPathIds = ref<string[]>([])
+const chapterSelectorProps = {
+  checkStrictly: true,
+  emitPath: true,
+  value: 'value',
+  label: 'label',
+  children: 'children',
+}
 
-// 双击展开状态：nodeId → 因该节点展开而加入的节点 ID 集合
-const expandedNodeMap = ref<Map<string, Set<string>>>(new Map())
-
-// 展开时需高亮的节点 ID（已在原图中的一跳邻居）
-const highlightedNodeIds = ref<Set<string>>(new Set())
-
-// 节点位置覆盖（fx/fy）- 使用普通对象替代 Map 以确保 Vue 响应式
-const nodeFxMap = ref<Record<string, {fx: number; fy: number}>>({})
-
-// 引用计数：nodeId → 被多少个展开锚点引用
-const expandedRefCount = computed(() => {
-  const counter = new Map<string, number>()
-  for (const addedNodes of expandedNodeMap.value.values()) {
-    for (const nodeId of addedNodes) {
-      counter.set(nodeId, (counter.get(nodeId) || 0) + 1)
-    }
-  }
-  return counter
-})
-
-// 所有因展开而加入的节点 ID（去重）
-const allExpandedNodeIds = computed(() => new Set(expandedRefCount.value.keys()))
-
-// 当前展开操作的锚点节点（被双击的节点）
-const anchorNodeIds = computed(() => new Set(expandedNodeMap.value.keys()))
-
-// 钻取路径改变时清空展开状态
+// 钻取路径改变时回到本层完整视图。
 watch(drillPath, () => {
-  expandedNodeMap.value = new Map()
-  highlightedNodeIds.value = new Set()
-  nodeFxMap.value = {}
+  chapterPathIds.value = drillPath.value.map(node => node.id)
+  store.selectNode(null)
 })
 
 const TYPE_COLORS: Record<string, string> = {
@@ -281,311 +277,143 @@ const hierarchy = computed(() => {
   return parseHierarchy(store.graphData)
 })
 
-// 当前层级应展示的图谱数据（含展开节点）
+interface ChapterOption {
+  value: string
+  label: string
+  children?: ChapterOption[]
+}
+
+const chapterOptions = computed<ChapterOption[]>(() => {
+  if (!hierarchy.value) return []
+  const buildOption = (node: GraphNode, visited: Set<string>): ChapterOption => {
+    if (visited.has(node.id)) return { value: node.id, label: node.name }
+    const nextVisited = new Set(visited).add(node.id)
+    const children = (hierarchy.value?.chapterChildren.get(node.id) || [])
+      .map(child => buildOption(child, nextVisited))
+    return {
+      value: node.id,
+      label: node.name,
+      ...(children.length ? { children } : {}),
+    }
+  }
+  return hierarchy.value.topLevelChapters.map(node => buildOption(node, new Set()))
+})
+
+function onChapterPathChange(value: string[] | string | null) {
+  if (!hierarchy.value || !Array.isArray(value) || value.length === 0) {
+    drillPath.value = []
+    return
+  }
+  drillPath.value = value
+    .map(id => hierarchy.value?.nodeMap.get(id))
+    .filter((node): node is GraphNode => Boolean(node))
+}
+
+// 当前层级应展示的图谱数据。进入具体小节后切换为“知识点掌握度 + 关系”视图。
 const currentGraphData = computed<GraphData | null>(() => {
   if (!store.graphData || !hierarchy.value) return store.graphData
   const base = getVisibleData(store.graphData, drillPath.value, hierarchy.value)
+  const projectedBase = base
 
   // 注入掌握度（节点名 → 掌握度 0~1），用于节点球"装水"可视化
   const injectMastery = (nodes: GraphNode[]) =>
     nodes.map(n => ({ ...n, mastery: masteryMap.value[n.name] ?? 0 }))
 
-  // 如果没有展开的节点，直接返回基础数据（注入掌握度）
-  if (expandedNodeMap.value.size === 0) {
+  const currentChapter = drillPath.value[drillPath.value.length - 1]
+  const isSectionView = drillPath.value.length >= 2
+    || (drillPath.value.length === 1
+      && (hierarchy.value.chapterChildren.get(currentChapter?.id || '')?.length || 0) === 0)
+
+  if (isSectionView) {
+    const nodes = injectMastery(projectedBase.nodes).filter(node => node.type !== 'Chapter')
+    const nodeIds = new Set(nodes.map(node => node.id))
+    const edges = projectedBase.edges.filter(edge => (
+      nodeIds.has(edge.source)
+      && nodeIds.has(edge.target)
+    ))
+    const nodeTypes: Record<string, number> = {}
+    for (const node of nodes) nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1
     return {
-      ...base,
-      nodes: injectMastery(base.nodes),
+      nodes,
+      edges,
+      stats: {
+        total_nodes: nodes.length,
+        total_edges: edges.length,
+        node_types: nodeTypes,
+      },
     }
-  }
-
-  // 合并展开节点
-  const baseNodeIds = new Set(base.nodes.map(n => n.id))
-  const mergedNodes = [...base.nodes]
-
-  for (const nodeId of allExpandedNodeIds.value) {
-    if (!baseNodeIds.has(nodeId)) {
-      const fullNode = hierarchy.value.nodeMap.get(nodeId)
-      if (fullNode) mergedNodes.push(fullNode)
-    }
-  }
-
-  const mergedNodeIds = new Set(mergedNodes.map(n => n.id))
-  const mergedEdges = store.graphData.edges.filter(
-    e => mergedNodeIds.has(e.source) && mergedNodeIds.has(e.target)
-  )
-
-  const typeCounter: Record<string, number> = {}
-  for (const n of mergedNodes) {
-    typeCounter[n.type] = (typeCounter[n.type] || 0) + 1
   }
 
   return {
-    nodes: injectMastery(mergedNodes),
-    edges: mergedEdges,
-    stats: {
-      total_nodes: mergedNodes.length,
-      total_edges: mergedEdges.length,
-      node_types: typeCounter,
-    },
+    ...projectedBase,
+    nodes: injectMastery(projectedBase.nodes),
   }
 })
+
+const currentScopeSummary = computed(() => {
+  const data = currentGraphData.value
+  if (!data) return ''
+  const knowledgeCount = data.nodes.filter(node => node.type !== 'Chapter').length
+  if (isKnowledgePointLevel.value) {
+    const connectedIds = new Set<string>()
+    for (const edge of data.edges) {
+      connectedIds.add(edge.source)
+      connectedIds.add(edge.target)
+    }
+    const isolatedCount = data.nodes.filter(node => !connectedIds.has(node.id)).length
+    const dependencyCount = data.edges.filter(edge => (
+      edge.relationship_name === '依赖' || edge.relationship_name === '前提'
+    )).length
+    const semanticCount = data.edges.length - dependencyCount
+    return `本节 ${knowledgeCount} 个知识点 · 前置/后置 ${dependencyCount} 条 · 其他关系 ${semanticCount} 条${isolatedCount ? ` · ${isolatedCount} 个节点暂无直接关系` : ''}`
+  }
+  return `${data.nodes.filter(node => node.type === 'Chapter').length} 个下级章节`
+})
+
+const visibleRelationNodeIds = computed(() => new Set(
+  (currentGraphData.value?.nodes ?? []).map(node => node.id),
+))
 
 // 是否在知识点层（控制图例和类型筛选）
 const isKnowledgePointLevel = computed(() => {
   if (drillPath.value.length === 0) return false
   const currentChapter = drillPath.value[drillPath.value.length - 1]
   const subSections = hierarchy.value?.chapterChildren.get(currentChapter.id)
-  // 知识点层：depth===2 或 depth===1 但无子节
-  return drillPath.value.length === 2 || (drillPath.value.length === 1 && (subSections?.length || 0) === 0)
+  // 知识点层：进入任意具体小节（支持更深层级）或无子节的章节。
+  return drillPath.value.length >= 2 || (drillPath.value.length === 1 && (subSections?.length || 0) === 0)
 })
 
 function handleNodeClick(node: GraphNode) {
+  // 与教师端一致：单击只负责选中并查看详情。
+  store.selectNode(node)
+}
+
+function handleNodeDoubleClick(node: GraphNode) {
   if (!hierarchy.value) return
-
-  const newPath = tryDrillInto(node, drillPath.value, hierarchy.value)
-  if (newPath !== null) {
-    // Chapter 节点 → 钻取
-    drillPath.value = newPath
-    store.selectNode(null) // 关闭详情面板
-  } else {
-    // 知识点节点 → 显示详情面板（保持现有行为）
-    store.selectNode(node)
+  if (node.type === 'Chapter') {
+    const newPath = tryDrillInto(node, drillPath.value, hierarchy.value)
+    if (newPath !== null) drillPath.value = newPath
+    store.selectNode(null)
+    return
   }
+  store.selectNode(node)
 }
 
-/**
- * 计算新节点的目标位置——沿"原图中心 → 锚点"方向向外辐射
- * @param anchorPos 锚点当前位置
- * @param centerPos 原图中心位置
- * @param newNeighborIds 需要定位的新节点 ID 列表
- * @returns 每个新节点的目标位置映射
- */
-function calculateGrowthPositions(
-  anchorPos: {x: number; y: number},
-  centerPos: {x: number; y: number},
-  newNeighborIds: string[],
-): Map<string, {fx: number; fy: number}> {
-  const result = new Map<string, {fx: number; fy: number}>()
-
-  // 计算从原图中心到锚点的方向向量
-  const dx = anchorPos.x - centerPos.x
-  const dy = anchorPos.y - centerPos.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  if (dist < 1) {
-    // 锚点就在中心附近 → 均匀散射
-    const baseDistance = 280
-    newNeighborIds.forEach((id, i) => {
-      const angle = (2 * Math.PI * i) / newNeighborIds.length
-      result.set(id, {
-        fx: anchorPos.x + baseDistance * Math.cos(angle),
-        fy: anchorPos.y + baseDistance * Math.sin(angle),
-      })
-    })
-    return result
-  }
-
-  // 归一化方向向量
-  const nx = dx / dist
-  const ny = dy / dist
-  // 增加延伸距离系数，确保新节点明显远离原图中心
-  const extensionDist = Math.max(500, dist * 1.4)
-
-  if (newNeighborIds.length === 1) {
-    // 单个新节点 → 放在锚点正外侧
-    result.set(newNeighborIds[0], {
-      fx: anchorPos.x + nx * extensionDist,
-      fy: anchorPos.y + ny * extensionDist,
-    })
-  } else {
-    // 多个新节点 → 在"远离中心"一侧扇形展开
-    // 扇形角度自适应：节点越多扇形越宽（90°~150°）
-    const spreadAngle = Math.min(Math.PI * 0.85, Math.PI / 2 + (Math.PI / 6) * newNeighborIds.length / 5)
-    newNeighborIds.forEach((id, i) => {
-      // 均匀分布在扇形内（-spreadAngle/2 ~ +spreadAngle/2）
-      const ratio = newNeighborIds.length > 1
-        ? (i / (newNeighborIds.length - 1)) - 0.5  // -0.5 到 +0.5
-        : 0
-      const angle = ratio * spreadAngle
-      const cosA = Math.cos(angle)
-      const sinA = Math.sin(angle)
-      // 旋转方向向量
-      const fxDir = nx * cosA - ny * sinA
-      const fyDir = nx * sinA + ny * cosA
-      // 中间节点近一点，边缘节点远一点（弧形展开）
-      const distFromAnchor = extensionDist * (1 + Math.abs(ratio) * 0.3)
-      result.set(id, {
-        fx: anchorPos.x + fxDir * distFromAnchor,
-        fy: anchorPos.y + fyDir * distFromAnchor,
-      })
-    })
-  }
-
-  return result
-}
-
-function handleNodeDblClick(node: GraphNode) {
-  console.log('节点:', node)
-  console.log('hierarchy:', hierarchy.value ? '存在' : '不存在')
-  console.log('store.graphData:', store.graphData ? '存在' : '不存在')
-  if (!hierarchy.value || !store.graphData) return
-
-  // 如果已展开 → 折叠
-  if (expandedNodeMap.value.has(node.id)) {
-    console.log('节点已展开，执行折叠')
-    const newMap = new Map(expandedNodeMap.value)
-    newMap.delete(node.id)
-    expandedNodeMap.value = newMap
-    // 折叠后清空高亮和位置覆盖
-    highlightedNodeIds.value = new Set()
-    nodeFxMap.value = {}
+function goToNodePractice() {
+  const node = store.selectedNode
+  const courseId = currentCourseId.value
+  if (!node || courseId == null) {
+    ElMessage.warning('当前节点暂无对应题目合集')
     return
   }
 
-  // 获取当前所有节点的渲染位置（用于冻结原图）
-  let currentPositions = new Map<string, {x: number; y: number}>()
-  if (graphRef3D.value) {
-    try {
-      currentPositions = graphRef3D.value.getNodePositions()
-    } catch {
-      currentPositions = new Map()
-    }
-  }
-
-  // BFS 1 跳
-  const kpTypes = new Set(['Concept', 'Algorithm', 'DataStructure', 'Protocol', 'Principle', 'Term', 'Technology', 'Model'])
-  const adj = new Map<string, string[]>()
-  for (const edge of store.graphData.edges) {
-    if (!adj.has(edge.source)) adj.set(edge.source, [])
-    if (!adj.has(edge.target)) adj.set(edge.target, [])
-    adj.get(edge.source)!.push(edge.target)
-    adj.get(edge.target)!.push(edge.source)
-  }
-
-  const visited = new Set<string>([node.id])
-  const queue: string[] = [node.id]
-  const oneHopNeighbors = new Set<string>()
-  let distance = 0
-
-  while (queue.length > 0 && distance < 1) {
-    const levelSize = queue.length
-    for (let i = 0; i < levelSize; i++) {
-      const cur = queue.shift()!
-      const neighbors = adj.get(cur) || []
-      for (const nb of neighbors) {
-        if (!visited.has(nb)) {
-          visited.add(nb)
-          queue.push(nb)
-          const nbNode = hierarchy.value.nodeMap.get(nb)
-          if (nbNode && kpTypes.has(nbNode.type) && nb !== node.id) {
-            oneHopNeighbors.add(nb)
-          }
-        }
-      }
-    }
-    distance++
-  }
-
-  console.log('oneHopNeighbors 大小:', oneHopNeighbors.size)
-  console.log('oneHopNeighbors:', Array.from(oneHopNeighbors))
-
-  // 分类一跳邻居
-  const base = getVisibleData(store.graphData, drillPath.value, hierarchy.value)
-  const baseNodeIds = new Set(base.nodes.map(n => n.id))
-  const existingNeighborIds = new Set<string>()
-  const newNeighborIds: string[] = []
-
-  for (const nbId of oneHopNeighbors) {
-    if (baseNodeIds.has(nbId)) {
-      existingNeighborIds.add(nbId)
-    } else {
-      newNeighborIds.push(nbId)
-    }
-  }
-
-  console.log('existingNeighborIds:', Array.from(existingNeighborIds))
-  console.log('newNeighborIds:', newNeighborIds)
-
-  if (newNeighborIds.length === 0 && existingNeighborIds.size === 0) {
-    console.log('没有邻居需要展开，直接返回')
-    return
-  }
-
-  // === 一步到位：同时设置 expandedNodeMap + nodeFxMap + highlightedNodeIds ===
-
-  // 1. 计算原图中心
-  let centerX = 0, centerY = 0, count = 0
-  for (const [id, pos] of currentPositions) {
-    if (baseNodeIds.has(id)) {
-      centerX += pos.x
-      centerY += pos.y
-      count++
-    }
-  }
-  if (count > 0) {
-    centerX /= count
-    centerY /= count
-  }
-
-  // 2. 获取锚点位置
-  const anchorPos = currentPositions.get(node.id)
-  if (!anchorPos) {
-    // 拿不到锚点位置 → 只高亮，不冻结位置
-    const fallbackMap = new Map<string, Set<string>>()
-    fallbackMap.set(node.id, oneHopNeighbors)
-    expandedNodeMap.value = fallbackMap
-    highlightedNodeIds.value = existingNeighborIds
-    nodeFxMap.value = {}
-    return
-  }
-
-  // 3. 计算新节点目标位置（沿"中心→锚点"方向外扩）
-  const growthPositions = calculateGrowthPositions(
-    anchorPos,
-    {x: centerX, y: centerY},
-    newNeighborIds,
-  )
-
-  // 4. 构建位置覆盖映射：原图节点冻结 + 新节点定位
-  const fxMap = new Map<string, {fx: number; fy: number}>()
-
-  // 冻结当前 visible 中的所有节点（包括原图节点和一跳邻居）
-  for (const [id, pos] of currentPositions) {
-    if (baseNodeIds.has(id) || oneHopNeighbors.has(id) || id === node.id) {
-      fxMap.set(id, {fx: pos.x, fy: pos.y})
-    }
-  }
-
-  // 新节点用计算出的位置覆盖（增加距离，确保分离）
-  for (const [id, pos] of growthPositions) {
-    fxMap.set(id, pos)
-  }
-
-  // 5. 一次性触发渲染
-  // 创建新的 Map 实例以确保 Vue 响应式系统检测到变化
-  const newMap = new Map<string, Set<string>>()
-  newMap.set(node.id, oneHopNeighbors)
-  expandedNodeMap.value = newMap
-  highlightedNodeIds.value = new Set(existingNeighborIds)
-
-  // 将 fxMap 转换为普通对象，确保 Vue 响应式系统检测到变化
-  const fxMapObj: Record<string, {fx: number; fy: number}> = {}
-  for (const [id, pos] of fxMap) {
-    fxMapObj[id] = pos
-  }
-  // 直接赋值新对象
-  nodeFxMap.value = fxMapObj
-
-  // 调试日志
-  console.log('=== 双击展开调试 ===')
-  console.log('锚点位置:', anchorPos)
-  console.log('原图中心:', {x: centerX, y: centerY})
-  console.log('新节点数量:', newNeighborIds.length)
-  console.log('新节点位置:', Array.from(growthPositions.entries()))
-  console.log('fxMap 大小:', fxMap.size)
-  console.log('currentPositions 大小:', currentPositions.size)
-  console.log('nodeFxMap 即将设置为:', fxMapObj)
-  console.log('nodeFxMap.value:', nodeFxMap.value)
-  console.log('=====================')
+  $router.push({
+    path: '/student/practice/panel',
+    query: {
+      module: String(courseId),
+      kgNodeName: node.name,
+    },
+  })
 }
 
 function querySearch(query: string, cb: (results: any[]) => void) {
@@ -609,27 +437,15 @@ function onSearchSelect(item: { value: string; nodeId: string }) {
 }
 
 function zoomIn() {
-  if (isKnowledgePointLevel.value) {
-    graphRef3D.value?.zoomIn()
-  } else {
-    graphRef2D.value?.zoomIn()
-  }
+  graphRef2D.value?.zoomIn()
 }
 
 function zoomOut() {
-  if (isKnowledgePointLevel.value) {
-    graphRef3D.value?.zoomOut()
-  } else {
-    graphRef2D.value?.zoomOut()
-  }
+  graphRef2D.value?.zoomOut()
 }
 
 function resetView() {
-  if (isKnowledgePointLevel.value) {
-    graphRef3D.value?.resetView()
-  } else {
-    graphRef2D.value?.resetView()
-  }
+  graphRef2D.value?.resetView()
 }
 
 function onGraphSelect(graphId: number) {
@@ -786,6 +602,7 @@ onMounted(async () => {
 .kg-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 12px 20px;
   background: rgba(255, 255, 255, 0.5);
@@ -800,9 +617,22 @@ onMounted(async () => {
   color: #4b5563;
   font-variant-numeric: tabular-nums;
 }
+.chapter-selector {
+  width: 300px;
+  flex-shrink: 0;
+}
+.chapter-selector :deep(.el-cascader) {
+  width: 100%;
+}
+.current-scope-summary {
+  color: #475569;
+  font-size: 12px;
+  white-space: nowrap;
+}
 .stat-divider { width: 1px; height: 16px; background: #d1d5db; }
 .kg-search-wrapper { flex: 1; max-width: 320px; }
-.kg-controls { display: flex; align-items: center; gap: 12px; }
+.kg-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.projection-modes { flex-shrink: 0; }
 .kg-legend {
   display: flex;
   flex-wrap: wrap;
@@ -826,6 +656,9 @@ onMounted(async () => {
 .legend-item:hover { background: rgba(0,0,0,0.05); }
 .legend-item.inactive { opacity: 0.4; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+.relation-line { width: 20px; height: 2px; border-radius: 2px; }
+.dependency-line { background: #38BDF8; box-shadow: 0 0 6px #38BDF8; }
+.semantic-line { background: #A78BFA; box-shadow: 0 0 6px #A78BFA; }
 .kg-chart-wrapper {
   flex: 1;
   position: relative;

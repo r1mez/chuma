@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'node-selected': [nodeData: NodeEditData | null]
+  'node-double-click': [nodeData: GraphNode]
   'edge-selected': [edgeData: EdgeEditData | null]
   'canvas-click': [coords: { x: number; y: number }]
   'edge-created': [edge: any]
@@ -86,10 +87,11 @@ function buildEChartsOption() {
     source: e.source,
     target: e.target,
     value: e.relationship_name,
+    rawEdge: e,
     lineStyle: {
       width: 1.5,
       color: '#94A3B8',
-      opacity: 0.5,
+      opacity: 0.6,
       curveness: 0.1,
     },
   }))
@@ -184,6 +186,12 @@ function initChart() {
           description: rawEdge?.description || '',
         })
       }
+    }
+  })
+
+  chartInstance.value.on('dblclick', (params: any) => {
+    if (params.dataType === 'node' && params.data?.rawNode) {
+      emit('node-double-click', params.data.rawNode as GraphNode)
     }
   })
 
@@ -310,7 +318,10 @@ defineExpose({
   },
 
   /** Update edge data locally */
-  updateEdgeData: (edgeId: string, fields: { relationship_name?: string; description?: string }): void => {
+  updateEdgeData: (edgeId: string, fields: {
+    relationship_name?: string
+    description?: string
+  }): void => {
     const edge = localEdges.find(e => `${e.source}-${e.target}` === edgeId)
     if (!edge) return
     if (fields.relationship_name !== undefined) edge.relationship_name = fields.relationship_name

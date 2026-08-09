@@ -7,6 +7,9 @@
         <div class="section-container" v-if="currentQuestion">
           <div class="question-header">
             <h3 class="title-red">题目 ({{ cachedIdList.length > 0 ? cachedIndex + 1 : currentIndex + 1 }} / {{ cachedIdList.length > 0 ? cachedIdList.length : questions.length }})：</h3>
+            <el-tag v-if="practiceNodeName" size="small" type="info" effect="plain">
+              知识点：{{ practiceNodeName }}
+            </el-tag>
             <div class="question-actions">
               <el-button size="small" type="danger" plain @click="prevQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === 0 : currentIndex === 0">上一题</el-button>
               <el-button size="small" type="danger" plain @click="nextQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === cachedIdList.length - 1 : currentIndex === questions.length - 1">下一题</el-button>
@@ -75,7 +78,7 @@
         <!-- 暂无题目 -->
         <div class="section-container" v-else-if="!loading">
            <div class="question-header">
-            <h3 class="title-red">暂无题目</h3>
+            <h3 class="title-red">{{ emptyQuestionMessage }}</h3>
             <div class="question-actions">
               <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
             </div>
@@ -295,6 +298,13 @@ const cachedIndex = ref(0)
 const currentQuestion = computed(() => {
   return questions.value[currentIndex.value] || null
 })
+const practiceNodeName = computed(() => {
+  const value = route.query.kgNodeName
+  return typeof value === 'string' ? value.trim() : ''
+})
+const emptyQuestionMessage = computed(() => (
+  practiceNodeName.value ? `暂无“${practiceNodeName.value}”对应的题目` : '暂无题目'
+))
 
 // AI 分析与解惑（双维度：题目答案深度剖析 + 知识图谱局部网络视角）
 const aiAnalysis = ref<QuestionAnalysisResult | null>(null)
@@ -310,6 +320,7 @@ onMounted(async () => {
   const idListStr = route.query.idList as string
   const randomIndexStr = route.query.randomIndex as string
   const courseId = courseIdStr ? parseInt(courseIdStr, 10) : undefined
+  const kgNodeName = practiceNodeName.value || undefined
   const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
 
   if (!courseId && !questionId) {
@@ -359,7 +370,7 @@ onMounted(async () => {
       }
     } else if (courseId) {
       // 通过 courseId 加载该学科下所有题目（正常进入练习）
-      const data = await fetchQuestions(courseId)
+      const data = await fetchQuestions(courseId, kgNodeName)
       questions.value = data || []
     }
   } catch (error) {

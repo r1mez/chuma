@@ -38,6 +38,28 @@ export interface DifficultChapter {
   ratio: number
 }
 
+/** 班级教学建议 — 三维度评估结果 */
+export interface ClassTeachingSuggestion {
+  class_id: number
+  course_id: number
+  course_name: string | null
+  status: 'ok' | 'insufficient' | 'db_error'
+  dimensions_available: number
+  weights: Record<string, number>
+  dimensions_detail: Record<string, any>
+  missing_dimensions: string[]
+  error: string | null
+  error_message: string | null
+  suggestion: {
+    overall_assessment: string
+    priority_focus: string[]
+    teaching_strategies: { strategy: string; detail: string }[]
+    difficult_focus: string
+    homework_suggestion: string
+    teacher_notes: string
+  } | null
+}
+
 export function getTeacherCourses() {
   return request.get<TeacherCourse[]>('/teacher/courses')
 }
@@ -85,6 +107,19 @@ export interface StudentKnowledgeGraph {
 export function getStudentKnowledgeGraph(studentId: number, courseId: number) {
   return request.get<StudentKnowledgeGraph>(
     `/teacher/students/${studentId}/knowledge-graph`,
+    {
+      params: { course_id: courseId },
+    },
+  )
+}
+
+/** 生成班级教学建议（AI ReAct Agent，三维度评估）。
+ *  综合学生评级、班级知识点平均掌握度进度、疑难章节与知识点三个维度，
+ *  各维度等权（3 维各 1/3，2 维各 1/2），缺失维度时触发兜底机制。
+ */
+export function getClassTeachingSuggestion(classId: number, courseId: number) {
+  return request.get<ClassTeachingSuggestion>(
+    `/teacher/classes/${classId}/teaching-suggestion`,
     {
       params: { course_id: courseId },
     },

@@ -100,12 +100,122 @@
     <div class="flex min-h-[360px] gap-6 max-lg:flex-col">
       <el-card class="teacher-card w-[45%] max-lg:w-full" shadow="never">
         <template #header>
-          <span class="text-sm font-bold text-slate-800">AI 班级教学建议</span>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-slate-800">AI 班级教学建议</span>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="teachingSuggestionLoading"
+              :disabled="selectedClass === null || selectedCourse === null"
+              @click="loadTeachingSuggestion"
+            >
+              {{ teachingSuggestionLoading ? '生成中...' : '生成建议' }}
+            </el-button>
+          </div>
         </template>
 
         <div class="custom-scrollbar h-[360px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm leading-7 text-slate-700">
-          结合学生评级、班级学科整体进度，以及疑难章节和知识点分布，后续可以优先围绕高频错题知识点安排专题复习。
-          当前这块仍是占位内容，词云能力已经接入真实数据，后续如果需要，我们可以再把这部分联动成自动生成的教学建议。
+          <!-- 加载中 -->
+          <div v-if="teachingSuggestionLoading" class="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+            <el-icon class="is-loading" :size="28"><Loading /></el-icon>
+            <span>AI 正在综合分析班级学情，生成教学建议...</span>
+          </div>
+
+          <!-- 数据不足 / 异常 -->
+          <div v-else-if="teachingSuggestionError" class="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <el-icon :size="32" class="text-amber-500"><WarningFilled /></el-icon>
+            <p class="font-medium text-slate-600">{{ teachingSuggestionError }}</p>
+            <p v-if="teachingSuggestionMissing.length" class="text-xs text-slate-400">
+              缺失维度：{{ teachingSuggestionMissing.join('、') }}
+            </p>
+          </div>
+
+          <!-- 建议内容 -->
+          <div v-else-if="teachingSuggestion" class="space-y-4">
+            <!-- 权重说明 -->
+            <div class="flex flex-wrap items-center gap-2 rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-500">
+              <span class="font-semibold text-slate-600">评估维度权重：</span>
+              <el-tag
+                v-for="(weight, key) in teachingSuggestionWeights"
+                :key="key"
+                size="small"
+                effect="plain"
+              >
+                {{ dimensionLabel(key) }} {{ (weight * 100).toFixed(0) }}%
+              </el-tag>
+            </div>
+
+            <!-- 整体评估 -->
+            <div>
+              <h4 class="mb-1 flex items-center gap-1 font-semibold text-slate-800">
+                <el-icon :size="14"><DataAnalysis /></el-icon> 班级整体学情评估
+              </h4>
+              <p class="text-slate-600">{{ teachingSuggestion.overall_assessment }}</p>
+            </div>
+
+            <!-- 优先教学重点 -->
+            <div>
+              <h4 class="mb-1 flex items-center gap-1 font-semibold text-slate-800">
+                <el-icon :size="14"><Flag /></el-icon> 优先教学重点
+              </h4>
+              <div class="flex flex-wrap gap-2">
+                <el-tag
+                  v-for="(focus, idx) in teachingSuggestion.priority_focus"
+                  :key="idx"
+                  type="danger"
+                  effect="light"
+                  size="small"
+                >
+                  {{ focus }}
+                </el-tag>
+              </div>
+            </div>
+
+            <!-- 教学策略 -->
+            <div>
+              <h4 class="mb-1 flex items-center gap-1 font-semibold text-slate-800">
+                <el-icon :size="14"><MagicStick /></el-icon> 教学策略建议
+              </h4>
+              <div class="space-y-2">
+                <div
+                  v-for="(strategy, idx) in teachingSuggestion.teaching_strategies"
+                  :key="idx"
+                  class="rounded-lg bg-white/80 p-3"
+                >
+                  <p class="font-medium text-slate-700">{{ strategy.strategy }}</p>
+                  <p class="text-xs text-slate-500">{{ strategy.detail }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 疑难专项突破 -->
+            <div>
+              <h4 class="mb-1 flex items-center gap-1 font-semibold text-slate-800">
+                <el-icon :size="14"><Aim /></el-icon> 疑难章节与知识点专项突破
+              </h4>
+              <p class="text-slate-600">{{ teachingSuggestion.difficult_focus }}</p>
+            </div>
+
+            <!-- 作业与练习 -->
+            <div>
+              <h4 class="mb-1 flex items-center gap-1 font-semibold text-slate-800">
+                <el-icon :size="14"><EditPen /></el-icon> 作业与练习安排
+              </h4>
+              <p class="text-slate-600">{{ teachingSuggestion.homework_suggestion }}</p>
+            </div>
+
+            <!-- 教师补充说明 -->
+            <div v-if="teachingSuggestion.teacher_notes" class="rounded-lg bg-amber-50/80 p-3 text-xs text-amber-700">
+              <p class="font-semibold">教师补充说明</p>
+              <p>{{ teachingSuggestion.teacher_notes }}</p>
+            </div>
+          </div>
+
+          <!-- 初始占位 -->
+          <div v-else class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400">
+            <el-icon :size="32"><ChatLineRound /></el-icon>
+            <p>点击「生成建议」，AI 将综合学生评级、班级知识点平均掌握度进度、疑难章节与知识点三个维度，为班级生成下一步教学建议。</p>
+          </div>
         </div>
       </el-card>
 
@@ -323,16 +433,18 @@ import {
   watch,
   type ComponentPublicInstance,
 } from 'vue'
-import { PieChart, Share, ZoomIn, ZoomOut, Refresh, Close } from '@element-plus/icons-vue'
+import { PieChart, Share, ZoomIn, ZoomOut, Refresh, Close, Loading, WarningFilled, DataAnalysis, Flag, MagicStick, Aim, EditPen, ChatLineRound } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import {
   getClassStudents,
+  getClassTeachingSuggestion,
   getDifficultChapters,
   getDifficultKnowledge,
   getStudentKnowledgeGraph,
   getTeacherClasses,
   getTeacherCourses,
   type ClassStudent,
+  type ClassTeachingSuggestion,
   type DifficultChapter,
   type DifficultKnowledgePoint,
   type StudentKnowledgeGraph,
@@ -354,6 +466,50 @@ const difficultChapterList = ref<DifficultChapter[]>([])
 const studentDialogVisible = ref(false)
 const teacherSuggestion = ref('')
 const currentStudent = ref<ClassStudent | null>(null)
+
+// ===== AI 班级教学建议（三维度评估） =====
+const teachingSuggestionLoading = ref(false)
+const teachingSuggestion = ref<ClassTeachingSuggestion['suggestion'] | null>(null)
+const teachingSuggestionWeights = ref<Record<string, number>>({})
+const teachingSuggestionError = ref('')
+const teachingSuggestionMissing = ref<string[]>([])
+
+const DIMENSION_LABELS_MAP: Record<string, string> = {
+  student_level: '学生评级',
+  class_mastery: '班级知识点平均掌握度进度',
+  difficult: '疑难章节与知识点',
+}
+
+const dimensionLabel = (key: string) => DIMENSION_LABELS_MAP[key] || key
+
+const loadTeachingSuggestion = async () => {
+  if (selectedClass.value === null || selectedCourse.value === null) return
+  teachingSuggestionLoading.value = true
+  teachingSuggestion.value = null
+  teachingSuggestionError.value = ''
+  teachingSuggestionMissing.value = []
+  teachingSuggestionWeights.value = {}
+
+  try {
+    const data = await getClassTeachingSuggestion(selectedClass.value, selectedCourse.value)
+    if (data.status === 'ok' && data.suggestion) {
+      teachingSuggestion.value = data.suggestion
+      teachingSuggestionWeights.value = data.weights || {}
+    } else if (data.status === 'insufficient') {
+      teachingSuggestionError.value =
+        data.error_message || '当前数据不足，暂时无法给出教学建议。'
+      teachingSuggestionMissing.value = data.missing_dimensions || []
+    } else {
+      teachingSuggestionError.value =
+        data.error_message || 'AI 教学建议服务暂时不可用，请稍后重试。'
+    }
+  } catch (error) {
+    console.error('生成班级教学建议失败:', error)
+    teachingSuggestionError.value = '生成班级教学建议失败，请稍后重试'
+  } finally {
+    teachingSuggestionLoading.value = false
+  }
+}
 
 // ===== 学生个人知识图谱（复用学生端知识图谱设计） =====
 const studentGraphData = ref<StudentKnowledgeGraph | null>(null)

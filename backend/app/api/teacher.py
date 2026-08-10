@@ -103,6 +103,32 @@ async def list_difficult_chapters(
     )
 
 
+@router.get("/classes/{class_id}/teaching-suggestion")
+async def get_class_teaching_suggestion(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """生成班级教学建议（AI ReAct Agent，三维度评估）。
+
+    综合三个维度（学生评级、班级知识点平均掌握度进度、疑难章节与知识点），
+    各维度等权（3 维各 1/3，2 维各 1/2），缺失维度时触发兜底机制。
+    """
+    if current_user["user_type"] != "teacher":
+        return {
+            "status": "db_error",
+            "error": "no_access",
+            "error_message": "仅教师可访问班级教学建议。",
+            "suggestion": None,
+        }
+
+    service = TeacherService()
+    return await service.get_class_teaching_suggestion(
+        current_user["id"], class_id, course_id, db
+    )
+
+
 @router.get("/analytics/{class_id}")
 async def get_class_analytics(class_id: int):
     """Get the class analytics report."""

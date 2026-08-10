@@ -7,9 +7,9 @@ import logging
 import math
 from typing import Sequence
 
-from app.config import settings
 from app.engines.rag.embedding import EmbeddingClient
 from app.kg_pipeline.age_semantic_store import search_node_embeddings
+from app.kg_pipeline.graph_registry import list_graph_names
 from app.kg_pipeline.queries import GraphQueryError, list_nodes
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def semantic_search_nodes(
     persisted_graph_names = (
         list(graph_names)
         if graph_names
-        else ([settings.AGE_GRAPH_NAME] if settings.AGE_GRAPH_NAME else None)
+        else list_graph_names(status=None)
     )
 
     query_vector = await client.encode(query)

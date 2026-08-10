@@ -29,7 +29,7 @@ async def run_kg_build(task_data: dict):
     task_id = task_data.get("task_id", "unknown")
     file_path = task_data["file_path"]
     output_key = task_data.get("output_key", f"kg:result:{task_id}")
-    graph_name = task_data.get("graph_name")  # 可选，为空则使用 settings.AGE_GRAPH_NAME
+    graph_name = task_data.get("graph_name")  # 可选，为空则从数据库 kg_graphs 解析默认图谱
     kg_graph_id = task_data.get("kg_graph_id")  # 可选，入库时关联 graph 记录
 
     logger.info(f"[KGBuild] Task {task_id}: building KG from {file_path} (kg_graph_id={kg_graph_id})")

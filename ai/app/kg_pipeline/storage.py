@@ -46,7 +46,13 @@ class AgeStorage:
 
     def __init__(self, dsn: Optional[str] = None, graph_name: Optional[str] = None):
         self._dsn = dsn or _build_dsn()
-        self._graph_name = graph_name or settings.AGE_GRAPH_NAME
+        if graph_name:
+            self._graph_name = graph_name
+        else:
+            # 不再回退到 .env 中硬编码的 AGE_GRAPH_NAME（chuma_kg 已被删除），
+            # 而是从数据库 kg_graphs 表解析真实存在的图谱。
+            from app.kg_pipeline.graph_registry import resolve_default_graph
+            self._graph_name = resolve_default_graph()
 
     def _get_conn(self):
         """创建 AGE 数据库连接"""

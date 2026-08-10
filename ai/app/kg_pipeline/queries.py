@@ -16,6 +16,8 @@ class GraphQueryError(Exception):
 def get_full_graph(graph_name: Optional[str] = None) -> dict[str, Any]:
     """获取完整图数据（节点 + 边 + 统计），自动去重"""
     storage = AgeStorage(graph_name=graph_name) # graph_name 传入 AgeStorage，Cypher 查询对应图
+    if not storage._graph_name:
+        raise GraphQueryError("No knowledge graph available in database (kg_graphs is empty)")
     try:
         conn = storage._get_conn()
     except AgeConnectionError as e:

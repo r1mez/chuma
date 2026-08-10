@@ -399,6 +399,94 @@ class TeacherService:
         items.sort(key=lambda item: (-item["count"], item["name"] or ""))
         return items
 
+    async def get_class_teaching_suggestion(
+        self, tea_id: int, class_id: int, course_id: int, db: AsyncSession
+    ) -> dict:
+        """生成班级教学建议（调用 AI 引擎的 ReAct Agent）。
+
+        综合三个维度（学生评级、班级知识点平均掌握度进度、疑难章节与知识点），
+        各维度等权（3 维各 1/3，2 维各 1/2），缺失维度时触发兜底机制。
+
+        返回结构（与 AI 引擎 /analysis/class_teaching_suggestion 一致）：
+          {
+            "class_id", "course_id", "course_name",
+            "status": "ok" | "insufficient" | "db_error",
+            "dimensions_available", "weights", "dimensions_detail",
+            "missing_dimensions", "error", "error_message", "suggestion"
+          }
+        """
+        # 1. 校验教师-班级-学科归属
+        if not await self._teacher_has_access_to_class_and_course(
+            tea_id, class_id, course_id, db
+        ):
+            return {
+                "class_id": class_id,
+                "course_id": course_id,
+                "course_name": None,
+                "status": "db_error",
+                "dimensions_available": 0,
+                "weights": {},
+                "dimensions_detail": {},
+                "missing_dimensions": [],
+                "error": "no_access",
+                "error_message": "您无权访问该班级或该学科的教学数据。",
+                "suggestion": None,
+            }
+
+        # 2. 获取学科名称
+        course_result = await db.execute(
+            select(Course.course_name).where(Course.course_id == course_id)
+        )
+        course_name = course_result.scalar_one_or_none()
+
+        # 3. 调用 AI 引擎生成教学建议
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"{settings.AI_SERVICE_URL}/analysis/class_teaching_suggestion",
+                    params={
+                        "class_id": class_id,
+                        "course_id": course_id,
+                        "course_name": course_name,
+                    },
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                )
+                if response.status_code >= 400:
+                    logger.warning(
+                        f"Class teaching suggestion request failed: "
+                        f"class_id={class_id}, course_id={course_id}, "
+                        f"status={response.status_code}"
+                    )
+                    return {
+                        "class_id": class_id,
+                        "course_id": course_id,
+                        "course_name": course_name,
+                        "status": "db_error",
+                        "dimensions_available": 0,
+                        "weights": {},
+                        "dimensions_detail": {},
+                        "missing_dimensions": [],
+                        "error": "ai_error",
+                        "error_message": "AI 教学建议服务暂时不可用，请稍后重试。",
+                        "suggestion": None,
+                    }
+                return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"Class teaching suggestion request error: {e}")
+            return {
+                "class_id": class_id,
+                "course_id": course_id,
+                "course_name": course_name,
+                "status": "db_error",
+                "dimensions_available": 0,
+                "weights": {},
+                "dimensions_detail": {},
+                "missing_dimensions": [],
+                "error": "ai_error",
+                "error_message": "AI 教学建议服务暂时不可用，请稍后重试。",
+                "suggestion": None,
+            }
+
     async def get_student_knowledge_graph(
         self, tea_id: int, student_id: int, course_id: int, db: AsyncSession
     ) -> dict:

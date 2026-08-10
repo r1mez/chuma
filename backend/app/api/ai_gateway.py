@@ -73,6 +73,74 @@ async def deep_chat(request: Request):
     )
 
 
+@router.get("/agent/conversations")
+async def list_agent_conversations(
+    current_user: dict = Depends(get_current_user_optional),
+    limit: int = 30,
+):
+    """List Agent conversations for the authenticated user."""
+
+    user_type = current_user.get("user_type")
+    user_role = user_type if user_type in {"student", "teacher", "admin"} else "student"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{settings.AI_SERVICE_URL}/agent/conversations",
+            headers=_ai_headers(),
+            params={
+                "user_id": current_user.get("id", 1),
+                "user_role": user_role,
+                "limit": limit,
+            },
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to load Agent conversations")
+    return response.json()
+
+
+@router.get("/agent/conversations/{conversation_id}")
+async def get_agent_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user_optional),
+):
+    """Load one Agent conversation for the authenticated user."""
+
+    user_type = current_user.get("user_type")
+    user_role = user_type if user_type in {"student", "teacher", "admin"} else "student"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(
+            f"{settings.AI_SERVICE_URL}/agent/conversations/{conversation_id}",
+            headers=_ai_headers(),
+            params={"user_id": current_user.get("id", 1), "user_role": user_role},
+        )
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to load Agent conversation")
+    return response.json()
+
+
+@router.delete("/agent/conversations/{conversation_id}")
+async def delete_agent_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user_optional),
+):
+    """Delete one Agent conversation for the authenticated user."""
+
+    user_type = current_user.get("user_type")
+    user_role = user_type if user_type in {"student", "teacher", "admin"} else "student"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.delete(
+            f"{settings.AI_SERVICE_URL}/agent/conversations/{conversation_id}",
+            headers=_ai_headers(),
+            params={"user_id": current_user.get("id", 1), "user_role": user_role},
+        )
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Failed to delete Agent conversation")
+    return response.json()
+
+
 @router.post("/agent/chat")
 async def agent_chat(
     request: Request,

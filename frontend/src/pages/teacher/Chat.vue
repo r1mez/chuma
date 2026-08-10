@@ -43,24 +43,16 @@
     </div>
 
     <div class="flex-1 flex overflow-hidden">
-      <!-- 左侧历史对话记录（可展开/收起） -->
-      <div class="history-panel w-64 border-r border-gray-200/50 bg-white/40 backdrop-blur-md flex flex-col transition-all duration-300" :class="{ 'w-12': isHistoryCollapsed }">
-        <div class="p-2 border-b border-gray-200/50 flex justify-between items-center">
-          <span v-if="!isHistoryCollapsed" class="font-bold text-gray-700 text-sm">历史对话记录</span>
-          <el-button size="small" circle @click="isHistoryCollapsed = !isHistoryCollapsed">
-            <el-icon><component :is="isHistoryCollapsed ? 'ArrowRight' : 'ArrowLeft'" /></el-icon>
-          </el-button>
-        </div>
-        <div v-if="!isHistoryCollapsed" class="flex-1 overflow-y-auto p-2">
-          <!-- 历史记录占位 -->
-          <div class="text-xs text-gray-500 p-2 hover:bg-white/50 rounded cursor-pointer truncate mb-1">
-            如何给差生布置作业...
-          </div>
-          <div class="text-xs text-gray-500 p-2 hover:bg-white/50 rounded cursor-pointer truncate mb-1">
-            生成一份Python期中卷...
-          </div>
-        </div>
-      </div>
+      <AgentConversationSidebar
+        :conversations="conversations"
+        :active-id="activeConversationId"
+        :collapsed="isHistoryCollapsed"
+        :loading="conversationsLoading"
+        @select="handleSelectConversation"
+        @new="handleNewConversation"
+        @delete="handleDeleteConversation"
+        @toggle="isHistoryCollapsed = !isHistoryCollapsed"
+      />
 
       <!-- 右侧对话主面板 -->
       <div class="flex-1 flex flex-col relative">
@@ -88,13 +80,20 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch, nextTick } from 'vue'
-import { ChatDotRound, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import AgentConversationSidebar from '@/components/AgentConversationSidebar.vue'
 import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
+import {
+  deleteAgentConversation,
+  getAgentConversation,
+  listAgentConversations,
+  type AgentConversationSummary,
+} from '@/api/ai'
 import {
   getTeacherClasses,
   getTeacherCourses,
@@ -107,7 +106,15 @@ const selectedCourse = ref<number | null>(null)
 const classList = ref<TeacherClass[]>([])
 const courseList = ref<TeacherCourse[]>([])
 
-const { messages, loading, sendMessage, clearMessages, chatMode } = useChat({
+const {
+  messages,
+  loading,
+  sendMessage,
+  clearMessages,
+  chatMode,
+  activeConversationId,
+  loadConversation,
+} = useChat({
   getAgent: () => ({
     agentId: 'teacher.class_assistant',
     classId: selectedClass.value ?? undefined,
@@ -116,6 +123,52 @@ const { messages, loading, sendMessage, clearMessages, chatMode } = useChat({
 })
 const messagesRef = ref<HTMLElement>()
 const isHistoryCollapsed = ref(false)
+const conversations = ref<AgentConversationSummary[]>([])
+const conversationsLoading = ref(false)
+
+async function refreshConversations() {
+  conversationsLoading.value = true
+  try {
+    const nextConversations = await listAgentConversations()
+    conversations.value = nextConversations
+    if (
+      messages.value.length === 0
+      && nextConversations.some(item => item.conversation_id === activeConversationId.value)
+    ) {
+      const currentConversation = await getAgentConversation(activeConversationId.value)
+      loadConversation(currentConversation.messages, currentConversation.conversation_id)
+    }
+  } catch (error) {
+    console.error('加载教师 Agent 历史会话失败:', error)
+  } finally {
+    conversationsLoading.value = false
+  }
+}
+
+async function handleSelectConversation(conversationId: string) {
+  try {
+    const conversation = await getAgentConversation(conversationId)
+    loadConversation(conversation.messages, conversation.conversation_id)
+  } catch (error) {
+    console.error('恢复教师 Agent 会话失败:', error)
+    ElMessage.error('历史会话加载失败，请稍后重试')
+  }
+}
+
+function handleNewConversation() {
+  clearMessages()
+}
+
+async function handleDeleteConversation(conversationId: string) {
+  try {
+    await deleteAgentConversation(conversationId)
+    if (activeConversationId.value === conversationId) clearMessages()
+    await refreshConversations()
+  } catch (error) {
+    console.error('删除教师 Agent 会话失败:', error)
+    ElMessage.error('历史会话删除失败，请稍后重试')
+  }
+}
 
 // 教师端模式配置：轻度思考、深度思考、辅助备课
 const navItems = [
@@ -146,7 +199,15 @@ onMounted(async () => {
     console.error('加载教师 Agent 范围失败:', error)
     ElMessage.error('班级和学科加载失败，请稍后重试')
   }
+  void refreshConversations()
 })
+
+watch(
+  () => loading.value,
+  (isLoading, wasLoading) => {
+    if (wasLoading && !isLoading) void refreshConversations()
+  },
+)
 
 // 自动滚动到底部
 watch(

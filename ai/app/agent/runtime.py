@@ -11,6 +11,7 @@ from app.agent.context import (
     reset_agent_context,
 )
 from app.agent.registry import AgentRegistry
+from app.agent.policy import ToolPolicy
 from app.engines.llm.client import LLMClient
 from app.engines.llm.profiles import deepseek_profile
 
@@ -41,10 +42,16 @@ class AgentRuntime:
         if definition.allowed_roles and context.user_role not in definition.allowed_roles:
             raise PermissionError(f"Role {context.user_role!r} cannot use {agent_id}")
         agent = definition.factory(context, self.llm)
-        # Existing chat Agents expose this attribute; workflow adapters can
-        # opt into the same policy later without changing the registry API.
-        if definition.allowed_tools is not None and hasattr(agent, "allowed_tools"):
-            agent.allowed_tools = definition.allowed_tools
+        # Apply the registry policy to chat Agents. A concrete Agent may also
+        # define a narrower policy of its own (for example the teacher class
+        # assistant), so use it when the registry entry is unrestricted.
+        policy_names = definition.allowed_tools
+        if policy_names is None and hasattr(agent, "allowed_tools"):
+            policy_names = getattr(agent, "allowed_tools")
+        if hasattr(agent, "set_tool_policy"):
+            agent.set_tool_policy(ToolPolicy(policy_names))
+        elif policy_names is not None and hasattr(agent, "allowed_tools"):
+            agent.allowed_tools = policy_names
         return definition, agent
 
     async def stream(

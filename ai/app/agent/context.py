@@ -22,6 +22,7 @@ class AgentContext:
     graph_names: tuple[str, ...] = ()
     history: tuple[dict[str, Any], ...] = ()
     message_id: str | None = None
+    conversation_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -17,6 +17,7 @@ from app.agent.context import (
 from app.agent.schemas import ToolExecutionResult
 from app.agent.suggestions import generate_suggested_questions
 from app.agent.tool_registry import ToolRegistry
+from app.agent.policy import ToolPolicy
 from app.engines.llm.client import LLMClient
 from app.kg_pipeline.neighbors import get_node_neighbors
 
@@ -114,16 +115,18 @@ class AgentOrchestrator:
         self.llm = llm_client
         self.context = context
         self.allowed_tools = allowed_tools
+        self.tool_policy = ToolPolicy(allowed_tools)
         self._kg_hit_info: dict | None = None  # Tracks last kg_hit for suggestions
+
+    def set_tool_policy(self, policy: ToolPolicy) -> None:
+        self.tool_policy = policy
+        self.allowed_tools = policy.allowed_tools
 
     def _build_system_prompt(self) -> str:
         """根据当前注册的工具和教材上下文动态生成系统提示词"""
         from app.agent.context import current_kg_graph_ids, current_graph_names
 
-        if self.allowed_tools is None:
-            tools = ToolRegistry.get_definitions()
-        else:
-            tools = ToolRegistry.get_definitions(self.allowed_tools)
+        tools = self.tool_policy.definitions()
 
         local_tools = []
         db_tools = []
@@ -308,10 +311,7 @@ class AgentOrchestrator:
         messages.append({"role": "user", "content": message})
         self._messages = messages  # Store for suggestions context
 
-        if self.allowed_tools is None:
-            tools = ToolRegistry.get_definitions()
-        else:
-            tools = ToolRegistry.get_definitions(self.allowed_tools)
+        tools = self.tool_policy.definitions()
         planning_started = time.perf_counter()
         planning_completed = False
         processing_step: tuple[str, float] | None = None
@@ -408,6 +408,8 @@ class AgentOrchestrator:
                         # Execute with timeout
                         tool_timeout = TOOL_TIMEOUTS.get(tc.name, TOOL_TIMEOUT)
                         try:
+                            if not self.tool_policy.allows(tc.name):
+                                raise PermissionError(f"Tool is not allowed for this Agent: {tc.name}")
                             result = await asyncio.wait_for(
                                 ToolRegistry.execute(tc.name, tc.arguments, self.user_id),
                                 timeout=tool_timeout,

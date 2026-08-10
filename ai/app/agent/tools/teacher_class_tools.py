@@ -27,6 +27,7 @@ CLASS_TOOL_NAMES = frozenset(
         "teacher_query_difficult_knowledge",
         "teacher_query_student_risk",
         "teacher_query_student_profile",
+        "teacher_query_assignment_results",
     }
 )
 
@@ -290,6 +291,80 @@ async def query_student_risk(user_id: int, top_k: int = 10) -> str:
             conn.close()
     except Exception as exc:
         return _error(tool, str(exc))
+
+
+@ToolRegistry.register(
+    name="teacher_query_assignment_results",
+    description="查询当前教师所选班级和学科近期作业/练习结果汇总。当前数据源为学生做题记录，返回提交数、错题数、平均得分和最近提交时间。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "top_k": {"type": "integer", "minimum": 1, "maximum": 20},
+            "period_days": {"type": "integer", "minimum": 1, "maximum": 90},
+        },
+        "additionalProperties": False,
+    },
+)
+async def query_assignment_results(
+    user_id: int,
+    top_k: int = 20,
+    period_days: int = 30,
+) -> str:
+    tool = "teacher_query_assignment_results"
+    conn = None
+    try:
+        teacher_id, class_id, course_id = _context_scope()
+        top_k = _limit(top_k)
+        period_days = max(1, min(int(period_days), 90))
+        conn = _get_conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _check_scope(cur, teacher_id, class_id, course_id)
+            cur.execute(
+                """
+                SELECT
+                    s.stu_id,
+                    s.stu_name,
+                    COUNT(er.do_id) AS submitted_count,
+                    COUNT(er.do_id) FILTER (
+                        WHERE er.do_istrue IS FALSE OR er.do_score < 6
+                    ) AS wrong_count,
+                    ROUND(AVG(er.do_score)::numeric, 4) AS avg_score,
+                    ROUND(AVG(
+                        CASE
+                            WHEN er.do_istrue IS NOT NULL THEN
+                                CASE WHEN er.do_istrue THEN 1.0 ELSE 0.0 END
+                            WHEN er.do_score IS NOT NULL THEN er.do_score / 10.0
+                        END
+                    )::numeric, 4) AS accuracy,
+                    MAX(er.created_at) AS latest_submission_at
+                FROM students s
+                LEFT JOIN exercise_records er
+                    ON er.stu_id = s.stu_id
+                   AND er.course_id = %s
+                   AND er.created_at >= now() - (%s * INTERVAL '1 day')
+                WHERE s.class_id = %s
+                GROUP BY s.stu_id, s.stu_name
+                ORDER BY wrong_count DESC, accuracy ASC NULLS FIRST,
+                         submitted_count ASC
+                LIMIT %s
+                """,
+                (course_id, period_days, class_id, top_k),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+        return _result(
+            tool,
+            {
+                "class_id": class_id,
+                "course_id": course_id,
+                "period_days": period_days,
+                "students": rows,
+            },
+        )
+    except Exception as exc:
+        return _error(tool, str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 @ToolRegistry.register(

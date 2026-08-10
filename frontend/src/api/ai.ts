@@ -39,10 +39,55 @@ export type AgentSSEEvent = LegacyAgentSSEEvent | AgentEventV2
 
 export interface AgentRequestOptions {
   agentId?: string
+  conversationId?: string
   studentId?: number
   teacherId?: number
   classId?: number
   courseId?: number
+}
+
+export interface AgentConversationSummary {
+  conversation_id: string
+  title: string
+  agent_id: string
+  message_count: number
+  last_message_at?: string | null
+}
+
+export interface AgentConversationDetail extends AgentConversationSummary {
+  messages: ChatHistoryItem[]
+}
+
+async function agentApiRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('token')
+  const response = await fetch(`${API_BASE}${url}`, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+  }
+  return response.json() as Promise<T>
+}
+
+export function listAgentConversations(limit = 30): Promise<AgentConversationSummary[]> {
+  return agentApiRequest<AgentConversationSummary[]>(`/ai/agent/conversations?limit=${limit}`)
+}
+
+export function getAgentConversation(conversationId: string): Promise<AgentConversationDetail> {
+  return agentApiRequest<AgentConversationDetail>(
+    `/ai/agent/conversations/${encodeURIComponent(conversationId)}`,
+  )
+}
+
+export function deleteAgentConversation(conversationId: string): Promise<{ deleted: boolean; conversation_id: string }> {
+  return agentApiRequest<{ deleted: boolean; conversation_id: string }>(
+    `/ai/agent/conversations/${encodeURIComponent(conversationId)}`,
+    { method: 'DELETE' },
+  )
 }
 
 /**
@@ -200,6 +245,7 @@ export async function sendAgentMessage(
         history,
         kg_graph_ids: kgGraphIds,
         message_id: messageId,
+        conversation_id: options.conversationId,
         agent_id: options.agentId,
         student_id: options.studentId,
         teacher_id: options.teacherId,

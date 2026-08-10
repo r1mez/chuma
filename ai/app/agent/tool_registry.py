@@ -31,6 +31,10 @@ class ToolRegistry:
         "list_tables": "检查可用学习数据",
         "describe_table": "了解数据结构",
         "query_postgresql": "查询学习记录",
+        "query_my_mastery": "查询我的知识掌握度",
+        "query_my_exercises": "查询我的做题记录",
+        "socratic_hint": "获取苏格拉底式提示",
+        "teacher_query_assignment_results": "查询班级作业结果",
     }
     _PURPOSES = {
         "search_kg": "查找与问题相关的知识点和概念关系",
@@ -39,6 +43,10 @@ class ToolRegistry:
         "list_tables": "确认可以查询哪些学习数据",
         "describe_table": "确认学习数据的组织方式",
         "query_postgresql": "查询与当前问题相关的学习记录",
+        "query_my_mastery": "定位自己的薄弱知识点",
+        "query_my_exercises": "了解自己的练习表现",
+        "socratic_hint": "获取下一步解题思路",
+        "teacher_query_assignment_results": "查看班级近期作业和练习结果",
     }
 
     @classmethod

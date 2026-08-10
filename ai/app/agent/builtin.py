@@ -16,7 +16,15 @@ from app.engines.llm.client import LLMClient
 # The student tutor keeps the same tool contract as the previously working
 # implementation. Other tools may be registered in this process, but are not
 # exposed to this Agent.
-STUDENT_TUTOR_TOOLS = frozenset({"search_kg", "read_document"})
+STUDENT_TUTOR_TOOLS = frozenset(
+    {
+        "search_kg",
+        "read_document",
+        "query_my_mastery",
+        "query_my_exercises",
+        "socratic_hint",
+    }
+)
 
 
 def _build_student_tutor(context: AgentContext, llm: LLMClient) -> AgentOrchestrator:

@@ -57,6 +57,28 @@ function createId(prefix: string): string {
   return `${prefix}_${randomId}`
 }
 
+function getConversationId(): string {
+  const storageKey = `chuma-agent-conversation:${globalThis.location?.pathname ?? 'default'}`
+  try {
+    const existing = globalThis.localStorage?.getItem(storageKey)
+    if (existing) return existing
+    const created = createId('conversation')
+    globalThis.localStorage?.setItem(storageKey, created)
+    return created
+  } catch {
+    return createId('conversation')
+  }
+}
+
+function saveConversationId(id: string): void {
+  const storageKey = `chuma-agent-conversation:${globalThis.location?.pathname ?? 'default'}`
+  try {
+    globalThis.localStorage?.setItem(storageKey, id)
+  } catch {
+    // Local storage is optional; the current in-memory conversation remains usable.
+  }
+}
+
 function createInitialRun(): AgentRun {
   const now = new Date().toISOString()
   return {
@@ -108,6 +130,8 @@ export function useChat(options: UseChatOptions = {}) {
   const subgraphPanelVisible = ref(false)
   const suggesting = ref(false)
   const currentController = ref<AbortController | null>(null)
+  let conversationId = getConversationId()
+  const activeConversationId = ref(conversationId)
   const { subgraphs, subgraphLoading, subgraphErrors, extractSubgraphs, clearSubgraphs } = useSubgraph()
 
   function findMessage(messageId: string) {
@@ -340,7 +364,11 @@ export function useChat(options: UseChatOptions = {}) {
     messages.value.push(assistantMessage)
 
     if (mode === 'agent') {
-      const agentOptions = options.getAgent?.() ?? options.agent ?? {}
+      const configuredAgent = options.getAgent?.() ?? options.agent ?? {}
+      const agentOptions: AgentRequestOptions = {
+        ...configuredAgent,
+        conversationId: configuredAgent.conversationId ?? conversationId,
+      }
       await sendAgentMessage(
         content,
         history,
@@ -426,6 +454,25 @@ export function useChat(options: UseChatOptions = {}) {
     sendMessage(question.text)
   }
 
+  function loadConversation(history: ChatHistoryItem[], id: string) {
+    cancelCurrentRun()
+    chatMode.value = 'agent'
+    messages.value = history.map(item => ({
+      id: createId('history'),
+      role: item.role,
+      mode: 'agent' as ChatMode,
+      content: item.content,
+      reasoning: '',
+    }))
+    kgHitNodes.value = []
+    activeKgHitIndex.value = 0
+    subgraphPanelVisible.value = false
+    clearSubgraphs()
+    conversationId = id
+    activeConversationId.value = id
+    saveConversationId(id)
+  }
+
   function clearMessages() {
     cancelCurrentRun()
     messages.value = []
@@ -433,6 +480,9 @@ export function useChat(options: UseChatOptions = {}) {
     activeKgHitIndex.value = 0
     subgraphPanelVisible.value = false
     clearSubgraphs()
+    conversationId = createId('conversation')
+    activeConversationId.value = conversationId
+    saveConversationId(conversationId)
   }
 
   return {
@@ -441,6 +491,8 @@ export function useChat(options: UseChatOptions = {}) {
     sendMessage,
     cancelCurrentRun,
     clearMessages,
+    activeConversationId,
+    loadConversation,
     chatMode,
     kgGraphIds,
     kgHitNodes,

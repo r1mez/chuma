@@ -15,6 +15,16 @@
     </div>
 
     <div class="chat-body">
+      <AgentConversationSidebar
+        :conversations="conversations"
+        :active-id="activeConversationId"
+        :collapsed="isHistoryCollapsed"
+        :loading="conversationsLoading"
+        @select="handleSelectConversation"
+        @new="handleNewConversation"
+        @delete="handleDeleteConversation"
+        @toggle="isHistoryCollapsed = !isHistoryCollapsed"
+      />
       <div class="messages-shell">
         <div class="chat-messages" ref="messagesRef" @scroll="handleMessagesScroll">
           <div v-if="messages.length === 0" class="empty-state">
@@ -58,14 +68,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import AgentConversationSidebar from '@/components/AgentConversationSidebar.vue'
 import StarBorder from '@/components/StarBorder.vue'
 import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
-import type { SuggestedQuestion } from '@/api/ai'
+import {
+  deleteAgentConversation,
+  getAgentConversation,
+  listAgentConversations,
+  type AgentConversationSummary,
+  type SuggestedQuestion,
+} from '@/api/ai'
 
 const {
   messages,
@@ -85,6 +102,8 @@ const {
   extractSubgraphs,
   suggesting,
   selectSuggestedQuestion,
+  activeConversationId,
+  loadConversation,
 } = useChat()
 
 const messagesRef = ref<HTMLElement>()
@@ -94,6 +113,51 @@ const lastMessageId = computed(() => messages.value[messages.value.length - 1]?.
 const activeSubgraph = computed(() => subgraphs.value[activeKgHitIndex.value] ?? null)
 const activeSubgraphLoading = computed(() => subgraphLoading.value[activeKgHitIndex.value] ?? false)
 const activeSubgraphError = computed(() => subgraphErrors.value[activeKgHitIndex.value] ?? null)
+const isHistoryCollapsed = ref(false)
+const conversations = ref<AgentConversationSummary[]>([])
+const conversationsLoading = ref(false)
+
+async function refreshConversations() {
+  conversationsLoading.value = true
+  try {
+    const nextConversations = await listAgentConversations()
+    conversations.value = nextConversations
+    if (
+      messages.value.length === 0
+      && nextConversations.some(item => item.conversation_id === activeConversationId.value)
+    ) {
+      const currentConversation = await getAgentConversation(activeConversationId.value)
+      loadConversation(currentConversation.messages, currentConversation.conversation_id)
+    }
+  } catch (error) {
+    console.error('加载学生 Agent 历史会话失败:', error)
+  } finally {
+    conversationsLoading.value = false
+  }
+}
+
+async function handleSelectConversation(conversationId: string) {
+  try {
+    const conversation = await getAgentConversation(conversationId)
+    loadConversation(conversation.messages, conversation.conversation_id)
+  } catch (error) {
+    console.error('恢复学生 Agent 会话失败:', error)
+  }
+}
+
+function handleNewConversation() {
+  clearMessages()
+}
+
+async function handleDeleteConversation(conversationId: string) {
+  try {
+    await deleteAgentConversation(conversationId)
+    if (activeConversationId.value === conversationId) clearMessages()
+    await refreshConversations()
+  } catch (error) {
+    console.error('删除学生 Agent 会话失败:', error)
+  }
+}
 
 function handleSelectQuestion(question: SuggestedQuestion) {
   nearBottom.value = true
@@ -112,6 +176,17 @@ function handleRetrySubgraph() {
   const hitNode = kgHitNodes.value[activeKgHitIndex.value]
   if (hitNode) extractSubgraphs(hitNode, activeKgHitIndex.value)
 }
+
+onMounted(() => {
+  void refreshConversations()
+})
+
+watch(
+  () => loading.value,
+  (isLoading, wasLoading) => {
+    if (wasLoading && !isLoading) void refreshConversations()
+  },
+)
 
 function handleMessagesScroll() {
   const element = messagesRef.value

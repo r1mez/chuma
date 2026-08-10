@@ -25,6 +25,7 @@ class AgentChatRequest(BaseModel):
     class_id: int | None = None
     course_id: int | None = None
     message_id: str = Field(default_factory=lambda: f"msg_{uuid4().hex}")
+    conversation_id: str | None = None
 
 
 @dataclass

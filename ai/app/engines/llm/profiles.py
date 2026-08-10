@@ -65,3 +65,17 @@ def deepseek_profile() -> ModelProfile:
         api_key=settings.REMOTE_MODEL_API_KEY,
         timeout=120.0,
     )
+
+
+def socratic_hint_profile() -> ModelProfile:
+    """Use the Q&A model until a dedicated hint model is configured."""
+    from app.config import settings
+
+    if settings.SOCRATIC_HINT_MODEL_URL and settings.SOCRATIC_HINT_MODEL_NAME:
+        return ModelProfile(
+            base_url=settings.SOCRATIC_HINT_MODEL_URL,
+            model_name=settings.SOCRATIC_HINT_MODEL_NAME,
+            api_key=settings.SOCRATIC_HINT_MODEL_API_KEY,
+            timeout=120.0,
+        )
+    return deepseek_profile()

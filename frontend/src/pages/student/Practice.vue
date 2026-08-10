@@ -70,6 +70,44 @@
                 />
               </div>
             </div>
+
+            <div class="socratic-help-panel">
+              <div class="socratic-help-header">
+                <div>
+                  <div class="socratic-help-title">苏格拉底式 AI 求助</div>
+                  <div class="socratic-help-status">{{ hintStatusText }}</div>
+                </div>
+                <el-tag
+                  size="small"
+                  effect="plain"
+                  :type="hintUnlocked ? 'success' : 'info'"
+                >
+                  {{ hintUnlocked ? '已解锁' : `${elapsedSeconds}s / 60s` }}
+                </el-tag>
+              </div>
+              <p class="socratic-help-description">
+                AI 只会通过问题引导你的思路，不会直接公布答案；每道题最多提供 3 级提示。
+              </p>
+              <div v-if="hintHistory.length > 0" class="socratic-hint-list">
+                <div v-for="hint in hintHistory" :key="hint.hint_level" class="socratic-hint-item">
+                  <el-tag size="small" type="warning" effect="plain">提示 {{ hint.hint_level }}</el-tag>
+                  <span>{{ hint.content }}</span>
+                </div>
+              </div>
+              <div class="socratic-help-actions">
+                <el-button
+                  type="primary"
+                  plain
+                  size="small"
+                  :loading="hintLoading"
+                  :disabled="!canRequestHint"
+                  @click="requestSocraticHint"
+                >
+                  {{ hintButtonText }}
+                </el-button>
+                <span class="socratic-help-limit">已使用 {{ hintHistory.length }} / 3 级</span>
+              </div>
+            </div>
             <!-- 占位，确保底部不被遮挡 -->
             <div class="spacer"></div>
           </div>
@@ -269,11 +307,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BorderGlow from '@/components/BorderGlow.vue'
-import { fetchQuestions, fetchQuestionById, submitExerciseRecord, type Question } from '@/api/practice'
+import {
+  fetchQuestions,
+  fetchQuestionById,
+  submitExerciseRecord,
+  fetchSocraticHint,
+  type Question,
+  type SocraticHintResponse,
+} from '@/api/practice'
 import { fetchQuestionAnalysis, type QuestionAnalysisResult } from '@/api/questionAnalysis'
 import { useAuthStore } from '@/stores/auth'
 
@@ -311,8 +356,54 @@ const aiAnalysis = ref<QuestionAnalysisResult | null>(null)
 const aiLoading = ref(false)
 const similarQuestions = ref<any[]>([])
 
+const elapsedSeconds = ref(0)
+const hintLevel = ref(1)
+const hintLoading = ref(false)
+const hintHistory = ref<SocraticHintResponse[]>([])
+let questionStartedAt: number | null = null
+let questionTimer: ReturnType<typeof setInterval> | null = null
+
 const userAnswer = ref('')
-const userAnswerArray = ref([])
+const userAnswerArray = ref<string[]>([])
+
+const remainingHintSeconds = computed(() => Math.max(0, 60 - elapsedSeconds.value))
+const hintUnlocked = computed(() => elapsedSeconds.value >= 60)
+const canRequestHint = computed(() => (
+  Boolean(currentQuestion.value)
+  && !isAnswerSubmitted.value
+  && hintUnlocked.value
+  && !hintLoading.value
+  && hintLevel.value <= 3
+))
+const hintStatusText = computed(() => {
+  if (isAnswerSubmitted.value) return '本题已提交，不能继续请求提示'
+  if (!hintUnlocked.value) return `请先独立思考，还需 ${remainingHintSeconds.value} 秒`
+  if (hintLevel.value > 3) return '本题的分级提示已全部使用'
+  return '可以请求下一层思路引导'
+})
+const hintButtonText = computed(() => {
+  if (hintLevel.value > 3) return '提示已用完'
+  return `获取第 ${hintLevel.value} 级提示`
+})
+
+const stopQuestionTimer = () => {
+  if (questionTimer !== null) {
+    clearInterval(questionTimer)
+    questionTimer = null
+  }
+  questionStartedAt = null
+}
+
+const startQuestionTimer = () => {
+  stopQuestionTimer()
+  questionStartedAt = Date.now()
+  elapsedSeconds.value = 0
+  questionTimer = setInterval(() => {
+    if (questionStartedAt !== null) {
+      elapsedSeconds.value = Math.floor((Date.now() - questionStartedAt) / 1000)
+    }
+  }, 1000)
+}
 
 onMounted(async () => {
   const courseIdStr = route.query.module as string
@@ -378,7 +469,14 @@ onMounted(async () => {
     ElMessage.error('获取题目失败')
   } finally {
     loading.value = false
+    if (currentQuestion.value) {
+      startQuestionTimer()
+    }
   }
+})
+
+onUnmounted(() => {
+  stopQuestionTimer()
 })
 
 // 题目切换逻辑
@@ -440,9 +538,7 @@ const submitAnswer = async () => {
   if (!currentQuestion.value) return
 
   // 构造学生答案字符串
-  const answerStr = userAnswerArray.value.length > 0
-    ? userAnswerArray.value.sort().join(',')
-    : userAnswer.value
+  const answerStr = getCurrentAnswer()
 
   // 保存学生答案，供 AI 个性化作答剖析使用
   submittedAnswer.value = answerStr
@@ -457,10 +553,40 @@ const submitAnswer = async () => {
       do_stu_answer: answerStr,
     })
     isAnswerSubmitted.value = true
+    stopQuestionTimer()
     ElMessage.success('答案已提交')
   } catch (error) {
     console.error('提交答案失败:', error)
     ElMessage.error('提交答案失败，请重试')
+  }
+}
+
+const getCurrentAnswer = () => (
+  userAnswerArray.value.length > 0
+    ? [...userAnswerArray.value].sort().join(',')
+    : userAnswer.value.trim()
+)
+
+const requestSocraticHint = async () => {
+  if (!currentQuestion.value || !canRequestHint.value) return
+
+  hintLoading.value = true
+  try {
+    const result = await fetchSocraticHint({
+      question_id: currentQuestion.value.question_id,
+      student_attempt: getCurrentAnswer(),
+      elapsed_seconds: elapsedSeconds.value,
+      hint_level: hintLevel.value,
+    })
+    hintHistory.value.push(result)
+    hintLevel.value = Math.min(4, result.hint_level + 1)
+    ElMessage.success(`已生成第 ${result.hint_level} 级提示`)
+  } catch (error: any) {
+    console.error('获取苏格拉底式提示失败:', error)
+    const detail = error?.response?.data?.detail
+    ElMessage.error(detail || 'AI 提示暂时不可用，请稍后重试')
+  } finally {
+    hintLoading.value = false
   }
 }
 
@@ -498,6 +624,7 @@ const triggerSimilarQuestions = () => {
 }
 
 const resetAnswer = () => {
+  stopQuestionTimer()
   userAnswer.value = ''
   userAnswerArray.value = []
   isAnswerSubmitted.value = false
@@ -506,6 +633,11 @@ const resetAnswer = () => {
   aiAnalysis.value = null
   aiLoading.value = false
   submittedAnswer.value = ''
+  hintLevel.value = 1
+  hintHistory.value = []
+  if (currentQuestion.value) {
+    startQuestionTimer()
+  }
 }
 
 const goBack = () => {
@@ -674,6 +806,67 @@ h3 {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px dashed #c0c5bd;
+}
+
+.socratic-help-panel {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(64, 158, 255, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(64, 158, 255, 0.08), rgba(255, 255, 255, 0.45));
+}
+
+.socratic-help-header,
+.socratic-help-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.socratic-help-title {
+  color: #2563a8;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.socratic-help-status,
+.socratic-help-description,
+.socratic-help-limit {
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.socratic-help-status {
+  margin-top: 3px;
+}
+
+.socratic-help-description {
+  margin: 10px 0;
+}
+
+.socratic-hint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.socratic-hint-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #334155;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.socratic-hint-item span:last-child {
+  white-space: pre-wrap;
 }
 
 .answer-title {

@@ -61,6 +61,21 @@ export interface ExerciseRecordListItem {
   created_at: string;
 }
 
+export interface SocraticHintRequest {
+  question_id: number;
+  student_attempt?: string;
+  elapsed_seconds: number;
+  hint_level: number;
+}
+
+export interface SocraticHintResponse {
+  content: string;
+  hint_level: number;
+  next_question: string;
+  rule: string;
+  source: 'ai' | 'rule_fallback' | string;
+}
+
 // practice API 调用封装
 export const fetchCourses = (): Promise<Course[]> => {
   return request.get<Course[]>('/practice/courses')
@@ -79,6 +94,11 @@ export const fetchQuestionById = (questionId: number): Promise<Question> => {
 /** 提交答案并存储做题记录 */
 export const submitExerciseRecord = (data: ExerciseRecordCreate): Promise<ExerciseRecord> => {
   return request.post<ExerciseRecord>('/practice/submit', data)
+}
+
+/** 请求练习过程中的分级苏格拉底式提示。 */
+export const fetchSocraticHint = (data: SocraticHintRequest): Promise<SocraticHintResponse> => {
+  return request.post<SocraticHintResponse>('/practice/hint', data, { timeout: 90000 })
 }
 
 /** 获取做题记录

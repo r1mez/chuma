@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     QUICK_MODEL_URL: str = ""
     QUICK_MODEL_NAME: str = ""
 
+    # Dedicated Socratic-hint model. Empty values intentionally fall back to
+    # the remote profile used by the existing AI Q&A/Agent chain.
+    SOCRATIC_HINT_MODEL_URL: str = ""
+    SOCRATIC_HINT_MODEL_NAME: str = ""
+    SOCRATIC_HINT_MODEL_API_KEY: str = ""
+
     # DeepSeek 深度解答模型
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = ""

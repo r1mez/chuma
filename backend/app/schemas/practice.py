@@ -1,7 +1,7 @@
 """Practice Pydantic 请求/响应模型"""
 from datetime import datetime
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QuestionCreate(BaseModel):
@@ -73,3 +73,22 @@ class ExerciseRecordListResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+
+class SocraticHintRequest(BaseModel):
+    """练习过程中的分级苏格拉底式求助请求。"""
+
+    question_id: int = Field(..., ge=1)
+    student_attempt: str = Field(default="", max_length=10000)
+    elapsed_seconds: int = Field(..., ge=0)
+    hint_level: int = Field(default=1, ge=1, le=3)
+
+
+class SocraticHintResponse(BaseModel):
+    """AI 返回的安全提示，不包含题目的标准答案。"""
+
+    content: str
+    hint_level: int
+    next_question: str
+    rule: str
+    source: str = "ai"

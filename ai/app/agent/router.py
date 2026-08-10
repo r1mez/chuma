@@ -1,17 +1,21 @@
 """HTTP routes for conversational Agents."""
 
+import json
 import logging
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.agent.builtin import register_builtin_agents
-from app.agent.context import AgentContext
+from app.agent.context import AgentContext, bind_agent_context, reset_agent_context
 from app.agent.event_serializer import EventSerializer
 from app.agent.registry import AgentRegistry
 from app.agent.runtime import AgentRuntime
-from app.agent.schemas import AgentChatRequest
+from app.agent.schemas import AgentChatRequest, SocraticHintRequest
 from app.agent.session_store import agent_session_store
+from app.agent.tool_registry import ToolRegistry
+from app.engines.llm.client import LLMClient
+from app.engines.llm.profiles import socratic_hint_profile
 
 logger = logging.getLogger(__name__)
 
@@ -155,3 +159,91 @@ async def agent_chat_stream(req: AgentChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/socratic-hint")
+async def socratic_hint(req: SocraticHintRequest) -> dict:
+    """Generate one safe, structured hint for the practice page.
+
+    The local tool enforces the 60-second rule and selects the hint level;
+    the model turns that structured guidance into natural language. Until a
+    dedicated fine-tuned model is configured, this uses the existing AI Q&A
+    model profile.
+    The question answer is intentionally never sent to this endpoint.
+    """
+    context = AgentContext(
+        user_id=req.user_id,
+        user_role="student",
+        agent_id="student.tutor",
+        student_id=req.user_id,
+    )
+    context_tokens = bind_agent_context(context)
+
+    try:
+        tool_result = await ToolRegistry.execute(
+            "socratic_hint",
+            {
+                "question": req.question,
+                "student_attempt": req.student_attempt,
+                "elapsed_seconds": req.elapsed_seconds,
+                "hint_level": req.hint_level,
+            },
+            req.user_id,
+        )
+        try:
+            tool_payload = json.loads(tool_result.raw)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=502, detail="苏格拉底式提示工具返回了无效结果") from exc
+
+        if not tool_result.success or not tool_payload.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=tool_payload.get("summary", "暂时无法生成提示"),
+            )
+
+        tool_data = tool_payload.get("data") or {}
+        next_question = str(tool_data.get("next_question") or "你认为下一步最需要确认的条件是什么？")
+        level = int(tool_data.get("hint_level", req.hint_level))
+        system_prompt = (
+            "你是计算机科学题目练习中的苏格拉底式助教。"
+            "你的任务是帮助学生自己思考，绝对不能直接给出最终答案、正确选项、完整代码或完整推导。"
+            "每次只给当前提示层级的一条简短引导，优先使用问题引导学生检查概念、条件、输入输出或反例。"
+            "如果学生没有提供思路，就先邀请他写出已知条件和第一步想法。使用中文，控制在2到4句话。"
+        )
+        user_prompt = (
+            f"题目：\n{req.question}\n\n"
+            f"学生当前作答/思路：\n{req.student_attempt or '（学生还没有填写具体思路）'}\n\n"
+            f"已独立思考时间：{req.elapsed_seconds}秒\n"
+            f"当前提示层级：{level}\n"
+            f"本层级引导方向：{next_question}\n\n"
+            "请根据以上信息生成一条不泄露答案的苏格拉底式提示。"
+        )
+
+        source = "ai"
+        try:
+            response = await LLMClient(default_profile=socratic_hint_profile()).chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+            )
+            content = (response.content or "").strip()
+        except Exception as exc:
+            logger.warning("Socratic hint model failed, using safe fallback: %s", exc)
+            content = next_question
+            source = "rule_fallback"
+
+        if not content:
+            content = next_question
+            source = "rule_fallback"
+
+        return {
+            "content": content,
+            "hint_level": level,
+            "next_question": next_question,
+            "rule": str(tool_data.get("rule") or "提示只引导思考，不直接给出最终答案。"),
+            "source": source,
+        }
+    finally:
+        reset_agent_context(context_tokens)

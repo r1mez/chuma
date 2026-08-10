@@ -1,15 +1,19 @@
 """题目练习路由"""
+import httpx
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import get_current_user_optional
+from app.core.deps import get_current_user, get_current_user_optional
 from app.schemas.practice import (
     QuestionCreate,
     QuestionResponse,
     ExerciseRecordCreate,
     ExerciseRecordResponse,
     ExerciseRecordListResponse,
+    SocraticHintRequest,
+    SocraticHintResponse,
 )
 from app.schemas.course import CourseResponse
 from app.services.practice_service import PracticeService
@@ -158,5 +162,60 @@ async def get_exercise_records_analytics():
 
 
 @router.post("/hint")
-async def get_hint():
-    return {"message": "hint endpoint - not in scope"}
+async def get_hint(
+    data: SocraticHintRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SocraticHintResponse:
+    """为当前题目生成分级苏格拉底式提示。
+
+    题干由后端根据 question_id 从题库读取，前端不能替换题目内容；
+    60 秒限制同时在后端和 AI 工具层校验，避免绕过前端按钮限制。
+    """
+    if current_user.get("user_type") != "student":
+        raise HTTPException(status_code=403, detail="仅学生可以在练习中请求提示")
+
+    if data.elapsed_seconds < 60:
+        raise HTTPException(
+            status_code=400,
+            detail=f"请先独立读题，{60 - data.elapsed_seconds} 秒后再请求提示",
+        )
+
+    question = await PracticeService().get_question_by_id(data.question_id, db)
+    if question is None:
+        raise HTTPException(status_code=404, detail="题目不存在")
+
+    payload = {
+        "user_id": current_user["id"],
+        "question": question.question_description,
+        "student_attempt": data.student_attempt,
+        "elapsed_seconds": data.elapsed_seconds,
+        "hint_level": data.hint_level,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                f"{settings.AI_SERVICE_URL}/agent/socratic-hint",
+                headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                json=payload,
+            )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="AI 提示生成超时，请稍后重试") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="AI 提示服务暂时不可用") from exc
+
+    if response.status_code == 400:
+        try:
+            detail = response.json().get("detail", "提示请求不符合要求")
+        except ValueError:
+            detail = "提示请求不符合要求"
+        raise HTTPException(status_code=400, detail=detail)
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="AI 提示服务返回错误")
+
+    try:
+        result = response.json()
+        return SocraticHintResponse.model_validate(result)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="AI 提示服务返回了无效结果") from exc

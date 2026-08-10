@@ -28,6 +28,16 @@ class AgentChatRequest(BaseModel):
     conversation_id: str | None = None
 
 
+class SocraticHintRequest(BaseModel):
+    """Request for one structured, level-based practice hint."""
+
+    user_id: int = Field(..., ge=1)
+    question: str = Field(..., min_length=1, max_length=20000)
+    student_attempt: str = Field(default="", max_length=10000)
+    elapsed_seconds: int = Field(..., ge=0)
+    hint_level: int = Field(default=1, ge=1, le=3)
+
+
 @dataclass
 class ToolDef:
     """Unified description of a local or MCP tool."""

@@ -1,7 +1,9 @@
 """工具注册与调度 — 统一管理本地工具和 MCP 远程工具"""
+import json
 import logging
 import re
 import time
+from collections.abc import Iterable
 
 from app.agent.schemas import ToolDef, ToolExecutionResult
 
@@ -79,9 +81,14 @@ class ToolRegistry:
         logger.info(f"Registered MCP tool: {name}")
 
     @classmethod
-    def get_definitions(cls) -> list[dict]:
+    def get_definitions(cls, allowed_names: Iterable[str] | None = None) -> list[dict]:
         """返回所有工具的 OpenAI function-calling 格式定义"""
-        return [tool.to_openai_format() for tool in cls._tools.values()]
+        if allowed_names is None:
+            tools = cls._tools.values()
+        else:
+            names = set(allowed_names)
+            tools = (tool for name, tool in cls._tools.items() if name in names)
+        return [tool.to_openai_format() for tool in tools]
 
     @classmethod
     async def execute(cls, name: str, arguments: dict, user_id: int) -> ToolExecutionResult:
@@ -177,6 +184,12 @@ class ToolRegistry:
 
     @staticmethod
     def _looks_failed(text: str) -> bool:
+        try:
+            payload = json.loads(text)
+            if isinstance(payload, dict) and payload.get("success") is False:
+                return True
+        except (json.JSONDecodeError, TypeError):
+            pass
         prefixes = ("执行出错", "查询失败", "知识图谱查询失败", "文档检索失败", "未知工具")
         return text.startswith(prefixes)
 

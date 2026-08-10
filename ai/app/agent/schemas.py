@@ -1,4 +1,5 @@
-"""Agent 模块数据结构"""
+"""Shared Agent request and tool schemas."""
+
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -8,28 +9,37 @@ from pydantic import BaseModel, Field
 
 
 class AgentChatRequest(BaseModel):
-    """Agent 对话请求"""
-    user_id: int = 1  # TODO 暂时默认 1，登录实现后改为必填
+    """Request for a conversational Agent."""
+
+    # Kept optional for backward compatibility with direct AI-engine callers.
+    # The backend gateway should always inject the authenticated user ID.
+    user_id: int = 1
+    agent_id: str = "student.tutor"
+    user_role: str | None = None
     message: str
     history: list[dict] = Field(default_factory=list)
     kg_graph_ids: list[int] = Field(default_factory=list)
     graph_names: list[str] = Field(default_factory=list)
+    student_id: int | None = None
+    teacher_id: int | None = None
+    class_id: int | None = None
+    course_id: int | None = None
     message_id: str = Field(default_factory=lambda: f"msg_{uuid4().hex}")
 
 
 @dataclass
 class ToolDef:
-    """工具定义 — 本地或 MCP 工具的统一描述"""
+    """Unified description of a local or MCP tool."""
+
     name: str
     description: str
-    parameters: dict          # JSON Schema for the tool's parameters
-    handler: Callable[..., Awaitable[str]] | None = None  # None for MCP tools
+    parameters: dict
+    handler: Callable[..., Awaitable[str]] | None = None
     is_mcp: bool = False
     display_name: str | None = None
     purpose: str | None = None
 
     def to_openai_format(self) -> dict:
-        """转为 OpenAI function-calling 格式"""
         return {
             "type": "function",
             "function": {
@@ -42,10 +52,7 @@ class ToolDef:
 
 @dataclass
 class ToolExecutionResult:
-    """工具的内部结果与公开展示摘要。
-
-    raw 仅提供给模型，绝不直接发送到浏览器。
-    """
+    """Internal tool result plus a safe summary for the UI."""
 
     raw: str
     success: bool

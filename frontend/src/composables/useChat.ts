@@ -8,6 +8,7 @@ import {
   type AgentSSEEvent,
   type LegacyAgentSSEEvent,
   type SuggestedQuestion,
+  type AgentRequestOptions,
 } from '@/api/ai'
 import { useSubgraph } from '@/composables/useSubgraph'
 import {
@@ -35,6 +36,11 @@ export interface KgHitNode {
   nodeName: string
   nodeType: string
   graphName: string
+}
+
+export interface UseChatOptions {
+  agent?: AgentRequestOptions
+  getAgent?: () => AgentRequestOptions
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -90,7 +96,7 @@ function markRunFinished(run: AgentRun, status: AgentRun['status'], durationMs?:
   }
 }
 
-export function useChat() {
+export function useChat(options: UseChatOptions = {}) {
   const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
   const streamingContent = ref('')
@@ -334,6 +340,7 @@ export function useChat() {
     messages.value.push(assistantMessage)
 
     if (mode === 'agent') {
+      const agentOptions = options.getAgent?.() ?? options.agent ?? {}
       await sendAgentMessage(
         content,
         history,
@@ -358,6 +365,7 @@ export function useChat() {
           currentController.value = null
         },
         controller.signal,
+        agentOptions,
       )
       return
     }

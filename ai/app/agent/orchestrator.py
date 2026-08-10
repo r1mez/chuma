@@ -8,6 +8,12 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from app.agent.context import (
+    AgentContext,
+    bind_agent_context,
+    current_graph_names,
+    reset_agent_context,
+)
 from app.agent.schemas import ToolExecutionResult
 from app.agent.suggestions import generate_suggested_questions
 from app.agent.tool_registry import ToolRegistry
@@ -97,17 +103,27 @@ class AgentOrchestrator:
             # SSE event dicts: {"type": "tool_used"|"tool_result"|"kg_hit"|"content"|"done"}
     """
 
-    def __init__(self, user_id: int, llm_client: LLMClient):
+    def __init__(
+        self,
+        user_id: int,
+        llm_client: LLMClient,
+        context: AgentContext | None = None,
+        allowed_tools: frozenset[str] | None = None,
+    ):
         self.user_id = user_id
         self.llm = llm_client
+        self.context = context
+        self.allowed_tools = allowed_tools
         self._kg_hit_info: dict | None = None  # Tracks last kg_hit for suggestions
 
-    @staticmethod
-    def _build_system_prompt() -> str:
+    def _build_system_prompt(self) -> str:
         """根据当前注册的工具和教材上下文动态生成系统提示词"""
         from app.agent.context import current_kg_graph_ids, current_graph_names
 
-        tools = ToolRegistry.get_definitions()
+        if self.allowed_tools is None:
+            tools = ToolRegistry.get_definitions()
+        else:
+            tools = ToolRegistry.get_definitions(self.allowed_tools)
 
         local_tools = []
         db_tools = []
@@ -245,12 +261,20 @@ class AgentOrchestrator:
         kg_graph_ids: list[int] | None = None,
         graph_names: list[str] | None = None,
         message_id: str | None = None,
+        context: AgentContext | None = None,
     ) -> AsyncIterator[dict]:
         """执行 Agent 循环，输出不包含私有推理的 v2 生命周期事件。"""
-        # Set contextvars for downstream use (system prompt reads these)
-        from app.agent.context import current_kg_graph_ids, current_graph_names
-        current_kg_graph_ids.set(kg_graph_ids or [])
-        current_graph_names.set(graph_names or [])
+        # Bind a structured context for downstream tools. The old graph-specific
+        # ContextVars are populated by bind_agent_context for compatibility.
+        agent_context = context or AgentContext(
+            user_id=self.user_id,
+            agent_id="student.tutor",
+            kg_graph_ids=tuple(kg_graph_ids or []),
+            graph_names=tuple(graph_names or []),
+            history=tuple(history),
+            message_id=message_id,
+        )
+        context_tokens = bind_agent_context(agent_context)
 
         run_id = f"run_{uuid4().hex}"
         resolved_message_id = message_id or f"msg_{uuid4().hex}"
@@ -284,7 +308,10 @@ class AgentOrchestrator:
         messages.append({"role": "user", "content": message})
         self._messages = messages  # Store for suggestions context
 
-        tools = ToolRegistry.get_definitions()
+        if self.allowed_tools is None:
+            tools = ToolRegistry.get_definitions()
+        else:
+            tools = ToolRegistry.get_definitions(self.allowed_tools)
         planning_started = time.perf_counter()
         planning_completed = False
         processing_step: tuple[str, float] | None = None
@@ -584,3 +611,5 @@ class AgentOrchestrator:
                     "retryable": True,
                 },
             })
+        finally:
+            reset_agent_context(context_tokens)

@@ -1,10 +1,17 @@
 """AI 网关 — 代理转发到 ai/ 服务"""
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.deps import get_current_user_optional
+from app.core.database import get_db
+from app.models.course import Course
+from app.models.kg_graph import KgGraph
+from app.models.teacher_relation import TeacherClass, TeacherCourse
 
 router = APIRouter()
 
@@ -67,13 +74,55 @@ async def deep_chat(request: Request):
 
 
 @router.post("/agent/chat")
-async def agent_chat(request: Request):
+async def agent_chat(
+    request: Request,
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     """智能体模式对话 — SSE 透传到 AI 引擎 Agent 路由"""
     body = await request.json()
-    # Inject current user ID from auth context
-    user = getattr(request.state, "user", None)
-    if user and "user_id" not in body:
-        body["user_id"] = user.get("id", 1)
+    # Inject identity from the JWT dependency instead of trusting the browser.
+    # Keep the body fallback for existing internal callers during migration.
+    user_type = current_user.get("user_type")
+    if user_type in {"student", "teacher", "admin"}:
+        body["user_id"] = current_user["id"]
+    else:
+        body.setdefault("user_id", current_user.get("id", 1))
+    body["user_role"] = user_type if user_type in {"student", "teacher", "admin"} else "student"
+    if user_type == "student":
+        body["student_id"] = current_user["id"]
+
+    if body.get("agent_id", "student.tutor") == "teacher.class_assistant":
+        if user_type != "teacher":
+            raise HTTPException(status_code=403, detail="仅教师可以使用班级分析助手")
+
+        class_id = body.get("class_id")
+        course_id = body.get("course_id")
+        if not isinstance(class_id, int) or not isinstance(course_id, int):
+            raise HTTPException(status_code=400, detail="班级助手需要 class_id 和 course_id")
+
+        access_result = await db.execute(
+            select(TeacherClass.class_id)
+            .join(TeacherCourse, TeacherCourse.tea_id == TeacherClass.tea_id)
+            .where(
+                TeacherClass.tea_id == current_user["id"],
+                TeacherClass.class_id == class_id,
+                TeacherCourse.course_id == course_id,
+            )
+        )
+        if access_result.first() is None:
+            raise HTTPException(status_code=403, detail="无权访问该班级或学科")
+
+        graph_result = await db.execute(
+            select(KgGraph.id, KgGraph.graph_name)
+            .join(Course, Course.kg_id == KgGraph.id)
+            .where(Course.course_id == course_id)
+        )
+        graph = graph_result.first()
+        if graph is not None:
+            body["kg_graph_ids"] = [graph.id]
+            body["graph_names"] = [graph.graph_name]
+        body["teacher_id"] = current_user["id"]
 
     # Resolve kg_graph_ids → graph_names
     kg_graph_ids: list[int] = body.get("kg_graph_ids", [])

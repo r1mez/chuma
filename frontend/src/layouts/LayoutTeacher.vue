@@ -75,6 +75,7 @@ onMounted(() => {
 const menuItems = [
   { name: '班级学情仪表盘', path: '/teacher/dashboard' },
   { name: 'AI 聊天',       path: '/teacher/chat' },
+  { name: 'AI 班级分析',   path: '/teacher/class-assistant' },
   { name: '互动专区',       path: '/teacher/interactive' },
   { name: '学科管理',       path: '/teacher/subject' },
 ]

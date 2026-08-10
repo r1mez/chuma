@@ -37,6 +37,14 @@ export interface LegacyAgentSSEEvent {
 
 export type AgentSSEEvent = LegacyAgentSSEEvent | AgentEventV2
 
+export interface AgentRequestOptions {
+  agentId?: string
+  studentId?: number
+  teacherId?: number
+  classId?: number
+  courseId?: number
+}
+
 /**
  * 快速回答 — 流式调用
  */
@@ -177,6 +185,7 @@ export async function sendAgentMessage(
   onDone: () => void,
   onError: (err: Error) => void,
   signal?: AbortSignal,
+  options: AgentRequestOptions = {},
 ): Promise<void> {
   try {
     const token = localStorage.getItem('token')
@@ -186,7 +195,17 @@ export async function sendAgentMessage(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, history, kg_graph_ids: kgGraphIds, message_id: messageId }),
+      body: JSON.stringify({
+        message,
+        history,
+        kg_graph_ids: kgGraphIds,
+        message_id: messageId,
+        agent_id: options.agentId,
+        student_id: options.studentId,
+        teacher_id: options.teacherId,
+        class_id: options.classId,
+        course_id: options.courseId,
+      }),
       signal,
     })
 

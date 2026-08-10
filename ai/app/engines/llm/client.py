@@ -20,6 +20,8 @@ from app.engines.llm.profiles import ModelProfile, remote_profile
 
 logger = logging.getLogger(__name__)
 
+_RETRYABLE_HTTP_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
 
 @dataclass
 class ToolCall:
@@ -157,7 +159,21 @@ class LLMClient:
                         content=content,
                         tool_calls=tool_calls,
                     )
-            except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException):
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                # A 4xx response is normally caused by the request payload.
+                # Retrying the same payload only hides the useful API message.
+                logger.error(
+                    "LLM chat request failed: status=%s model=%s tools=%s body=%s",
+                    status_code,
+                    p.model_name,
+                    [item.get("function", {}).get("name") for item in (tools or [])],
+                    exc.response.text[:2000],
+                )
+                if status_code not in _RETRYABLE_HTTP_STATUS_CODES or attempt == p.max_retries:
+                    raise
+                continue
+            except (httpx.ConnectError, httpx.TimeoutException):
                 if attempt == p.max_retries:
                     raise
                 continue
@@ -266,6 +282,13 @@ class LLMClient:
                         yield {"tool_calls": parsed}
             except httpx.HTTPStatusError as e:
                 # 友好的流式错误提示，不让服务直接崩掉
+                logger.error(
+                    "LLM stream request failed: status=%s model=%s tools=%s body=%s",
+                    e.response.status_code,
+                    p.model_name,
+                    [item.get("function", {}).get("name") for item in (tools or [])],
+                    e.response.text[:2000],
+                )
                 err_msg = f"大模型接口调用失败 (HTTP {e.response.status_code})。请检查您的 API Key 是否正确加载！"
                 if e.response.status_code == 401:
                     err_msg = "大模型 API Key 无效或未提供 (HTTP 401)。请确保终端没有缓存错误的全局环境变量，并已重载 .env 文件！"

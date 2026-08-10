@@ -4,6 +4,24 @@
     <div class="chat-header flex justify-between items-center px-5 py-3 border-b border-gray-200/50 bg-white/60 backdrop-blur-md text-gray-800">
       <h3 class="m-0 text-base font-bold">AI 助教</h3>
       <div class="header-actions flex gap-4 items-center">
+        <div v-if="chatMode === 'agent'" class="scope-selectors">
+          <el-select v-model="selectedClass" size="small" placeholder="选择班级" clearable>
+            <el-option
+              v-for="item in classList"
+              :key="item.class_id"
+              :label="item.class_name"
+              :value="item.class_id"
+            />
+          </el-select>
+          <el-select v-model="selectedCourse" size="small" placeholder="选择学科" clearable>
+            <el-option
+              v-for="item in courseList"
+              :key="item.course_id"
+              :label="item.course_name"
+              :value="item.course_id"
+            />
+          </el-select>
+        </div>
         <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper rounded-full">
           <GooeyNav 
             :items="navItems"
@@ -62,22 +80,40 @@
         </div>
 
         <!-- 输入框 -->
-        <ChatInput :loading="loading" @send="sendMessage" />
+        <ChatInput :loading="loading" @send="handleSend" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { onMounted, ref, watch, nextTick } from 'vue'
 import { ChatDotRound, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useChat } from '@/composables/useChat'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import GooeyNav from '@/components/GooeyNav.vue'
 import StarBorder from '@/components/StarBorder.vue'
+import {
+  getTeacherClasses,
+  getTeacherCourses,
+  type TeacherClass,
+  type TeacherCourse,
+} from '@/api/teacher'
 
-const { messages, loading, sendMessage, clearMessages, chatMode } = useChat()
+const selectedClass = ref<number | null>(null)
+const selectedCourse = ref<number | null>(null)
+const classList = ref<TeacherClass[]>([])
+const courseList = ref<TeacherCourse[]>([])
+
+const { messages, loading, sendMessage, clearMessages, chatMode } = useChat({
+  getAgent: () => ({
+    agentId: 'teacher.class_assistant',
+    classId: selectedClass.value ?? undefined,
+    courseId: selectedCourse.value ?? undefined,
+  }),
+})
 const messagesRef = ref<HTMLElement>()
 const isHistoryCollapsed = ref(false)
 
@@ -87,6 +123,30 @@ const navItems = [
   { label: '深度思考', value: 'deep' },
   { label: '辅助备课', value: 'agent' }
 ]
+
+function handleSend(content: string) {
+  if (chatMode.value === 'agent' && (!selectedClass.value || !selectedCourse.value)) {
+    ElMessage.warning('请先选择班级和学科，再使用辅助备课模式')
+    return
+  }
+  void sendMessage(content)
+}
+
+onMounted(async () => {
+  try {
+    const [classes, courses] = await Promise.all([
+      getTeacherClasses(),
+      getTeacherCourses(),
+    ])
+    classList.value = classes
+    courseList.value = courses
+    selectedClass.value = classes[0]?.class_id ?? null
+    selectedCourse.value = courses[0]?.course_id ?? null
+  } catch (error) {
+    console.error('加载教师 Agent 范围失败:', error)
+    ElMessage.error('班级和学科加载失败，请稍后重试')
+  }
+})
 
 // 自动滚动到底部
 watch(
@@ -124,6 +184,14 @@ watch(
 }
 .clear-btn-wrapper :deep(.inner-content) {
   background: #e5e8e4;
+}
+.scope-selectors {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.scope-selectors :deep(.el-select) {
+  width: 132px;
 }
 
 /* 自定义滚动条样式 */

@@ -46,6 +46,7 @@ const router = createRouter({
       children: [
         { path: 'dashboard', component: () => import('@/pages/teacher/Analytics.vue') },
         { path: 'chat', component: () => import('@/pages/teacher/Chat.vue') },
+        { path: 'class-assistant', component: () => import('@/pages/teacher/AiClassAssistant.vue') },
         { path: 'interactive', component: () => import('@/pages/teacher/InteractiveZone.vue') },
         { path: 'subject', component: () => import('@/pages/teacher/SubjectManage.vue') },
         { path: 'kg-manage', component: () => import('@/pages/teacher/KnowledgeGraphManage.vue') },

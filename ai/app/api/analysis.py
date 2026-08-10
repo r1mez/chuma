@@ -11,7 +11,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.agent.stu_analysis_agent import analyze_student
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.dependencies import verify_service_token
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,16 @@ async def stu_analysis(
     """
     logger.info(f"[Analysis API] 收到分析请求: stu_id={stu_id}")
     try:
-        result = await analyze_student(stu_id)
+        context = AgentContext(
+            user_id=stu_id,
+            user_role="service",
+            agent_id="student.analysis",
+            student_id=stu_id,
+        )
+        result = await AgentRuntime.default().execute(
+            "student.analysis",
+            context,
+        )
         logger.info(
             f"[Analysis API] 分析完成: stu_id={stu_id}, "
             f"dimensions_available={result.get('dimensions_available', 0)}"

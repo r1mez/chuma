@@ -16,7 +16,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.agent.class_teaching_agent import generate_class_teaching_suggestion
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.dependencies import verify_service_token
 
 logger = logging.getLogger(__name__)
@@ -46,8 +47,16 @@ async def class_teaching_suggestion(
         f"class_id={class_id}, course_id={course_id}"
     )
     try:
-        result = await generate_class_teaching_suggestion(
-            class_id, course_id, course_name
+        result = await AgentRuntime.default().execute(
+            "teacher.class_teaching_suggestion",
+            AgentContext(
+                user_id=0,
+                user_role="service",
+                agent_id="teacher.class_teaching_suggestion",
+                class_id=class_id,
+                course_id=course_id,
+            ),
+            {"course_name": course_name},
         )
         logger.info(
             f"[ClassTeaching API] 班级教学建议完成: class_id={class_id}, "

@@ -65,6 +65,8 @@ import json
 import logging
 from typing import Any
 
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.agent.tools.question_analysis_db import (
     execute_question_analysis_tool,
     get_question_analysis_tool_definitions,
@@ -72,7 +74,6 @@ from app.agent.tools.question_analysis_db import (
     query_student_answer,
 )
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import deepseek_profile
 
 logger = logging.getLogger(__name__)
 
@@ -419,10 +420,16 @@ async def analyze_question(
     Returns:
         分析结果字典
     """
-    llm = LLMClient(default_profile=deepseek_profile())
-    agent = QuestionAnalysisAgent(llm_client=llm)
-    return await agent.analyze(
-        question_id,
-        do_stu_answer=do_stu_answer,
-        stu_id=stu_id,
+    return await AgentRuntime.default().execute(
+        "student.question_analysis",
+        AgentContext(
+            user_id=stu_id or 0,
+            user_role="service",
+            agent_id="student.question_analysis",
+            student_id=stu_id,
+        ),
+        {
+            "question_id": question_id,
+            "do_stu_answer": do_stu_answer,
+        },
     )

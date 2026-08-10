@@ -17,7 +17,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.agent.learning_plan_agent import generate_learning_plan
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.dependencies import verify_service_token
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,16 @@ async def learning_plan(
     """
     logger.info(f"[LearningPlan API] 收到学习规划请求: stu_id={stu_id}")
     try:
-        result = await generate_learning_plan(stu_id)
+        context = AgentContext(
+            user_id=stu_id,
+            user_role="service",
+            agent_id="student.learning_plan",
+            student_id=stu_id,
+        )
+        result = await AgentRuntime.default().execute(
+            "student.learning_plan",
+            context,
+        )
         logger.info(
             f"[LearningPlan API] 学习规划完成: stu_id={stu_id}, "
             f"subjects={len(result.get('subjects', []))}"

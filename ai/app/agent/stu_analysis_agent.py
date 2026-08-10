@@ -31,12 +31,13 @@ import json
 import logging
 from typing import Any
 
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.agent.tools.stu_analysis_db import (
     execute_analysis_tool,
     get_stu_analysis_tool_definitions,
 )
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import deepseek_profile
 
 logger = logging.getLogger(__name__)
 
@@ -431,6 +432,12 @@ async def analyze_student(stu_id: int) -> dict[str, Any]:
     Returns:
         分析结果字典，格式与旧版完全兼容
     """
-    llm = LLMClient(default_profile=deepseek_profile())
-    agent = StuAnalysisAgent(llm_client=llm)
-    return await agent.analyze(stu_id)
+    return await AgentRuntime.default().execute(
+        "student.analysis",
+        AgentContext(
+            user_id=stu_id,
+            user_role="service",
+            agent_id="student.analysis",
+            student_id=stu_id,
+        ),
+    )

@@ -41,12 +41,13 @@ import json
 import logging
 from typing import Any
 
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.agent.tools.class_teaching_db import (
     execute_class_teaching_tool,
     get_class_teaching_tool_definitions,
 )
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import deepseek_profile
 
 logger = logging.getLogger(__name__)
 
@@ -613,6 +614,14 @@ async def generate_class_teaching_suggestion(
     Returns:
         教学建议结果字典
     """
-    llm = LLMClient(default_profile=deepseek_profile())
-    agent = ClassTeachingAgent(llm_client=llm)
-    return await agent.generate(class_id, course_id, course_name)
+    return await AgentRuntime.default().execute(
+        "teacher.class_teaching_suggestion",
+        AgentContext(
+            user_id=0,
+            user_role="service",
+            agent_id="teacher.class_teaching_suggestion",
+            class_id=class_id,
+            course_id=course_id,
+        ),
+        {"course_name": course_name},
+    )

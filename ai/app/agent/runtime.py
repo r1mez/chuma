@@ -5,9 +5,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.agent.context import AgentContext
+from app.agent.context import (
+    AgentContext,
+    bind_agent_context,
+    reset_agent_context,
+)
 from app.agent.registry import AgentRegistry
 from app.engines.llm.client import LLMClient
+from app.engines.llm.profiles import deepseek_profile
 
 
 class AgentRuntime:
@@ -16,7 +21,22 @@ class AgentRuntime:
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
 
+    @classmethod
+    def default(cls) -> "AgentRuntime":
+        """Build the application runtime with the configured deep model."""
+
+        return cls(llm_client=LLMClient(default_profile=deepseek_profile()))
+
+    @staticmethod
+    def _ensure_builtin_agents() -> None:
+        """Load built-ins lazily for non-chat API routes as well."""
+
+        from app.agent.builtin import register_builtin_agents
+
+        register_builtin_agents()
+
     def resolve(self, agent_id: str, context: AgentContext):
+        self._ensure_builtin_agents()
         definition = AgentRegistry.get(agent_id)
         if definition.allowed_roles and context.user_role not in definition.allowed_roles:
             raise PermissionError(f"Role {context.user_role!r} cannot use {agent_id}")
@@ -55,9 +75,14 @@ class AgentRuntime:
     ) -> Any:
         """Run a structured workflow Agent through the same registry."""
 
+        self._ensure_builtin_agents()
         definition = AgentRegistry.get(agent_id)
         if definition.allowed_roles and context.user_role not in definition.allowed_roles:
             raise PermissionError(f"Role {context.user_role!r} cannot use {agent_id}")
         if definition.mode != "workflow" or definition.executor is None:
             raise TypeError(f"Agent {agent_id} is not a workflow Agent")
-        return await definition.executor(context, self.llm, payload or {})
+        context_tokens = bind_agent_context(context)
+        try:
+            return await definition.executor(context, self.llm, payload or {})
+        finally:
+            reset_agent_context(context_tokens)

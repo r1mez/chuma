@@ -13,8 +13,9 @@ import json
 import logging
 from typing import Any
 
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 from app.engines.llm.client import LLMClient
-from app.engines.llm.profiles import deepseek_profile
 
 logger = logging.getLogger(__name__)
 
@@ -157,10 +158,16 @@ async def score_qa(
     Returns:
         {"score": float, "reason": str}
     """
-    llm = LLMClient(default_profile=deepseek_profile())
-    agent = QaScoreAgent(llm_client=llm)
-    return await agent.score(
-        question_description,
-        question_answer,
-        stu_answer,
+    return await AgentRuntime.default().execute(
+        "student.qa_score",
+        AgentContext(
+            user_id=0,
+            user_role="service",
+            agent_id="student.qa_score",
+        ),
+        {
+            "question_description": question_description,
+            "question_answer": question_answer,
+            "stu_answer": stu_answer,
+        },
     )

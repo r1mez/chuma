@@ -5,7 +5,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.agent.question_analysis_agent import analyze_question
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,18 @@ async def question_analysis(
         except (TypeError, ValueError):
             stu_id_int = None
 
-    result = await analyze_question(
-        question_id,
-        do_stu_answer=do_stu_answer,
-        stu_id=stu_id_int,
+    context = AgentContext(
+        user_id=stu_id_int or 0,
+        user_role="service",
+        agent_id="student.question_analysis",
+        student_id=stu_id_int,
+    )
+    result = await AgentRuntime.default().execute(
+        "student.question_analysis",
+        context,
+        {
+            "question_id": question_id,
+            "do_stu_answer": do_stu_answer,
+        },
     )
     return result

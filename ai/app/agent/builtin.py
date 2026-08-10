@@ -1,6 +1,7 @@
 """Built-in Agent registrations."""
 
 from app.agent import tools as _builtin_tools  # noqa: F401 - load local tools
+from app.agent.class_teaching_agent import ClassTeachingAgent
 from app.agent.context import AgentContext
 from app.agent.learning_plan_agent import LearningPlanAgent
 from app.agent.orchestrator import AgentOrchestrator
@@ -31,6 +32,13 @@ def _build_teacher_class_assistant(
     llm: LLMClient,
 ) -> TeacherClassAgent:
     return TeacherClassAgent(context=context, llm_client=llm)
+
+
+def _build_class_teaching_suggestion(
+    context: AgentContext,
+    llm: LLMClient,
+) -> ClassTeachingAgent:
+    return ClassTeachingAgent(llm_client=llm)
 
 
 def _build_student_analysis(context: AgentContext, llm: LLMClient) -> StuAnalysisAgent:
@@ -94,6 +102,25 @@ async def _execute_qa_score(context: AgentContext, llm: LLMClient, payload: dict
     )
 
 
+async def _execute_class_teaching_suggestion(
+    context: AgentContext,
+    llm: LLMClient,
+    payload: dict,
+):
+    class_id = context.class_id or payload.get("class_id")
+    course_id = context.course_id or payload.get("course_id")
+    if not isinstance(class_id, int) or not isinstance(course_id, int):
+        raise ValueError("class_id and course_id are required")
+    course_name = payload.get("course_name")
+    if course_name is not None and not isinstance(course_name, str):
+        raise ValueError("course_name must be a string")
+    return await _build_class_teaching_suggestion(context, llm).generate(
+        class_id=class_id,
+        course_id=course_id,
+        course_name=course_name,
+    )
+
+
 def register_builtin_agents() -> None:
     definitions = {
         "student.tutor": AgentDefinition(
@@ -102,7 +129,7 @@ def register_builtin_agents() -> None:
             description="Student knowledge graph, document retrieval, and learning assistant",
             mode="chat",
             factory=_build_student_tutor,
-            allowed_roles=frozenset({"student", "teacher", "admin"}),
+            allowed_roles=frozenset({"student", "teacher", "admin", "service"}),
             allowed_tools=STUDENT_TUTOR_TOOLS,
         ),
         "teacher.class_assistant": AgentDefinition(
@@ -120,7 +147,7 @@ def register_builtin_agents() -> None:
             mode="workflow",
             factory=_build_student_analysis,
             executor=_execute_student_analysis,
-            allowed_roles=frozenset({"student", "teacher", "admin"}),
+            allowed_roles=frozenset({"student", "teacher", "admin", "service"}),
         ),
         "student.learning_plan": AgentDefinition(
             agent_id="student.learning_plan",
@@ -129,7 +156,7 @@ def register_builtin_agents() -> None:
             mode="workflow",
             factory=_build_learning_plan,
             executor=_execute_learning_plan,
-            allowed_roles=frozenset({"student", "teacher", "admin"}),
+            allowed_roles=frozenset({"student", "teacher", "admin", "service"}),
         ),
         "student.question_analysis": AgentDefinition(
             agent_id="student.question_analysis",
@@ -138,7 +165,7 @@ def register_builtin_agents() -> None:
             mode="workflow",
             factory=_build_question_analysis,
             executor=_execute_question_analysis,
-            allowed_roles=frozenset({"student", "teacher", "admin"}),
+            allowed_roles=frozenset({"student", "teacher", "admin", "service"}),
         ),
         "student.qa_score": AgentDefinition(
             agent_id="student.qa_score",
@@ -147,7 +174,16 @@ def register_builtin_agents() -> None:
             mode="workflow",
             factory=_build_qa_score,
             executor=_execute_qa_score,
-            allowed_roles=frozenset({"student", "teacher", "admin"}),
+            allowed_roles=frozenset({"student", "teacher", "admin", "service"}),
+        ),
+        "teacher.class_teaching_suggestion": AgentDefinition(
+            agent_id="teacher.class_teaching_suggestion",
+            display_name="Class Teaching Suggestion",
+            description="Generate a structured teaching suggestion from class learning analytics",
+            mode="workflow",
+            factory=_build_class_teaching_suggestion,
+            executor=_execute_class_teaching_suggestion,
+            allowed_roles=frozenset({"teacher", "admin", "service"}),
         ),
     }
 

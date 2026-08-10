@@ -5,7 +5,8 @@ import logging
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.agent.qa_score_agent import score_qa
+from app.agent.context import AgentContext
+from app.agent.runtime import AgentRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,17 @@ async def qa_score(req: QaScoreRequest):
 
     根据题目题干、标准答案与学生回答，由大模型酌情给分。
     """
-    result = await score_qa(
-        req.question_description,
-        req.question_answer,
-        req.stu_answer,
+    result = await AgentRuntime.default().execute(
+        "student.qa_score",
+        AgentContext(
+            user_id=0,
+            user_role="service",
+            agent_id="student.qa_score",
+        ),
+        {
+            "question_description": req.question_description,
+            "question_answer": req.question_answer,
+            "stu_answer": req.stu_answer,
+        },
     )
     return result

@@ -53,6 +53,7 @@ from app.agent.tools.learning_plan_db import (
     execute_learning_plan_tool,
     get_learning_plan_tool_definitions,
 )
+from app.engines.gnn.inference import TGNNInference
 from app.engines.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ DATA_COLLECTION_SYSTEM_PROMPT = """你是一位学习规划数据采集助手。
 
 # ── 规划生成系统提示词（权重约束）──────────────────────────────
 def build_plan_system_prompt() -> str:
-    """构建规划生成阶段的系统提示词（约束四维度权重）"""
+    """构建规划生成阶段的系统提示词（约束四维度与动态推荐）"""
     return """你是一位专业的 408 考研学习规划师。你的任务是为指定学科制定**具体、细粒度、可执行**的学习规划。
 
 ## 规划原则
@@ -116,6 +117,7 @@ def build_plan_system_prompt() -> str:
 2. **四维度等权约束**：规划必须综合四个维度（学生端 AI 分析、知识图谱、习题情况、老师意见），各维度权重相等，**不得偏向任何一方的片面结论**。若某个维度缺失，其余维度权重相应提高，但必须明确标注缺失维度。
 3. **细粒度**：规划要具体到知识点、章节、时间安排、练习量，而不是泛泛而谈。
 4. **实事求是**：只能基于给定的数据制定规划，数据中没有的信息不得臆造。
+5. **动态推荐不可改写**：输入中的“DyGKT + 加权 RRF 下一步候选”已由确定性排序生成。若其中有候选，必须按其排名把对应知识点和题目编号写入优先突破点及第一周任务；不得虚构题目编号、不得重新调换候选顺序。
 
 ## 输出格式
 
@@ -140,8 +142,9 @@ class LearningPlanAgent:
     4. 对可用维度 ≥3 的学科：用权重约束提示词生成细粒度规划
     """
 
-    def __init__(self, llm_client: LLMClient):
+    def __init__(self, llm_client: LLMClient, tgnn_inference: TGNNInference | None = None):
         self.llm = llm_client
+        self.tgnn = tgnn_inference or TGNNInference()
 
     # ── 公开接口 ─────────────────────────────────────────────
 
@@ -226,6 +229,7 @@ class LearningPlanAgent:
                 "missing_dimensions": db_error_dims,
                 "error": "db_error",
                 "error_message": "数据库连接异常，暂时无法获取学习数据，请稍后重试。",
+                "recommendation": None,
                 "plan": None,
             }
 
@@ -234,6 +238,14 @@ class LearningPlanAgent:
             1 for k in DIMENSION_KEYS if dimensions_detail[k].get("available", False)
         )
         weights = self._compute_weights(dimensions_detail, available_count)
+
+        # 动态候选题只依赖做题时间序列与题库/掌握度，和完整周计划的
+        # “四维资料至少三项”门槛不同；资料不足时仍可给出明确标识的下一题。
+        recommendation = await self._recommend_next_targets(
+            stu_id=stu_id,
+            course_id=course_id,
+            dimensions_detail=dimensions_detail,
+        )
 
         # 5. 兜底判定：可用维度 ≤2 → 无法准确规划
         if available_count <= 2:
@@ -254,12 +266,14 @@ class LearningPlanAgent:
                 "error_message": (
                     f"缺失{'、'.join(missing)}维度，导致无法准确地进行学习规划！"
                 ),
+                "recommendation": recommendation,
                 "plan": None,
             }
 
-        # 6. 可用维度 ≥3 → 生成细粒度规划
+        # 6. 可用维度 ≥3 → DyGKT 动态候选排序，再由 LLM 编排为周计划。
+        # DyGKT 只预测做对概率，RRF 与四维数据属于模型外的规划决策层。
         plan = await self._generate_plan(
-            stu_id, subject, dimensions_detail, weights, available_count
+            stu_id, subject, dimensions_detail, weights, available_count, recommendation
         )
 
         return {
@@ -271,6 +285,7 @@ class LearningPlanAgent:
             "dimensions_detail": dimensions_detail,
             "missing_dimensions": [],
             "error": None,
+            "recommendation": recommendation,
             "plan": plan,
         }
 
@@ -471,6 +486,40 @@ class LearningPlanAgent:
 
     # ── 规划生成 ─────────────────────────────────────────────
 
+    async def _recommend_next_targets(
+        self,
+        stu_id: int,
+        course_id: int,
+        dimensions_detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        """获得 DyGKT + RRF 候选；异常不能阻断原有学习规划。"""
+
+        try:
+            return await self.tgnn.recommend_for_course(
+                stu_id=stu_id,
+                course_id=course_id,
+                ai_analysis=dimensions_detail.get("ai_analysis", {}).get("value"),
+                teacher_opinion=dimensions_detail.get("teacher_opinion", {}).get("value"),
+            )
+        except Exception as exc:
+            logger.error(
+                "[LearningPlanAgent] DyGKT 推荐异常 stu_id=%s, course_id=%s: %s",
+                stu_id,
+                course_id,
+                exc,
+                exc_info=True,
+            )
+            return {
+                "status": "unavailable",
+                "model_version": None,
+                "history_event_count": 0,
+                "candidate_count": 0,
+                "target_correct_probability": None,
+                "fusion": {"method": "weighted_rrf", "rrf_k": 60, "source_weights": {}, "active_sources": []},
+                "recommendations": [],
+                "message": "动态推荐暂不可用，已仅依据学习数据生成规划。",
+            }
+
     async def _generate_plan(
         self,
         stu_id: int,
@@ -478,13 +527,14 @@ class LearningPlanAgent:
         dimensions_detail: dict[str, Any],
         weights: dict[str, float],
         available_count: int,
-    ) -> dict[str, Any] | None:
+        recommendation: dict[str, Any],
+    ) -> dict[str, Any]:
         """用权重约束提示词生成某学科的细粒度学习规划"""
         course_id = subject.get("course_id")
         course_name = subject.get("course_name", f"学科{course_id}")
 
-        # 构建四维度描述文本
-        dimension_texts = self._build_dimension_texts(dimensions_detail)
+        # 构建四维度描述文本，并附加确定性 DyGKT + RRF 候选。
+        dimension_texts = self._build_dimension_texts(dimensions_detail, recommendation)
 
         # 权重说明（等权，动态调整）
         weight_text = "、".join(
@@ -524,7 +574,7 @@ class LearningPlanAgent:
             )
             if response.content:
                 plan = self._parse_plan_json(response.content)
-                return plan
+                return self._normalise_plan(plan, course_name, dimensions_detail, recommendation)
         except Exception as e:
             logger.error(
                 f"[LearningPlanAgent] 规划生成异常 stu_id={stu_id}, "
@@ -532,11 +582,12 @@ class LearningPlanAgent:
                 exc_info=True,
             )
 
-        return None
+        return self._fallback_plan(course_name, dimensions_detail, recommendation)
 
     @staticmethod
     def _build_dimension_texts(
         dimensions_detail: dict[str, Any],
+        recommendation: dict[str, Any] | None = None,
     ) -> list[str]:
         """将四维度详情转换为可读文本（供规划提示词使用）"""
         texts: list[str] = []
@@ -582,7 +633,126 @@ class LearningPlanAgent:
         else:
             texts.append("【老师意见与评估】暂无数据（可能用户还没有开展学习哦~）")
 
+        recommendation = recommendation or {}
+        targets = recommendation.get("recommendations", [])
+        if targets:
+            target_text = "；".join(
+                f"#{target.get('rank')} {target.get('knowledge_point')}（题目 #{target.get('question_id')}，"
+                f"预测正确率 {float(target.get('predicted_correct_probability', 0)) * 100:.0f}%）"
+                for target in targets
+            )
+            texts.append(
+                "【DyGKT + 加权 RRF 下一步候选】"
+                f"状态={recommendation.get('status')}；{target_text}。"
+                "这些候选的顺序和题目编号必须保留在最终计划中。"
+            )
+        else:
+            texts.append(
+                "【DyGKT + 加权 RRF 下一步候选】"
+                f"暂无可跳转题目（状态={recommendation.get('status', 'unavailable')}）。"
+            )
+
         return texts
+
+    @staticmethod
+    def _target_tasks(recommendation: dict[str, Any]) -> list[str]:
+        return [
+            f"优先练习「{item.get('knowledge_point')}」的推荐题 #{item.get('question_id')}"
+            for item in recommendation.get("recommendations", [])
+            if item.get("knowledge_point") and item.get("question_id") is not None
+        ]
+
+    @classmethod
+    def _fallback_plan(
+        cls,
+        course_name: str,
+        dimensions_detail: dict[str, Any],
+        recommendation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """LLM 不可用时，仍返回包含可执行动态目标的安全规划。"""
+
+        targets = recommendation.get("recommendations", [])
+        target_tasks = cls._target_tasks(recommendation)
+        weak_from_kg = [
+            str(node.get("name"))
+            for node in dimensions_detail.get("knowledge_mastery", {}).get("weakest_nodes", [])
+            if node.get("name")
+        ]
+        target_points = [str(item.get("knowledge_point")) for item in targets if item.get("knowledge_point")]
+        weak_points = list(dict.fromkeys(target_points + weak_from_kg))[:3]
+        first_theme = "动态推荐知识点练习" if target_tasks else "薄弱知识点梳理"
+        return {
+            "overall_goal": f"围绕 {course_name} 的薄弱知识点完成一轮复习，并用练习结果更新掌握度。",
+            "weak_points": weak_points,
+            "weekly_plan": [{
+                "week": 1,
+                "theme": first_theme,
+                "tasks": target_tasks or ["梳理最薄弱知识点的概念、易错点和关联章节", "完成基础练习并记录错因"],
+                "exercises": f"完成 {max(3, len(target_tasks))} 道针对性练习，并复盘错题。",
+            }],
+            "priority_focus": [
+                f"{item.get('knowledge_point')}（推荐题目 #{item.get('question_id')}）"
+                for item in targets
+                if item.get("knowledge_point") and item.get("question_id") is not None
+            ] or weak_points,
+            "teacher_notes": str(dimensions_detail.get("teacher_opinion", {}).get("value") or "暂无老师意见；完成练习后可请老师针对错因给出反馈。"),
+        }
+
+    @classmethod
+    def _normalise_plan(
+        cls,
+        plan: dict[str, Any],
+        course_name: str,
+        dimensions_detail: dict[str, Any],
+        recommendation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """校验 LLM 输出，并把确定性候选写回首周任务和优先级。"""
+
+        fallback = cls._fallback_plan(course_name, dimensions_detail, recommendation)
+        if not isinstance(plan, dict):
+            return fallback
+
+        normalised = dict(fallback)
+        for key in ("overall_goal", "teacher_notes"):
+            value = plan.get(key)
+            if isinstance(value, str) and value.strip():
+                normalised[key] = value.strip()
+        for key in ("weak_points", "priority_focus"):
+            value = plan.get(key)
+            if isinstance(value, list):
+                cleaned = [str(item).strip() for item in value if str(item).strip()]
+                if cleaned:
+                    normalised[key] = cleaned
+
+        weekly = plan.get("weekly_plan")
+        if isinstance(weekly, list):
+            cleaned_weeks: list[dict[str, Any]] = []
+            for index, item in enumerate(weekly, start=1):
+                if not isinstance(item, dict):
+                    continue
+                tasks = item.get("tasks", [])
+                if not isinstance(tasks, list):
+                    tasks = [str(tasks)] if tasks else []
+                cleaned_weeks.append({
+                    "week": int(item.get("week") or index),
+                    "theme": str(item.get("theme") or f"第 {index} 周学习"),
+                    "tasks": [str(task) for task in tasks if str(task).strip()],
+                    "exercises": str(item.get("exercises") or "完成针对性练习并复盘错题"),
+                })
+            if cleaned_weeks:
+                normalised["weekly_plan"] = cleaned_weeks
+
+        target_tasks = cls._target_tasks(recommendation)
+        if target_tasks:
+            first_week = normalised["weekly_plan"][0]
+            first_week["tasks"] = list(dict.fromkeys(target_tasks + first_week.get("tasks", [])))
+            target_focus = [
+                f"{item.get('knowledge_point')}（推荐题目 #{item.get('question_id')}）"
+                for item in recommendation.get("recommendations", [])
+                if item.get("knowledge_point") and item.get("question_id") is not None
+            ]
+            normalised["priority_focus"] = list(dict.fromkeys(target_focus + normalised["priority_focus"]))
+        return normalised
 
     @staticmethod
     def _build_assistant_message(response) -> dict:

@@ -79,6 +79,43 @@
                 </span>
               </div>
 
+              <!-- DyGKT 动态下一步推荐：即使完整周计划资料不足，也保留可执行的下一题。 -->
+              <div v-if="subject.recommendation" class="plan-section recommendation-section">
+                <div class="recommendation-header">
+                  <h4 class="section-title">动态推荐的下一步</h4>
+                  <span class="recommendation-status" :class="`recommendation-${subject.recommendation.status}`">
+                    {{ recommendationStatusText(subject.recommendation.status) }}
+                  </span>
+                </div>
+                <p v-if="subject.recommendation.recommendations.length" class="recommendation-note">
+                    DyGKT 先预测作答正确率；知识点掌握度、AI 分析和老师意见在模型外通过加权 RRF 排序。点击可直接练习。
+                </p>
+                <div v-if="subject.recommendation.recommendations.length" class="recommendation-list">
+                  <div
+                    v-for="item in subject.recommendation.recommendations"
+                    :key="item.question_id"
+                    class="recommendation-item"
+                  >
+                    <span class="recommendation-rank">{{ item.rank }}</span>
+                    <div class="recommendation-main">
+                      <strong>{{ item.knowledge_point }}</strong>
+                      <span>题目 #{{ item.question_id }} · 难度 {{ item.question_difficulty }}</span>
+                      <small>{{ item.reason }}</small>
+                    </div>
+                    <div class="recommendation-metrics">
+                      <span>预测正确率 {{ formatPercent(item.predicted_correct_probability) }}</span>
+                      <span>掌握度 {{ item.current_mastery.toFixed(1) }}/5</span>
+                    </div>
+                    <el-button type="primary" size="small" plain @click="goToPractice(subject.course_id, item.question_id)">
+                      去练习
+                    </el-button>
+                  </div>
+                </div>
+                <p v-else class="section-text">
+                  {{ subject.recommendation.message || '当前没有可跳转的未完成题目。' }}
+                </p>
+              </div>
+
               <!-- 状态：维度不足 -->
               <div v-if="subject.status === 'insufficient'" class="subject-error">
                 <p class="error-text">{{ subject.error_message }}</p>
@@ -149,6 +186,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh, MagicStick } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
@@ -156,6 +194,7 @@ import { useAuthStore } from '@/stores/auth'
 import { fetchLearningPlan, type LearningPlanResult, type SubjectPlan } from '@/api/learningPlan'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 // 学生姓名（优先从 Store 获取）
 const studentName = ref(authStore.user?.name || '秦诗浩')
@@ -185,6 +224,26 @@ const statusText = (status: string): string => {
   if (status === 'insufficient') return '维度不足'
   if (status === 'db_error') return '数据异常'
   return status
+}
+
+const recommendationStatusText = (status: string): string => {
+  const labels: Record<string, string> = {
+    model: 'DyGKT 模型推荐',
+    cold_start_fallback: '冷启动推荐',
+    heuristic_fallback: '启发式降级',
+    no_candidates: '暂无候选题',
+    unavailable: '动态推荐暂不可用',
+  }
+  return labels[status] || status
+}
+
+const formatPercent = (value: number): string => `${Math.round(value * 100)}%`
+
+const goToPractice = (courseId: number, questionId: number) => {
+  router.push({
+    path: '/student/practice/panel',
+    query: { module: String(courseId), questionId: String(questionId) },
+  })
 }
 
 /** 加载学习规划 */
@@ -504,6 +563,99 @@ onMounted(() => {
   font-size: 0.85rem;
   font-weight: 600;
   color: #409eff;
+}
+
+.recommendation-section {
+  border: 1px solid #b3d8ff;
+  background: linear-gradient(135deg, rgba(236, 245, 255, 0.92), rgba(255, 255, 255, 0.6));
+}
+
+.recommendation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recommendation-status {
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: #409eff;
+  background: #ecf5ff;
+}
+
+.recommendation-cold_start_fallback,
+.recommendation-heuristic_fallback {
+  color: #e6a23c;
+  background: #fdf6ec;
+}
+
+.recommendation-unavailable,
+.recommendation-no_candidates {
+  color: #909399;
+  background: #f4f4f5;
+}
+
+.recommendation-note {
+  margin: 0 0 8px;
+  color: #606266;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.recommendation-item {
+  display: grid;
+  grid-template-columns: 26px minmax(160px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.recommendation-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #409eff;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.recommendation-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: #606266;
+}
+
+.recommendation-main strong { color: #303133; font-size: 0.84rem; }
+.recommendation-main small { color: #909399; }
+
+.recommendation-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+  font-size: 0.74rem;
+  color: #409eff;
+}
+
+@media (max-width: 760px) {
+  .recommendation-item { grid-template-columns: 26px 1fr auto; }
+  .recommendation-metrics { grid-column: 2 / 3; }
 }
 
 .section-text {

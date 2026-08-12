@@ -358,6 +358,25 @@ async def question_analysis(request: Request):
 
 
 @router.post("/recommend")
-async def recommend_questions():
+async def recommend_questions(
+    request: Request,
+    current_user: dict = Depends(get_current_user_optional),
+):
     """GNN 题目推荐 — 转发到 ai/ 服务"""
-    pass
+    body = await request.json()
+    if current_user.get("user_type") == "student":
+        body["student_id"] = current_user["id"]
+    else:
+        body.setdefault("student_id", current_user.get("id", 1))
+    if not body.get("course_id"):
+        raise HTTPException(status_code=400, detail="缺少 course_id 参数")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{settings.AI_SERVICE_URL}/gnn/recommend",
+            headers=_ai_headers(),
+            json=body,
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+    return response.json()

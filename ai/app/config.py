@@ -94,6 +94,19 @@ class Settings(BaseSettings):
     RAG_FUSION_TOP_K: int = 15
     RAG_RERANKER_TOP_K: int = 5
 
+    # TGNN / DyGKT 学习规划。模型本体严格采用 PengLinzhi/DyGKT 的
+    # 双邻居 GRU、时间双衰减编码与 MergeLayer；RRF 等规划策略在模型外执行。
+    TGNN_MODEL_PATH: str = "data/models/dygkt_original.pt"
+    TGNN_HISTORY_SIZE: int = 50
+    TGNN_MIN_HISTORY: int = 5
+    TGNN_TOP_K: int = 3
+    TGNN_RRF_K: int = 60
+    TGNN_TARGET_CORRECT_PROBABILITY: float = 0.65
+    TGNN_TRAIN_EPOCHS: int = 30
+    TGNN_TRAIN_BATCH_SIZE: int = 64
+    TGNN_TRAIN_LEARNING_RATE: float = 0.001
+    TGNN_TRAIN_MIN_SAMPLES: int = 64
+
     def get_mcp_server_urls(self) -> list[str]:
         """返回所有待连接的 MCP Server URL 列表
 

@@ -1,19 +1,5 @@
 <template>
   <div class="chat-page">
-    <div class="chat-header">
-      <div>
-        <h3>AI 助学</h3>
-        <span class="mode-description">可查看任务规划、工具调用和知识来源</span>
-      </div>
-      <div class="header-actions">
-        <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
-          <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn">
-            清空对话
-          </el-button>
-        </StarBorder>
-      </div>
-    </div>
-
     <div class="chat-body">
       <AgentConversationSidebar
         :conversations="conversations"
@@ -28,9 +14,18 @@
       <div class="messages-shell">
         <div class="chat-messages" ref="messagesRef" @scroll="handleMessagesScroll">
           <div v-if="messages.length === 0" class="empty-state">
-            <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-            <p>开始向 AI 助学提问吧！</p>
-            <p class="hint">AI 助学将展示任务规划、资料查询和答案生成进度</p>
+            <div class="welcome-copy">
+              <span class="welcome-icon"><Sparkles :size="20" /></span>
+              <h2>你好，{{ userName }}</h2>
+              <p>今天想一起学习什么？</p>
+            </div>
+            <div class="welcome-composer">
+              <ChatInput prominent :loading="loading" placeholder="输入课程问题，或描述你遇到的学习困难…" @send="handleSend" @cancel="cancelCurrentRun" />
+              <div class="prompt-chips">
+                <button v-for="prompt in quickPrompts" :key="prompt" type="button" @click="handleSend(prompt)">{{ prompt }}</button>
+              </div>
+            </div>
+            <div class="welcome-note"><BookOpen :size="17" /><span>可结合知识图谱与学习记录，为你提供个性化辅导</span></div>
           </div>
           <ChatMessage
             v-for="msg in messages"
@@ -47,6 +42,10 @@
             <span aria-hidden="true">↓</span>
           </button>
         </transition>
+        <div v-if="messages.length > 0" class="conversation-composer">
+          <ChatInput :loading="loading" @send="handleSend" @cancel="cancelCurrentRun" />
+          <button class="clear-link" type="button" @click="clearMessages">清空当前对话</button>
+        </div>
       </div>
 
       <ChatSubgraphPanel
@@ -63,18 +62,17 @@
       />
     </div>
 
-    <ChatInput :loading="loading" @send="handleSend" @cancel="cancelCurrentRun" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { Sparkles, BookOpen } from 'lucide-vue-next'
 import { useChat } from '@/composables/useChat'
+import { useAuthStore } from '@/stores/auth'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import AgentConversationSidebar from '@/components/AgentConversationSidebar.vue'
-import StarBorder from '@/components/StarBorder.vue'
 import ChatSubgraphPanel from '@/components/ChatSubgraphPanel.vue'
 import {
   deleteAgentConversation,
@@ -105,6 +103,9 @@ const {
   activeConversationId,
   loadConversation,
 } = useChat()
+const authStore = useAuthStore()
+const userName = computed(() => authStore.user?.name || '同学')
+const quickPrompts = ['解释一个知识点', '分析我的薄弱项', '制定复习计划', '带我做一道题', '整理课程重点']
 
 const messagesRef = ref<HTMLElement>()
 const nearBottom = ref(true)
@@ -230,40 +231,39 @@ watch(
 
 <style scoped>
 .chat-page {
-  height: 100%;
+  height: calc(100vh - 184px);
+  min-height: 620px;
   display: flex;
   flex-direction: column;
-  background: transparent;
+  overflow: hidden;
+  border: 1px solid #e2e7ef;
+  border-radius: 10px;
+  background: #fff;
 }
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(10px);
-  color: #1f2937;
-}
-.chat-header h3 { margin: 0; font-size: 16px; }
-.mode-description { display: block; margin-top: 2px; color: #94a3b8; font-size: 11px; }
-.header-actions { display: flex; gap: 16px; align-items: center; }
-.clear-btn { margin-left: 0; padding: 8px 16px; }
-.clear-btn-wrapper :deep(.inner-content) { background: #e5e8e4; }
 .chat-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
-.messages-shell { position: relative; flex: 1; min-width: 0; }
-.chat-messages { height: 100%; overflow-y: auto; padding: 20px; box-sizing: border-box; scroll-behavior: smooth; }
+.messages-shell { position: relative; display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 38px; box-sizing: border-box; scroll-behavior: smooth; }
 .chat-messages::-webkit-scrollbar { width: 8px; }
 .chat-messages::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.02); border-radius: 4px; }
 .chat-messages::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 4px; }
 .chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6b7280; }
-.empty-state p { margin: 8px 0 0; font-size: 14px; color: #4b5563; }
-.hint { font-size: 12px !important; color: #9ca3af !important; }
+.empty-state { width: min(100%, 800px); min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: auto; color: #6b7280; }
+.welcome-copy { text-align: center; }
+.welcome-icon { width: 42px; height: 42px; display: grid; place-items: center; margin: 0 auto 16px; border: 1px solid #dbe3ef; border-radius: 10px; color: #21469b; background: #f1f4fa; }
+.welcome-copy h2 { margin: 0; color: #101828; font-size: 34px; letter-spacing: -.035em; }
+.welcome-copy p { margin: 9px 0 0; color: #7a8699; font-size: 14px; }
+.welcome-composer { width: 100%; margin-top: 34px; }
+.prompt-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.prompt-chips button { padding: 7px 12px; border: 1px solid #dfe5ed; border-radius: 18px; color: #526078; background: #fff; font-size: 12px; cursor: pointer; }
+.prompt-chips button:hover { color: #21469b; border-color: #bac7dc; background: #f5f7fb; }
+.welcome-note { display: flex; align-items: center; gap: 9px; margin-top: 36px; padding: 11px 14px; border: 1px solid #e2e7ef; border-radius: 8px; color: #667085; background: #fafbfc; font-size: 12px; }
+.conversation-composer { position: relative; width: min(880px, calc(100% - 56px)); margin: 0 auto; padding: 12px 0 18px; background: #fff; }
+.clear-link { position: absolute; right: 4px; bottom: 1px; border: 0; color: #98a2b3; background: transparent; font-size: 10px; cursor: pointer; }
+.clear-link:hover { color: #d14343; }
 .jump-latest {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 126px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -273,17 +273,17 @@ watch(
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
   color: #475569;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
   cursor: pointer;
   font-size: 12px;
 }
 .jump-enter-active, .jump-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
 .jump-enter-from, .jump-leave-to { opacity: 0; transform: translate(-50%, 8px); }
 @media (max-width: 800px) {
-  .chat-header { align-items: flex-start; gap: 8px; }
-  .header-actions { gap: 8px; }
-  .mode-description { display: none; }
-  .chat-messages { padding: 14px 10px; }
+  .chat-page { height: calc(100vh - 168px); min-height: 520px; }
+  .chat-messages { padding: 22px 16px; }
+  .welcome-copy h2 { font-size: 27px; }
+  .conversation-composer { width: calc(100% - 24px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-messages { scroll-behavior: auto; }

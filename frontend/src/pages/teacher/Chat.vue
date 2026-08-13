@@ -1,9 +1,10 @@
 <template>
-  <div class="chat-page teacher-page h-full flex flex-col bg-transparent">
-    <!-- 顶部栏 -->
-    <div class="chat-header flex justify-between items-center px-5 py-3 border-b border-gray-200/50 bg-white/60 backdrop-blur-md text-gray-800">
-      <h3 class="m-0 text-base font-bold">AI 助教</h3>
-      <div class="header-actions flex gap-4 items-center">
+  <div class="chat-page teacher-page">
+    <div class="chat-toolbar">
+      <div class="mode-tabs">
+        <button v-for="item in navItems" :key="item.value" type="button" :class="{ active: chatMode === item.value }" @click="chatMode = item.value as any">{{ item.label }}</button>
+      </div>
+      <div class="header-actions">
         <div v-if="chatMode === 'agent'" class="scope-selectors">
           <el-select v-model="selectedClass" size="small" placeholder="选择班级" clearable>
             <el-option
@@ -22,27 +23,11 @@
             />
           </el-select>
         </div>
-        <StarBorder as="div" color="#4ecdc4" speed="4s" class="nav-wrapper rounded-full">
-          <GooeyNav 
-            :items="navItems"
-            v-model="chatMode"
-            :particle-count="15"
-            :particle-distances="[90, 10]"
-            :particle-r="100"
-            :animation-time="600"
-            :time-variance="300"
-            :colors="[1, 2, 3, 1, 2, 3, 1, 4]"
-          />
-        </StarBorder>
-        <StarBorder as="div" color="#f56c6c" speed="4s" class="clear-btn-wrapper">
-          <el-button text @click="clearMessages" :disabled="messages.length === 0" class="clear-btn px-4 py-2 bg-[#e5e8e4]">
-            清空对话
-          </el-button>
-        </StarBorder>
+        <button class="clear-button" type="button" :disabled="messages.length === 0" @click="clearMessages">清空对话</button>
       </div>
     </div>
 
-    <div class="flex-1 flex overflow-hidden">
+    <div class="chat-body">
       <AgentConversationSidebar
         :conversations="conversations"
         :active-id="activeConversationId"
@@ -55,13 +40,21 @@
       />
 
       <!-- 右侧对话主面板 -->
-      <div class="flex-1 flex flex-col relative">
-        <!-- 消息列表 -->
-        <div class="chat-messages flex-1 overflow-y-auto p-5" ref="messagesRef">
-          <div v-if="messages.length === 0" class="empty-state flex flex-col items-center justify-center h-full text-gray-500">
-            <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-            <p class="mt-2 text-sm text-gray-600">我是您的专属 AI 助教，可以帮您解答问题或辅助备课。</p>
-            <p class="hint text-xs text-gray-400 mt-1">支持轻度思考、深度思考、以及辅助备课模式</p>
+      <div class="messages-shell">
+        <div class="chat-messages" ref="messagesRef">
+          <div v-if="messages.length === 0" class="empty-state">
+            <div class="welcome-copy">
+              <span class="welcome-icon"><Sparkles :size="20" /></span>
+              <h2>你好，{{ userName }}</h2>
+              <p>今天需要我协助完成什么教学工作？</p>
+            </div>
+            <div class="welcome-composer">
+              <ChatInput prominent :loading="loading" placeholder="输入教学问题，或描述你希望准备的课程内容…" @send="handleSend" />
+              <div class="prompt-chips">
+                <button v-for="prompt in quickPrompts" :key="prompt" type="button" @click="handleSend(prompt)">{{ prompt }}</button>
+              </div>
+            </div>
+            <div class="welcome-note"><BookOpenCheck :size="17" /><span>辅助备课模式可结合班级学情与课程知识生成教学建议</span></div>
           </div>
           <ChatMessage
             v-for="(msg, i) in messages"
@@ -71,23 +64,21 @@
           />
         </div>
 
-        <!-- 输入框 -->
-        <ChatInput :loading="loading" @send="handleSend" />
+        <div v-if="messages.length > 0" class="conversation-composer"><ChatInput :loading="loading" @send="handleSend" /></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch, nextTick } from 'vue'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
+import { Sparkles, BookOpenCheck } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
 import { useChat } from '@/composables/useChat'
+import { useAuthStore } from '@/stores/auth'
 import ChatMessage from '@/components/ChatMessage.vue'
 import ChatInput from '@/components/ChatInput.vue'
 import AgentConversationSidebar from '@/components/AgentConversationSidebar.vue'
-import GooeyNav from '@/components/GooeyNav.vue'
-import StarBorder from '@/components/StarBorder.vue'
 import {
   deleteAgentConversation,
   getAgentConversation,
@@ -105,6 +96,9 @@ const selectedClass = ref<number | null>(null)
 const selectedCourse = ref<number | null>(null)
 const classList = ref<TeacherClass[]>([])
 const courseList = ref<TeacherCourse[]>([])
+const authStore = useAuthStore()
+const userName = computed(() => authStore.user?.name || '老师')
+const quickPrompts = ['生成一份教案', '分析班级薄弱项', '设计课堂练习', '整理章节重点', '生成课后作业']
 
 const {
   messages,
@@ -233,19 +227,22 @@ watch(
 
 <style scoped>
 .chat-page {
-  --color-1: #ff6b6b;
-  --color-2: #4ecdc4;
-  --color-3: #45b7d1;
-  --color-4: #f9ca24;
+  height: calc(100vh - 184px);
+  min-height: 620px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e2e7ef;
+  border-radius: 10px;
+  background: #fff;
 }
-
-.nav-wrapper :deep(.inner-content) {
-  background: #e5e8e4;
-  border-radius: 9999px;
-}
-.clear-btn-wrapper :deep(.inner-content) {
-  background: #e5e8e4;
-}
+.chat-toolbar { min-height: 55px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 9px 14px; border-bottom: 1px solid #e4e9f0; background: #fafbfc; }
+.mode-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid #e2e7ef; border-radius: 8px; background: #eef1f5; }
+.mode-tabs button { padding: 7px 12px; border: 0; border-radius: 6px; color: #667085; background: transparent; font-size: 12px; cursor: pointer; }
+.mode-tabs button.active { color: #172033; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.05); font-weight: 600; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.clear-button { height: 32px; padding: 0 10px; border: 1px solid #dfe5ed; border-radius: 7px; color: #667085; background: #fff; font-size: 12px; cursor: pointer; }
+.clear-button:disabled { opacity: .4; cursor: not-allowed; }
 .scope-selectors {
   display: flex;
   gap: 8px;
@@ -254,6 +251,20 @@ watch(
 .scope-selectors :deep(.el-select) {
   width: 132px;
 }
+.chat-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.messages-shell { display: flex; position: relative; flex: 1; min-width: 0; flex-direction: column; }
+.chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 38px; }
+.empty-state { width: min(100%, 800px); min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: auto; }
+.welcome-copy { text-align: center; }
+.welcome-icon { width: 42px; height: 42px; display: grid; place-items: center; margin: 0 auto 16px; border: 1px solid #dbe3ef; border-radius: 10px; color: #21469b; background: #f1f4fa; }
+.welcome-copy h2 { margin: 0; color: #101828; font-size: 34px; letter-spacing: -.035em; }
+.welcome-copy p { margin: 9px 0 0; color: #7a8699; font-size: 14px; }
+.welcome-composer { width: 100%; margin-top: 34px; }
+.prompt-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+.prompt-chips button { padding: 7px 12px; border: 1px solid #dfe5ed; border-radius: 18px; color: #526078; background: #fff; font-size: 12px; cursor: pointer; }
+.prompt-chips button:hover { color: #21469b; border-color: #bac7dc; background: #f5f7fb; }
+.welcome-note { display: flex; align-items: center; gap: 9px; margin-top: 36px; padding: 11px 14px; border: 1px solid #e2e7ef; border-radius: 8px; color: #667085; background: #fafbfc; font-size: 12px; }
+.conversation-composer { width: min(880px, calc(100% - 56px)); margin: 0 auto; padding: 12px 0 18px; background: #fff; }
 
 /* 自定义滚动条样式 */
 .chat-messages::-webkit-scrollbar,
@@ -276,5 +287,13 @@ watch(
 .chat-messages::-webkit-scrollbar-thumb:hover,
 .history-panel .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.25);
+}
+@media (max-width: 850px) {
+  .chat-page { height: calc(100vh - 168px); min-height: 520px; }
+  .chat-toolbar { align-items: flex-start; flex-direction: column; }
+  .header-actions { width: 100%; flex-wrap: wrap; }
+  .chat-messages { padding: 22px 16px; }
+  .welcome-copy h2 { font-size: 27px; }
+  .conversation-composer { width: calc(100% - 24px); }
 }
 </style>

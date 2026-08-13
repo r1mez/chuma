@@ -1,272 +1,97 @@
 <template>
-  <div class="login-wrapper">
-    <!-- Letter Glitch Background -->
-    <LetterGlitch class="background-glitch" />
+  <main class="auth-page">
+    <section class="auth-intro">
+      <div class="brand"><span><GraduationCap :size="22" /></span>智教慧学</div>
+      <div class="intro-copy">
+        <p class="eyebrow">AI 教学与学习工作台</p>
+        <h1>让知识脉络清晰可见，<br>让每一步学习都有依据。</h1>
+        <p>面向计算机科学课程的智能助教助学平台，连接知识图谱、个性化练习与学情分析。</p>
+      </div>
+      <small>Intelligent Teaching & Learning Workspace</small>
+    </section>
 
-    <!-- Login Form -->
-    <div class="form-container">
-      <form class="form" @submit.prevent="handleLogin">
-        <h2 class="title">智教慧学Agent平台</h2>
-        
-        <!-- Role Selector -->
-        <div class="role-selector">
-          <label class="radio-label">
-            <input type="radio" v-model="role" value="student" /> Student
-          </label>
-          <label class="radio-label">
-            <input type="radio" v-model="role" value="teacher" /> Teacher
-          </label>
-          <label class="radio-label">
-            <input type="radio" v-model="role" value="admin" /> Admin
+    <section class="auth-form-area">
+      <form class="login-form" @submit.prevent="handleLogin">
+        <header><h2>欢迎回来</h2><p>登录后进入你的专属工作台</p></header>
+        <div class="role-tabs">
+          <label v-for="item in roles" :key="item.value" :class="{ active: role === item.value }">
+            <input v-model="role" type="radio" :value="item.value">{{ item.label }}
           </label>
         </div>
-
-        <span class="input-span">
-          <label for="email" class="label">Email</label>
-          <input 
-            type="email" 
-            name="email" 
-            id="email" 
-            v-model="email" 
-            required 
-          />
-        </span>
-        <span class="input-span">
-          <label for="password" class="label">Password</label>
-          <input 
-            type="password" 
-            name="password" 
-            id="password" 
-            v-model="password" 
-            required 
-          />
-        </span>
-        <span class="span"><a href="#">Forgot password?</a></span>
-        <input class="submit" type="submit" value="Log in" :disabled="loading" />
-        <span class="span">Don't have an account? <a href="#">Sign up</a></span>
+        <label class="field"><span>邮箱</span><input v-model="email" type="email" autocomplete="email" placeholder="请输入邮箱地址" required></label>
+        <label class="field"><span>密码</span><input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" required></label>
+        <div class="form-options"><label><input type="checkbox"> 保持登录</label><a href="#">忘记密码？</a></div>
+        <button class="submit" type="submit" :disabled="loading">{{ loading ? '正在登录…' : '登录工作台' }}</button>
+        <p class="register-link">还没有账号？<RouterLink to="/register">创建账号</RouterLink></p>
       </form>
-    </div>
-  </div>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { GraduationCap } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import LetterGlitch from '@/components/LetterGlitch.vue'
 import request from '@/utils/request'
-
 const router = useRouter()
 const authStore = useAuthStore()
-
 const email = ref('')
 const password = ref('')
 const role = ref<'student' | 'teacher' | 'admin'>('student')
 const loading = ref(false)
-
+const roles = [{ label: '学生', value: 'student' }, { label: '教师', value: 'teacher' }, { label: '管理员', value: 'admin' }] as const
 const handleLogin = async () => {
-  if (!email.value || !password.value) {
-    ElMessage.warning('Email and Password cannot be empty')
-    return
-  }
-
+  if (!email.value || !password.value) return ElMessage.warning('请输入邮箱和密码')
   loading.value = true
   try {
-    // Admin: mock login (no backend admin table)
     if (role.value === 'admin') {
-      if (!email.value.startsWith('admin')) {
-        ElMessage.warning('管理员账号必须以 admin 开头')
-        loading.value = false
-        return
-      }
+      if (!email.value.startsWith('admin')) return ElMessage.warning('管理员账号必须以 admin 开头')
       authStore.setToken('admin-mock-token')
-      authStore.setUser({
-        id: 0,
-        name: email.value.split('@')[0],
-        email: email.value,
-        gender: null,
-        stu_level: null,
-        role: 'admin',
-      })
+      authStore.setUser({ id: 0, name: email.value.split('@')[0], email: email.value, gender: null, stu_level: null, role: 'admin' })
       localStorage.setItem('userRole', 'admin')
-      ElMessage.success('Logged in as admin')
       await router.push('/admin/ocr')
       return
     }
-
-    const res: any = await request.post('/auth/login', {
-      email: email.value,
-      password: password.value,
-      user_type: role.value,
-    })
-
-    console.log('Login response:', res)
-
-    // 保存 token 和用户完整信息（包括从后端返回的姓名和邮箱）
+    const res: any = await request.post('/auth/login', { email: email.value, password: password.value, user_type: role.value })
     authStore.setToken(res.access_token)
-    authStore.setUser({
-      id: res.user_id,
-      name: res.user_name || email.value.split('@')[0],
-      email: res.user_email || email.value,
-      gender: null,
-      stu_level: res.stu_level ?? null,
-      role: res.user_type,
-    })
-    // 同步写入 localStorage，供路由守卫读取角色
+    authStore.setUser({ id: res.user_id, name: res.user_name || email.value.split('@')[0], email: res.user_email || email.value, gender: null, stu_level: res.stu_level ?? null, role: res.user_type })
     localStorage.setItem('userRole', res.user_type)
-
-    ElMessage.success(`Logged in as ${role.value}`)
-
-    // 根据角色跳转到不同的主页面
-    if (res.user_type === 'student') {
-      await router.push('/student/dashboard')
-    } else {
-      await router.push('/teacher/dashboard')
-    }
-  } catch (err: any) {
-    const msg = err?.response?.data?.detail || '邮箱或密码错误'
-    ElMessage.error(msg)
-  } finally {
-    loading.value = false
-  }
+    ElMessage.success('登录成功')
+    await router.push(res.user_type === 'student' ? '/student/dashboard' : '/teacher/dashboard')
+  } catch (err: any) { ElMessage.error(err?.response?.data?.detail || '邮箱或密码错误') }
+  finally { loading.value = false }
 }
 </script>
 
 <style scoped>
-.login-wrapper {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background-color: #000;
-}
-
-.background-glitch {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-}
-
-.form-container {
-  position: relative;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 2rem;
-  border-radius: 1rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(10px);
-  width: 500px;
-}
-
-.title {
-  text-align: center;
-  margin-bottom: 1rem;
-  color: #333;
-  font-size: 2.5rem;
-  font-weight: bold;
-}
-
-.role-selector {
-  display: flex;
-  justify-content: center;
-  gap: 1.5rem;
-  margin-bottom:1rem;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-weight: 600;
-  color: #555;
-  font-size: 1.5rem;
-}
-
-/* 引入 template.txt 的样式 */
-.form {
-  --bg-light: #efefef;
-  --bg-dark: #707070;
-  --clr: #58bc82;
-  --clr-alpha: #9c9c9c60;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  width: 100%;
-  max-width: 500px;
-}
-
-.form .input-span {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.form input[type="email"],
-.form input[type="password"] {
-  border-radius: 0.5rem;
-  padding: 1rem 0.75rem;
-  width: 100%;
-  border: none;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--clr-alpha);
-  outline: 2px solid var(--bg-dark);
-  box-sizing: border-box;
-}
-
-.form input[type="email"]:focus,
-.form input[type="password"]:focus {
-  outline: 2px solid var(--clr);
-}
-
-.label {
-  align-self: flex-start;
-  color: var(--clr);
-  font-weight: 600;
-  font-size: 1.2rem;
-}
-
-.form .submit {
-  padding: 1rem 0.75rem;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: 3rem;
-  background-color: var(--bg-dark);
-  color: var(--bg-light);
-  border: none;
-  cursor: pointer;
-  transition: all 300ms;
-  font-weight: 600;
-  font-size: 1.2rem;
-}
-
-.form .submit:hover {
-  background-color: var(--clr);
-  color: var(--bg-dark);
-}
-
-.span {
-  text-decoration: none;
-  color: var(--bg-dark);
-  font-size: 0.9rem;
-}
-
-.span a {
-  color: var(--clr);
-  font-weight: bold;
-}
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(360px, 44%) 1fr; background: #fff; }
+.auth-intro { min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 42px clamp(36px, 5vw, 82px); color: #fff; background: #10182b; }
+.brand { display: flex; align-items: center; gap: 11px; font-size: 17px; font-weight: 700; }
+.brand span { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 9px; background: #3159b3; }
+.intro-copy { max-width: 590px; }
+.eyebrow { margin-bottom: 22px !important; color: #9db1df !important; font-size: 13px; font-weight: 600; letter-spacing: .12em; }
+.intro-copy h1 { margin: 0 0 24px; font-size: clamp(34px, 3.2vw, 54px); line-height: 1.25; letter-spacing: -.04em; }
+.intro-copy p { margin: 0; color: #aeb8cb; font-size: 15px; line-height: 1.9; }
+.auth-intro small { color: #69758c; font-size: 11px; letter-spacing: .08em; }
+.auth-form-area { display: grid; place-items: center; padding: 48px 24px; background: #f8f9fb; }
+.login-form { width: min(100%, 420px); }
+.login-form header { margin-bottom: 30px; }
+.login-form h2 { margin: 0; color: #101828; font-size: 29px; letter-spacing: -.02em; }
+.login-form header p { margin: 9px 0 0; color: #7a8699; font-size: 14px; }
+.role-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 24px; padding: 4px; border: 1px solid #e1e6ed; border-radius: 9px; background: #eef1f5; }
+.role-tabs label { padding: 9px; border-radius: 6px; color: #667085; font-size: 13px; text-align: center; cursor: pointer; }
+.role-tabs label.active { color: #172033; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.05); font-weight: 600; }
+.role-tabs input { display: none; }
+.field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; color: #344054; font-size: 13px; font-weight: 600; }
+.field input { height: 44px; padding: 0 13px; border: 1px solid #d9e0e9; border-radius: 7px; outline: none; color: #172033; background: #fff; font-weight: 400; }
+.field input:focus { border-color: #21469b; box-shadow: 0 0 0 3px rgba(33,70,155,.09); }
+.form-options { display: flex; justify-content: space-between; margin: 4px 0 24px; color: #667085; font-size: 12px; }
+.form-options a, .register-link a { color: #21469b; text-decoration: none; font-weight: 600; }
+.submit { width: 100%; height: 44px; border: 0; border-radius: 7px; color: #fff; background: #21469b; font-weight: 600; cursor: pointer; }
+.submit:hover { background: #193a86; }
+.submit:disabled { opacity: .6; cursor: wait; }
+.register-link { margin: 22px 0 0; color: #7a8699; font-size: 13px; text-align: center; }
+@media (max-width: 800px) { .auth-page { grid-template-columns: 1fr; } .auth-intro { min-height: 250px; padding: 28px; } .intro-copy h1 { font-size: 30px; } .intro-copy > p:not(.eyebrow), .auth-intro small { display: none; } }
 </style>

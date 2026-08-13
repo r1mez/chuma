@@ -1,10 +1,10 @@
 <template>
   <aside class="conversation-sidebar" :class="{ collapsed }">
     <div class="sidebar-header">
-      <span v-if="!collapsed" class="sidebar-title">历史对话</span>
+      <span v-if="!collapsed" class="sidebar-title">对话</span>
       <div class="sidebar-actions">
         <button v-if="!collapsed" class="new-button" type="button" @click="$emit('new')">
-          新建
+          ＋ 新建对话
         </button>
         <button class="toggle-button" type="button" :aria-label="collapsed ? '展开历史对话' : '收起历史对话'" @click="$emit('toggle')">
           {{ collapsed ? '›' : '‹' }}
@@ -75,14 +75,13 @@ function formatDate(value?: string | null): string {
 
 <style scoped>
 .conversation-sidebar {
-  width: 256px;
-  flex: 0 0 256px;
+  width: 230px;
+  flex: 0 0 230px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(10px);
+  border-right: 1px solid #e4e9f0;
+  background: #f8f9fb;
   transition: width 0.2s ease, flex-basis 0.2s ease;
 }
 
@@ -98,12 +97,12 @@ function formatDate(value?: string | null): string {
   gap: 8px;
   min-height: 48px;
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  border-bottom: 1px solid #e4e9f0;
 }
 
 .sidebar-title {
   overflow: hidden;
-  color: #475569;
+  color: #344054;
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -124,10 +123,10 @@ function formatDate(value?: string | null): string {
 }
 
 .new-button {
-  padding: 4px 8px;
+  padding: 6px 9px;
   border-radius: 6px;
-  background: rgba(64, 158, 255, 0.12);
-  color: #409eff;
+  background: #10182b;
+  color: #fff;
   font-size: 12px;
 }
 
@@ -141,10 +140,8 @@ function formatDate(value?: string | null): string {
   line-height: 24px;
 }
 
-.toggle-button:hover,
-.new-button:hover {
-  background: rgba(64, 158, 255, 0.18);
-}
+.toggle-button:hover { background: #e9edf3; }
+.new-button:hover { background: #21469b; }
 
 .conversation-list {
   flex: 1;
@@ -169,18 +166,15 @@ function formatDate(value?: string | null): string {
   padding: 9px 8px;
   margin-bottom: 4px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: #475569;
   cursor: pointer;
   text-align: left;
 }
 
-.conversation-item:hover,
-.conversation-item.active {
-  border-color: rgba(64, 158, 255, 0.18);
-  background: rgba(255, 255, 255, 0.72);
-}
+.conversation-item:hover { background: #eef1f5; }
+.conversation-item.active { border-color: #dbe2ec; background: #fff; }
 
 .conversation-copy {
   min-width: 0;

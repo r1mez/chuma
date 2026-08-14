@@ -1,33 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #172033;
-  background: #f7f8fb;
+  background: #f7f9fc;
   font-synthesis: none;
   --workspace-primary: #21469b;
   --workspace-primary-hover: #193a86;
+  --workspace-primary-soft: #edf3ff;
+  --workspace-primary-border: #c9d8f5;
+  --workspace-accent: #0f9f8c;
+  --workspace-accent-soft: #e9f8f5;
+  --workspace-warning: #c87808;
+  --workspace-danger: #d14343;
   --workspace-text: #172033;
+  --workspace-heading: #101828;
   --workspace-muted: #667085;
+  --workspace-subtle-text: #8a96a8;
   --workspace-border: #e2e7ef;
+  --workspace-border-strong: #cbd5e1;
   --workspace-surface: #ffffff;
-  --workspace-subtle: #f7f8fb;
+  --workspace-subtle: #f7f9fc;
+  --workspace-surface-muted: #f4f7fb;
+  --workspace-shadow-card: 0 1px 2px rgba(16, 24, 40, .03), 0 8px 20px rgba(31, 55, 96, .04);
+  --workspace-shadow-float: 0 14px 32px rgba(16, 24, 40, .12);
+  --workspace-radius-sm: 8px;
+  --workspace-radius: 12px;
   --el-color-primary: #21469b;
   --el-color-primary-light-3: #526fb2;
   --el-color-primary-light-5: #8296c9;
   --el-color-primary-light-7: #b4bfdf;
   --el-color-primary-light-8: #d0d7e9;
-  --el-color-primary-light-9: #e9edf6;
+  --el-color-primary-light-9: #edf3ff;
+  --el-color-success: #0f9f8c;
+  --el-color-warning: #c87808;
+  --el-color-danger: #d14343;
+  --el-color-info: #64748b;
   --el-border-color: #dfe5ed;
   --el-border-color-light: #e8ecf2;
-  --el-border-radius-base: 7px;
+  --el-border-radius-base: 8px;
   --el-box-shadow-light: none;
 }
 
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; min-width: 320px; min-height: 100%; margin: 0; }
-body { min-height: 100vh; background: #f7f8fb; color: #172033; }
+body { min-height: 100vh; background: #f7f9fc; color: #172033; }
 button, input, textarea, select { font: inherit; }
+button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid rgba(33, 70, 155, .28); outline-offset: 2px; }
 
 /* Flat workspace treatment for legacy screens. */
 .workspace-content :where(.dashboard-page, .practice-page, .practice-home-page, .learning-plan-page, .messages-page, .subject-records-page, .wrong-book-page, .ocr-page, .kgp-page, .teacher-page, .chat-page) {
@@ -57,36 +77,38 @@ button, input, textarea, select { font: inherit; }
 
 .workspace-content :where(.glass-card, .teacher-card, .module-card, .content-card, .stat-card, .info-card) {
   border: 1px solid var(--workspace-border) !important;
-  border-radius: 9px !important;
+  border-radius: var(--workspace-radius) !important;
+  box-shadow: var(--workspace-shadow-card) !important;
 }
 
 .workspace-content :where(.glass-card, .module-card, .teacher-card):hover {
   transform: none !important;
-  box-shadow: none !important;
-  border-color: #cbd3df !important;
+  box-shadow: 0 8px 24px rgba(31, 55, 96, .07) !important;
+  border-color: var(--workspace-border-strong) !important;
 }
 
-.workspace-content :where(h1, h2, h3, h4, .card-title, .page-title) { color: #172033 !important; text-shadow: none !important; }
-.workspace-content :where(.page-subtitle, .description, .subtitle) { color: #667085 !important; }
+.workspace-content :where(h1, h2, h3, h4, .card-title, .page-title) { color: var(--workspace-heading) !important; text-shadow: none !important; }
+.workspace-content :where(.page-subtitle, .description, .subtitle) { color: var(--workspace-muted) !important; }
 
 .workspace-content .el-card {
   border: 1px solid var(--workspace-border) !important;
-  border-radius: 9px !important;
+  border-radius: var(--workspace-radius) !important;
   background: #fff !important;
-  box-shadow: none !important;
+  box-shadow: var(--workspace-shadow-card) !important;
   backdrop-filter: none !important;
 }
 .workspace-content .el-card__header { padding: 16px 18px; border-bottom-color: #e8ecf2; }
 .workspace-content .el-card__body { padding: 18px; }
-.el-button { border-radius: 7px; box-shadow: none !important; font-weight: 500; }
+.el-button { border-radius: var(--workspace-radius-sm); box-shadow: none !important; font-weight: 500; transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .el-button--primary { background: var(--workspace-primary); border-color: var(--workspace-primary); }
 .el-button--primary:hover { background: var(--workspace-primary-hover); border-color: var(--workspace-primary-hover); }
-.el-input__wrapper, .el-select__wrapper, .el-textarea__inner { border-radius: 7px !important; box-shadow: 0 0 0 1px #dfe5ed inset !important; background: #fff !important; }
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner { border-radius: var(--workspace-radius-sm) !important; box-shadow: 0 0 0 1px #dfe5ed inset !important; background: #fff !important; }
 .el-input__wrapper:hover, .el-select__wrapper:hover { box-shadow: 0 0 0 1px #b9c3d1 inset !important; }
-.el-dialog, .el-message-box, .el-popper { border: 1px solid var(--workspace-border) !important; border-radius: 9px !important; background: #fff !important; box-shadow: 0 12px 32px rgba(16, 24, 40, .1) !important; backdrop-filter: none !important; }
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused, .el-textarea__inner:focus { box-shadow: 0 0 0 1px var(--workspace-primary) inset, 0 0 0 3px rgba(33, 70, 155, .08) !important; }
+.el-dialog, .el-message-box, .el-popper { border: 1px solid var(--workspace-border) !important; border-radius: var(--workspace-radius) !important; background: #fff !important; box-shadow: var(--workspace-shadow-float) !important; backdrop-filter: none !important; }
 .el-table { --el-table-border-color: #e8ecf2; --el-table-header-bg-color: #f8fafc; --el-table-row-hover-bg-color: #f7f9fc; color: #344054; }
 .el-table th.el-table__cell { color: #667085; font-weight: 600; }
-.el-tag { border-radius: 5px; }
+.el-tag { border-radius: 6px; }
 .el-progress-bar__outer { background: #edf0f4; }
 
 @media (prefers-reduced-motion: reduce) {

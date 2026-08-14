@@ -59,15 +59,10 @@
 
       <!-- 空状态 -->
       <div v-else-if="store.isEmpty" class="kg-state">
-        <el-empty description="还没有构建知识图谱">
+        <el-empty description="当前暂无可用的知识图谱，请联系教师">
           <template #image>
             <div class="empty-graph-icon">🔍</div>
           </template>
-          <StarBorder as="div" color="#409eff" speed="5s">
-            <el-button type="primary" @click="$router.push('/student/kg-pipeline')">
-              上传文档构建知识图谱
-            </el-button>
-          </StarBorder>
         </el-empty>
       </div>
 
@@ -98,6 +93,12 @@
             />
           </div>
           <div class="kg-controls">
+            <el-tag v-if="learningPathTargetId" type="warning" effect="plain" size="small">
+              学习路径 {{ learningPathNodeIds.size }} 个知识点
+            </el-tag>
+            <el-button v-if="learningPathTargetId" size="small" type="warning" plain @click="clearLearningPath">
+              清除路径
+            </el-button>
             <span v-if="drillPath.length" class="current-scope-summary">{{ currentScopeSummary }}</span>
             <el-tooltip content="单击查看详情；双击章/节进入下一级；知识点不再展开局部图">
               <el-tag type="info" plain size="small">双击钻取</el-tag>
@@ -162,6 +163,8 @@
             :data="currentGraphData!"
             :show-labels="showLabels"
             :show-mastery-wave="isKnowledgePointLevel"
+            :highlighted-node-ids="learningPathNodeIds"
+            :highlighted-edge-ids="learningPathEdgeIds"
             @node-click="handleNodeClick"
             @node-dbl-click="handleNodeDoubleClick"
           />
@@ -170,8 +173,11 @@
             :node="store.selectedNode"
             :relation-node-ids="visibleRelationNodeIds"
             :course-id="currentCourseId"
+            :learning-path-active="learningPathTargetId === store.selectedNode?.id"
             @close="store.selectNode(null)"
             @practice="goToNodePractice"
+            @ask="askAboutNode"
+            @path="toggleLearningPath"
           />
           <!-- 知识点层空状态 -->
           <div
@@ -204,6 +210,7 @@ import BorderGlow from '@/components/BorderGlow.vue'
 import { parseHierarchy, getVisibleData, tryDrillInto } from '@/utils/kgHierarchy'
 import type { GraphNode, GraphData } from '@/api/knowledge'
 import { fetchMasteryHierarchy } from '@/api/learning'
+import { buildLearningPath, getGraphEdgeKey } from '@/utils/learningPath'
 
 const route = useRoute()
 const $router = useRouter()
@@ -217,6 +224,17 @@ const currentCourseId = computed(() => (
 
 // 掌握度映射：节点名 → 掌握度(0~1)，用于节点球"装水"可视化
 const masteryMap = ref<Record<string, number>>({})
+const learningPathNodeIds = ref<Set<string>>(new Set())
+const learningPathEdgeIds = ref<Set<string>>(new Set())
+const learningPathTargetId = ref<string | null>(null)
+const learningPathBlockingNodeIds = ref<Set<string>>(new Set())
+
+function clearLearningPath() {
+  learningPathNodeIds.value = new Set()
+  learningPathEdgeIds.value = new Set()
+  learningPathBlockingNodeIds.value = new Set()
+  learningPathTargetId.value = null
+}
 
 // 根据当前图谱的 course_id 加载掌握度层级树，并构建 节点名→掌握度 映射
 async function loadMastery() {
@@ -327,10 +345,32 @@ const currentGraphData = computed<GraphData | null>(() => {
   if (isSectionView) {
     const nodes = injectMastery(projectedBase.nodes).filter(node => node.type !== 'Chapter')
     const nodeIds = new Set(nodes.map(node => node.id))
-    const edges = projectedBase.edges.filter(edge => (
-      nodeIds.has(edge.source)
-      && nodeIds.has(edge.target)
-    ))
+
+    // 跨章节前置知识点也加入当前视图，避免学习路径因章节筛选而被截断。
+    // Cross-chapter prerequisites are added so the highlighted path remains complete.
+    if (learningPathNodeIds.value.size) {
+      for (const nodeId of learningPathNodeIds.value) {
+        if (nodeIds.has(nodeId)) continue
+        const pathNode = hierarchy.value.nodeMap.get(nodeId)
+        if (pathNode && pathNode.type !== 'Chapter') {
+          nodes.push({ ...pathNode, mastery: masteryMap.value[pathNode.name] ?? 0 })
+          nodeIds.add(pathNode.id)
+        }
+      }
+    }
+
+    const edgeMap = new Map<string, typeof projectedBase.edges[number]>()
+    for (const edge of projectedBase.edges) {
+      if (nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+        edgeMap.set(getGraphEdgeKey(edge), edge)
+      }
+    }
+    for (const edge of store.graphData.edges) {
+      if (learningPathEdgeIds.value.has(getGraphEdgeKey(edge)) && nodeIds.has(edge.source) && nodeIds.has(edge.target)) {
+        edgeMap.set(getGraphEdgeKey(edge), edge)
+      }
+    }
+    const edges = [...edgeMap.values()]
     const nodeTypes: Record<string, number> = {}
     for (const node of nodes) nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1
     return {
@@ -384,6 +424,7 @@ const isKnowledgePointLevel = computed(() => {
 })
 
 function handleNodeClick(node: GraphNode) {
+  if (learningPathTargetId.value && learningPathTargetId.value !== node.id) clearLearningPath()
   // 与教师端一致：单击只负责选中并查看详情。
   store.selectNode(node)
 }
@@ -391,6 +432,7 @@ function handleNodeClick(node: GraphNode) {
 function handleNodeDoubleClick(node: GraphNode) {
   if (!hierarchy.value) return
   if (node.type === 'Chapter') {
+    clearLearningPath()
     const newPath = tryDrillInto(node, drillPath.value, hierarchy.value)
     if (newPath !== null) drillPath.value = newPath
     store.selectNode(null)
@@ -412,6 +454,42 @@ function goToNodePractice() {
     query: {
       module: String(courseId),
       kgNodeName: node.name,
+    },
+  })
+}
+
+function toggleLearningPath() {
+  const node = store.selectedNode
+  if (!node || node.type === 'Chapter' || !store.graphData) return
+  if (learningPathTargetId.value === node.id) {
+    clearLearningPath()
+    return
+  }
+
+  const path = buildLearningPath(store.graphData, node.id, masteryMap.value)
+  learningPathTargetId.value = path.targetId
+  learningPathNodeIds.value = new Set(path.nodeIds)
+  learningPathEdgeIds.value = new Set(path.edgeIds)
+  learningPathBlockingNodeIds.value = new Set(path.blockingNodeIds)
+  ElMessage.success(
+    path.blockingNodeIds.length
+      ? `已高亮学习路径，还有 ${path.blockingNodeIds.length} 个知识点需要巩固`
+      : '已高亮学习路径，可以按前置知识点顺序学习',
+  )
+}
+
+function askAboutNode() {
+  const node = store.selectedNode
+  if (!node) return
+  const graphId = selectedGraphId.value
+  const courseId = currentCourseId.value
+  const question = `请结合当前课程知识图谱，系统讲解知识点“${node.name}”。请说明它的定义、核心原理、前置知识、与相关知识点的关系，并给出一个简短例子。请优先使用知识图谱和文档中的依据回答。`
+  $router.push({
+    path: '/student/chat',
+    query: {
+      question,
+      ...(graphId != null ? { kgGraphId: String(graphId) } : {}),
+      ...(courseId != null ? { courseId: String(courseId) } : {}),
     },
   })
 }
@@ -450,6 +528,7 @@ function resetView() {
 
 function onGraphSelect(graphId: number) {
   drillPath.value = []  // 切换图谱时重置钻取路径
+  clearLearningPath()
   const graph = store.graphList.find(g => g.id === graphId)
   if (graph && graph.status === 'completed') {
     $router.push({ query: { graphId } })
@@ -540,6 +619,7 @@ async function selectGraphByCourse(courseId: number) {
 
 watch(() => [route.query.graphId, route.query.module], () => {
   drillPath.value = []
+  clearLearningPath()
   loadGraphByRoute()
   loadMastery()
 })
@@ -559,6 +639,10 @@ onMounted(async () => {
 :deep(.el-select__wrapper) { background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.1); color: #1f2937; }
 :deep(.el-input__inner) { color: #1f2937; }
 .kg-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 500px;
   height: calc(100vh - 170px);
   margin: 16px;
 }
@@ -579,8 +663,10 @@ onMounted(async () => {
 }
 .kg-container {
   display: flex;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
   background: rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(10px);
   border-radius: 12px;
@@ -660,8 +746,10 @@ onMounted(async () => {
 .dependency-line { background: #38BDF8; box-shadow: 0 0 6px #38BDF8; }
 .semantic-line { background: #A78BFA; box-shadow: 0 0 6px #A78BFA; }
 .kg-chart-wrapper {
-  flex: 1;
+  flex: 1 1 auto;
   position: relative;
+  min-width: 0;
+  min-height: 500px;
   overflow: hidden;
 }
 .kg-breadcrumb {

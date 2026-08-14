@@ -12,7 +12,5 @@ const items = computed<WorkspaceItem[]>(() => [
   { path: '/student/plan', label: '学习计划', icon: 'CalendarRange', description: '规划学习目标并跟踪完成情况。' },
   { path: '/student/interactive', label: '互动专区', icon: 'Users', description: '参与课程讨论与师生互动。' },
   { path: '/student/messages', label: '消息提醒', icon: 'Bell', description: '查看课程通知和互动消息。', badge: unreadCount.value },
-  { path: '/student/ocr', label: '文档解析', icon: 'ScanText', description: '解析 PDF 或图片中的课程内容。' },
-  { path: '/student/kg-pipeline', label: '图谱构建', icon: 'Workflow', description: '管理知识图谱构建任务。' },
 ])
 </script>

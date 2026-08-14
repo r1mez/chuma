@@ -187,3 +187,24 @@ class TGNNRepository:
                 return [int(row[0]) for row in cursor.fetchall()]
         finally:
             connection.close()
+
+    def list_courses(self) -> list[dict[str, Any]]:
+        connection = self._connect()
+        try:
+            with connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute("SELECT course_id, course_name FROM courses ORDER BY course_id")
+                return [
+                    {"course_id": int(row["course_id"]), "course_name": str(row["course_name"])}
+                    for row in cursor.fetchall()
+                ]
+        finally:
+            connection.close()
+
+    def list_student_ids(self) -> list[int]:
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT stu_id FROM students ORDER BY stu_id")
+                return [int(row[0]) for row in cursor.fetchall()]
+        finally:
+            connection.close()

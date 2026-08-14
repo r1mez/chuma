@@ -80,3 +80,23 @@ export const fetchLearningPlan = (stuId: number): Promise<LearningPlanResult> =>
     { timeout: 300000 }, // 学习规划涉及多轮 LLM 调用（4 学科 × ReAct 循环），放宽超时
   )
 }
+
+export interface NextKnowledgePointSubject {
+  course_id: number
+  course_name: string
+  recommendation: LearningPlanRecommendation
+  next_knowledge_point: string | null
+  next_question_id: number | null
+  next_reason: string | null
+}
+
+export interface NextKnowledgePointResult {
+  stu_id: number
+  generated_at: string
+  subjects: NextKnowledgePointSubject[]
+}
+
+/** Dashboard view of the same TGNN + weighted-RRF next-step recommendation. */
+export const fetchNextKnowledgePoints = (): Promise<NextKnowledgePointResult> => {
+  return request.get<NextKnowledgePointResult>('/ai/analysis/next-knowledge-points')
+}

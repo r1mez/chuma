@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
 
     # 后端服务地址
-    BACKEND_URL: str = ""
+    BACKEND_URL: str = "http://localhost:8006"
 
     # 本地微调模型
     LOCAL_MODEL_URL: str = ""

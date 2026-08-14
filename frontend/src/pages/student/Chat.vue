@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Sparkles, BookOpen } from 'lucide-vue-next'
 import { useChat } from '@/composables/useChat'
 import { useAuthStore } from '@/stores/auth'
@@ -102,8 +103,10 @@ const {
   selectSuggestedQuestion,
   activeConversationId,
   loadConversation,
+  kgGraphIds,
 } = useChat()
 const authStore = useAuthStore()
+const route = useRoute()
 const userName = computed(() => authStore.user?.name || '同学')
 const quickPrompts = ['解释一个知识点', '分析我的薄弱项', '制定复习计划', '带我做一道题', '整理课程重点']
 
@@ -178,8 +181,17 @@ function handleRetrySubgraph() {
   if (hitNode) extractSubgraphs(hitNode, activeKgHitIndex.value)
 }
 
-onMounted(() => {
-  void refreshConversations()
+onMounted(async () => {
+  const graphId = Number(route.query.kgGraphId)
+  if (Number.isInteger(graphId) && graphId > 0) {
+    kgGraphIds.value = [graphId]
+  }
+
+  await refreshConversations()
+  const question = typeof route.query.question === 'string' ? route.query.question : ''
+  if (question) {
+    handleSend(question)
+  }
 })
 
 watch(

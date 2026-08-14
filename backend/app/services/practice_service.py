@@ -1,11 +1,13 @@
 """Practice 业务逻辑层 — 题库与做题记录"""
 import logging
+from datetime import date, datetime, timezone
 from typing import Optional
 from sqlalchemy import select, and_, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.question import Question
 from app.models.exercise_record import ExerciseRecord
 from app.models.course import Course
+from app.models.daily_question import DailyQuestion
 from app.schemas.practice import (
     QuestionCreate,
     QuestionResponse,
@@ -154,6 +156,7 @@ class PracticeService:
                 do_isTrue=do_isTrue,
                 db=db,
             )
+            await self._mark_daily_question_completed(stu_id, data.question_id, db)
             return ExerciseRecordResponse.model_validate(existing_record)
         else:
             # 不存在则创建新记录，本次即首次作答，判定 iserror_firstly
@@ -187,7 +190,34 @@ class PracticeService:
                 do_isTrue=do_isTrue,
                 db=db,
             )
+            await self._mark_daily_question_completed(stu_id, data.question_id, db)
             return ExerciseRecordResponse.model_validate(record)
+
+    async def _mark_daily_question_completed(
+        self,
+        stu_id: int,
+        question_id: int,
+        db: AsyncSession,
+    ) -> None:
+        """Mark today's question complete without breaking normal submissions."""
+        try:
+            result = await db.execute(
+                select(DailyQuestion).where(
+                    DailyQuestion.stu_id == stu_id,
+                    DailyQuestion.question_id == question_id,
+                    DailyQuestion.target_date == date.today(),
+                    DailyQuestion.completed_at.is_(None),
+                )
+            )
+            daily = result.scalar_one_or_none()
+            if daily is not None:
+                daily.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                await db.commit()
+        except Exception:
+            # A missing/unmigrated optional table must not prevent an answer from
+            # being recorded. The migration is applied independently in deploys.
+            await db.rollback()
+            logger.exception("failed to mark daily question complete")
 
     async def _update_mastery(
         self,

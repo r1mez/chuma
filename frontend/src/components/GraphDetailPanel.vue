@@ -52,11 +52,28 @@
         <div v-if="canPractice" class="practice-section">
           <el-button
             type="primary"
+            class="practice-button"
+            :icon="ChatDotRound"
+            @click="$emit('ask')"
+          >
+            问 AI 这个知识点
+          </el-button>
+          <el-button
+            type="primary"
             plain
             class="practice-button"
+            :icon="Share"
             @click="$emit('practice')"
           >
             查看关联题目
+          </el-button>
+          <el-button
+            class="practice-button"
+            :type="learningPathActive ? 'warning' : 'success'"
+            plain
+            @click="$emit('path')"
+          >
+            {{ learningPathActive ? '隐藏学习路径' : '查看学习路径' }}
           </el-button>
           <p class="practice-hint">查看与“{{ node.name }}”关联的题目合集</p>
         </div>
@@ -67,7 +84,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Close } from '@element-plus/icons-vue'
+import { Close, ChatDotRound, Share } from '@element-plus/icons-vue'
 import type { GraphNode, GraphEdge } from '@/api/knowledge'
 import { useKnowledgeStore } from '@/stores/knowledge'
 
@@ -75,9 +92,10 @@ const props = defineProps<{
   node: GraphNode
   relationNodeIds?: Set<string>
   courseId?: number | null
+  learningPathActive?: boolean
 }>()
 
-defineEmits<{ close: []; practice: [] }>()
+defineEmits<{ close: []; practice: []; ask: []; path: [] }>()
 
 const store = useKnowledgeStore()
 
@@ -89,7 +107,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const typeColor = computed(() => TYPE_COLORS[props.node.type] || '#94A3B8')
 const masteryPercentage = computed(() => Math.round(Math.max(0, Math.min(1, props.node.mastery || 0)) * 100))
-const canPractice = computed(() => props.courseId != null)
+const canPractice = computed(() => props.courseId != null && props.node.type !== 'Chapter')
 
 const relations = computed(() => {
   const edges = store.graphData?.edges ?? []

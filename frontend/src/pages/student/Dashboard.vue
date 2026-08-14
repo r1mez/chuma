@@ -140,6 +140,33 @@
 
       <!-- 右侧面板：408 考研四宫格学科 -->
       <div class="right-panel">
+        <div class="glass-card daily-question-card">
+          <div class="card-header-row">
+            <h3 class="card-title">今日一题</h3>
+            <span v-if="dailyQuestions.length" class="daily-question-date">{{ dailyQuestions[0].target_date }}</span>
+          </div>
+          <template v-if="dailyQuestions.length">
+            <div class="daily-question-list">
+              <div v-for="question in dailyQuestions" :key="question.daily_question_id" class="daily-question-item">
+                <div class="daily-question-item-header">
+                  <p class="daily-question-meta">
+                    {{ question.course_name }}<span v-if="question.kg_node_name"> · {{ question.kg_node_name }}</span>
+                  </p>
+                  <el-tag v-if="question.completed" size="small" type="success">已完成</el-tag>
+                </div>
+                <p class="daily-question-text">{{ question.question_description }}</p>
+                <p v-if="question.recommendation_reason" class="daily-question-reason">
+                  推荐理由：{{ question.recommendation_reason }}
+                </p>
+                <el-button type="primary" size="small" plain @click="navigateToDailyQuestion(question)">
+                  {{ question.completed ? '再次练习' : '开始今日一题' }}
+                </el-button>
+              </div>
+            </div>
+          </template>
+          <p v-else class="daily-question-empty">四个学科的每日一题将在 4:30 后自动生成；若定时任务未完成，打开页面时会自动补生成。</p>
+        </div>
+
         <div v-for="subject in subjects" :key="subject.id" class="glass-card subject-card">
           <h3 class="subject-title">{{ subject.name }}</h3>
 
@@ -170,6 +197,22 @@
               <!-- 跳转到 题目练习面板（携带做题记录中的随机题目 ID 和题目列表） -->
               <el-button size="small" type="warning" plain @click="navigateToPractice(subject, 'record')" :disabled="!subject.recordQuestionId">做题记录</el-button>
             </div>
+          </div>
+
+          <div class="next-step-row">
+            <div class="next-step-copy">
+              <span class="next-step-label">下一知识点</span>
+              <strong>{{ subject.nextKnowledgePoint || '暂无可用推荐' }}</strong>
+            </div>
+            <el-button
+              size="small"
+              type="success"
+              plain
+              :disabled="!subject.nextQuestionId"
+              @click="navigateToRecommendedPractice(subject)"
+            >
+              去学习
+            </el-button>
           </div>
 
           <!-- 知识图谱全宽按钮 -->
@@ -232,11 +275,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit, Aim, Refresh } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
-import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, type Course, type Question } from '@/api/practice'
+import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, type Course } from '@/api/practice'
 import { fetchCurrentUser, updateProfile } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { fetchStuAnalysis, type StuAnalysisResult } from '@/api/analysis'
-import { fetchDashboardProgress } from '@/api/learning'
+import { fetchDashboardProgress, fetchDailyQuestion, type DailyQuestion } from '@/api/learning'
+import { fetchNextKnowledgePoints } from '@/api/learningPlan'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -444,6 +488,9 @@ const subjects = ref<Array<{
   progress: number
   latestMsg: string
   recordMsg: string
+  nextKnowledgePoint: string | null
+  nextQuestionId: number | null
+  nextReason: string | null
   newQuestionId: number | null
   recordQuestionId: number | null
   newRandomIndex: number
@@ -452,13 +499,7 @@ const subjects = ref<Array<{
   recordIdList: number[]
 }>>([])
 
-// Mock 数据映射：按学科名称匹配进度与消息（后端尚未实现真实数据接口）
-const mockSubjectData: Record<string, { progress: number; latestMsg: string; recordMsg: string }> = {
-  '数据结构':         { progress: 75, latestMsg: '最新：二叉树非递归遍历', recordMsg: '记录：图的连通性分析' },
-  '计算机组成原理':   { progress: 35, latestMsg: '最新：Cache 组相联映射', recordMsg: '记录：浮点数 IEEE754 标准' },
-  '操作系统':         { progress: 55, latestMsg: '最新：页面置换算法', recordMsg: '记录：死锁避免与银行家算法' },
-  '计算机网络':       { progress: 85, latestMsg: '最新：TCP 拥塞控制状态机', recordMsg: '记录：CIDR 子网划分计算' }
-}
+const dailyQuestions = ref<DailyQuestion[]>([])
 
 /** 截断题目描述，保留前 maxLen 个字符 */
 const truncateDesc = (desc: string, maxLen: number = 28): string => {
@@ -471,11 +512,23 @@ onMounted(async () => {
   await loadUserInfo()
 
   try {
-    const [courses, progressMap] = await Promise.all([fetchCourses(), fetchDashboardProgress()])
+    const [courses, progressMap, nextResult, dailyResult] = await Promise.all([
+      fetchCourses(),
+      fetchDashboardProgress(),
+      fetchNextKnowledgePoints().catch((error) => {
+        console.error('获取下一知识点推荐失败:', error)
+        return null
+      }),
+      fetchDailyQuestion().catch((error) => {
+        console.error('获取每日一题失败:', error)
+        return null
+      }),
+    ])
+    dailyQuestions.value = dailyResult || []
     if (courses && courses.length > 0) {
       // 先构建基础学科列表
       const baseSubjects = courses.map((course: Course) => {
-        const mock = mockSubjectData[course.course_name] || { progress: 0, latestMsg: '暂无记录', recordMsg: '暂无记录' }
+        const recommendation = nextResult?.subjects.find((item) => item.course_id === course.course_id)
         // 学科进度取自 student_course_mastery.course_process（0~1），
         // 表中无该学科记录或进度为 0 时，一律默认为 0
         const rawProcess = progressMap[course.course_id]
@@ -484,8 +537,11 @@ onMounted(async () => {
           id: course.course_id,
           name: course.course_name,
           progress,
-          latestMsg: mock.latestMsg,
-          recordMsg: mock.recordMsg,
+          latestMsg: '正在获取新题…',
+          recordMsg: '正在获取做题记录…',
+          nextKnowledgePoint: recommendation?.next_knowledge_point || null,
+          nextQuestionId: recommendation?.next_question_id || null,
+          nextReason: recommendation?.next_reason || null,
           newQuestionId: null as number | null,
           recordQuestionId: null as number | null,
           newRandomIndex: -1,
@@ -498,11 +554,13 @@ onMounted(async () => {
 
       // 并行获取每个学科的随机题目
       const promises = baseSubjects.map(async (s) => {
-        try {
-          const [newRes, recordRes] = await Promise.all([
-            fetchDashboardNewQuestion(s.id),
-            fetchDashboardRecordQuestion(s.id),
-          ])
+        const [newResult, recordResult] = await Promise.allSettled([
+          fetchDashboardNewQuestion(s.id),
+          fetchDashboardRecordQuestion(s.id),
+        ])
+
+        if (newResult.status === 'fulfilled') {
+          const newRes = newResult.value
           if (newRes.question) {
             s.newQuestionId = newRes.question.question_id
             s.newRandomIndex = newRes.random_index
@@ -511,6 +569,13 @@ onMounted(async () => {
           } else {
             s.latestMsg = '【最新】暂无新题'
           }
+        } else {
+          s.latestMsg = '【最新】暂时无法获取'
+          console.error(`获取学科 ${s.name} 的最新题目失败:`, newResult.reason)
+        }
+
+        if (recordResult.status === 'fulfilled') {
+          const recordRes = recordResult.value
           if (recordRes.question) {
             s.recordQuestionId = recordRes.question.question_id
             s.recordRandomIndex = recordRes.random_index
@@ -519,40 +584,22 @@ onMounted(async () => {
           } else {
             s.recordMsg = '【巩固】暂无记录'
           }
-        } catch (e) {
-          console.error(`获取学科 ${s.name} 的题目失败:`, e)
+        } else {
+          s.recordMsg = '【巩固】暂时无法获取'
+          console.error(`获取学科 ${s.name} 的做题记录失败:`, recordResult.reason)
         }
       })
       await Promise.all(promises)
+      // baseSubjects was assigned before the requests started. Re-assign a
+      // fresh array after raw objects are updated so Vue tracks the results.
+      subjects.value = [...baseSubjects]
     } else {
-      // 无数据时回退到静态 Mock
-      subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
-        id: index + 1,
-        name,
-        ...data,
-        newQuestionId: null,
-        recordQuestionId: null,
-        newRandomIndex: -1,
-        recordRandomIndex: -1,
-        newIdList: [],
-        recordIdList: [],
-      }))
+      subjects.value = []
     }
   } catch (error) {
     console.error('获取学科列表失败:', error)
-    ElMessage.error('获取学科列表失败，使用本地数据')
-    // 接口失败时回退到静态 Mock
-    subjects.value = Object.entries(mockSubjectData).map(([name, data], index) => ({
-      id: index + 1,
-      name,
-      ...data,
-      newQuestionId: null,
-      recordQuestionId: null,
-      newRandomIndex: -1,
-      recordRandomIndex: -1,
-      newIdList: [],
-      recordIdList: [],
-    }))
+    ElMessage.error('获取学科列表失败，请稍后重试')
+    subjects.value = []
   }
 })
 
@@ -583,9 +630,113 @@ const navigateToPractice = (subject: any, mode: 'new' | 'record') => {
     }
   })
 }
+
+const navigateToRecommendedPractice = (subject: any) => {
+  if (!subject.nextQuestionId) {
+    ElMessage.warning('暂无可用的下一步题目')
+    return
+  }
+  router.push({
+    path: '/student/practice/panel',
+    query: {
+      questionId: String(subject.nextQuestionId),
+      module: String(subject.id),
+    },
+  })
+}
+
+const navigateToDailyQuestion = (question: DailyQuestion) => {
+  router.push({
+    path: '/student/practice/panel',
+    query: {
+      questionId: String(question.question_id),
+      module: String(question.course_id),
+    },
+  })
+}
 </script>
 
 <style scoped>
+.daily-question-card {
+  margin-bottom: 16px;
+  border: 1px solid #b3d8ff;
+  background: linear-gradient(135deg, rgba(236, 245, 255, 0.95), rgba(255, 255, 255, 0.75));
+}
+
+.daily-question-date {
+  color: #909399;
+  font-size: 0.75rem;
+}
+
+.daily-question-list {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-question-item {
+  padding: 10px 12px;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.daily-question-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.daily-question-meta,
+.daily-question-reason,
+.daily-question-empty {
+  margin: 0 0 8px;
+  color: #606266;
+  font-size: 0.8rem;
+}
+
+.daily-question-text {
+  margin: 0 0 8px;
+  color: #303133;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.daily-question-reason {
+  color: #67c23a;
+}
+
+.next-step-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(240, 249, 235, 0.75);
+}
+
+.next-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.next-step-label {
+  color: #67c23a;
+  font-size: 0.75rem;
+}
+
+.next-step-copy strong {
+  overflow: hidden;
+  color: #303133;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dashboard-page {
   color: #000;
   height: calc(100vh - 170px);

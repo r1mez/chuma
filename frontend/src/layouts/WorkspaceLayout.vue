@@ -1,6 +1,10 @@
 <template>
   <div class="workspace-shell">
-    <aside class="workspace-sidebar" :class="{ collapsed }">
+    <aside
+      class="workspace-sidebar"
+      :class="{ collapsed, 'is-transitioning': sidebarTransitioning }"
+      @transitionend="handleSidebarTransitionEnd"
+    >
       <div class="brand">
         <div class="brand-mark"><GraduationCap :size="20" /></div>
         <div v-if="!collapsed" class="brand-copy">
@@ -24,7 +28,7 @@
           <span class="user-copy"><strong>{{ userName }}</strong><small>{{ roleLabel }}</small></span>
         </div>
         <button class="sidebar-action" title="退出登录" @click="logout"><LogOut :size="17" /><span v-if="!collapsed">退出登录</span></button>
-        <button class="sidebar-action" :title="collapsed ? '展开导航' : '收起导航'" @click="collapsed = !collapsed">
+        <button class="sidebar-action" :title="collapsed ? '展开导航' : '收起导航'" @click="toggleSidebar">
           <PanelLeftOpen v-if="collapsed" :size="17" />
           <PanelLeftClose v-else :size="17" />
           <span v-if="!collapsed">收起导航</span>
@@ -62,6 +66,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const collapsed = ref(false)
+const sidebarTransitioning = ref(false)
 const icons: Record<string, any> = { LayoutDashboard, Network, Dumbbell, History, MessageSquare, CalendarRange, Users, Bell, ScanText, Workflow, BookOpen, Bot, ChartNoAxesCombined, School }
 const currentItem = computed(() => [...props.items].sort((a, b) => b.path.length - a.path.length).find(item => route.path.startsWith(item.path)))
 const userName = computed(() => auth.user?.name || '当前用户')
@@ -71,11 +76,22 @@ function logout() {
   auth.logout()
   router.push('/login')
 }
+
+function toggleSidebar() {
+  sidebarTransitioning.value = true
+  collapsed.value = !collapsed.value
+}
+
+function handleSidebarTransitionEnd(event: TransitionEvent) {
+  if (event.propertyName === 'width') {
+    sidebarTransitioning.value = false
+  }
+}
 </script>
 
 <style scoped>
 .workspace-shell { min-height: 100vh; display: flex; background: #f7f8fb; color: #172033; }
-.workspace-sidebar { width: 240px; height: 100vh; position: sticky; top: 0; flex: 0 0 auto; display: flex; flex-direction: column; box-sizing: border-box; padding: 20px 14px 14px; background: #f4f6f9; border-right: 1px solid #e2e7ef; transition: width .2s ease; }
+.workspace-sidebar { width: 240px; height: 100vh; position: sticky; top: 0; flex: 0 0 auto; display: flex; flex-direction: column; box-sizing: border-box; padding: 20px 14px 14px; overflow: hidden; background: #f4f6f9; border-right: 1px solid #e2e7ef; transition: width .2s ease; }
 .workspace-sidebar.collapsed { width: 72px; }
 .brand { height: 44px; display: flex; align-items: center; gap: 11px; padding: 0 7px; }
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: none; color: #fff; background: #21469b; border-radius: 9px; }
@@ -83,12 +99,23 @@ function logout() {
 .brand-copy strong { color: #101828; font-size: 15px; white-space: nowrap; }
 .brand-copy span { margin-top: 4px; color: #8a96a8; font-size: 11px; }
 .nav-caption { margin: 27px 10px 8px; color: #98a2b3; font-size: 12px; }
-.workspace-nav { display: flex; flex: 1; flex-direction: column; gap: 4px; overflow-y: auto; padding-top: 14px; }
+.workspace-nav { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 4px; overflow-x: hidden; overflow-y: auto; padding-top: 14px; scrollbar-width: none; }
+.workspace-nav::-webkit-scrollbar { width: 0; height: 0; }
 .nav-item { min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 0 12px; border-radius: 8px; color: #526078; font-size: 14px; text-decoration: none; transition: background .15s, color .15s; }
 .nav-item:hover { color: #172033; background: #e9edf3; }
 .nav-item.router-link-active { color: #fff; background: #10182b; }
 .nav-item svg { flex: none; }
 .nav-badge { margin-left: auto; min-width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; color: #fff; background: #e5484d; font-size: 10px; }
+.workspace-sidebar.collapsed .workspace-nav { overflow: hidden; }
+.workspace-sidebar.collapsed .nav-item { width: 100%; box-sizing: border-box; justify-content: center; gap: 0; padding-inline: 0; }
+.workspace-sidebar.collapsed .nav-badge { display: none; }
+.workspace-sidebar.is-transitioning .workspace-nav { overflow: hidden; }
+.workspace-sidebar.is-transitioning .nav-item { width: 100%; box-sizing: border-box; justify-content: center; gap: 0; padding-inline: 0; }
+.workspace-sidebar.is-transitioning .brand-copy,
+.workspace-sidebar.is-transitioning .nav-caption,
+.workspace-sidebar.is-transitioning .nav-item > span,
+.workspace-sidebar.is-transitioning .user-block,
+.workspace-sidebar.is-transitioning .sidebar-action span { display: none; }
 .sidebar-footer { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 1px solid #e2e7ef; }
 .user-block { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 8px; border: 1px solid #e2e7ef; border-radius: 9px; background: #fff; }
 .avatar { width: 30px; height: 30px; display: grid; place-items: center; flex: none; border-radius: 50%; color: #fff; background: #21469b; font-size: 13px; font-weight: 700; }

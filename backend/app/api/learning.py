@@ -1,7 +1,13 @@
 """学习管理路由"""
-from fastapi import APIRouter, Depends, Query
+from datetime import date, datetime, time
+import logging
+
+import httpx
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.deps import get_current_user_optional
 from app.schemas.learning import (
     StudentCourseMasteryCreate, StudentCourseMasteryResponse,
@@ -9,8 +15,135 @@ from app.schemas.learning import (
 )
 from app.services.learning_service import LearningService
 from app.services.mastery_service import MasteryService
+from app.core.service_auth import verify_ai_service_token
+from app.schemas.daily_question import DailyQuestionResponse, DailyQuestionUpsert
+from app.services.daily_question_service import DailyQuestionService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+@router.get("/daily-question", response_model=list[DailyQuestionResponse])
+async def get_daily_question(
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return one persisted daily question for every available course."""
+    stu_id = current_user.get("id")
+    service = DailyQuestionService()
+    target_date = date.today()
+    existing = await service.list_for_student(stu_id, target_date, db)
+    if datetime.now().time() < time(4, 30):
+        return existing
+
+    # Once the daily generation window has opened, only fill missing courses.
+    # This keeps completed questions stable and makes a page refresh idempotent.
+    existing_course_ids = {question.course_id for question in existing}
+    course_ids = await service.list_course_ids(db)
+    if course_ids and course_ids.issubset(existing_course_ids):
+        return existing
+
+    # The scheduler remains the primary path. This lazy path guarantees that
+    # a student who opens the app after 04:30 is not stuck without a question
+    # when the batch job was skipped or the AI service restarted.
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            headers = {"X-Service-Token": settings.AI_SERVICE_TOKEN}
+            response = await client.get(
+                f"{settings.AI_SERVICE_URL}/analysis/daily_questions",
+                headers=headers,
+                params={"stu_id": stu_id},
+            )
+            if response.status_code >= 400:
+                # Keep the fallback compatible with an AI service that has the
+                # shared next-knowledge endpoint but not the newer daily list
+                # endpoint yet. Both paths use the same TGNN/RRF result.
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/analysis/next_knowledge_points",
+                    headers=headers,
+                    params={"stu_id": stu_id},
+                )
+        response.raise_for_status()
+        candidates = _daily_candidates_from_ai_response(
+            response.json(),
+            stu_id=stu_id,
+            target_date=target_date,
+        )
+        generated = list(existing)
+        for candidate in candidates:
+            try:
+                data = DailyQuestionUpsert.model_validate(candidate).model_copy(
+                    update={"stu_id": stu_id, "target_date": target_date}
+                )
+                if data.course_id in existing_course_ids:
+                    continue
+                generated.append(await service.upsert(data, db))
+                existing_course_ids.add(data.course_id)
+            except Exception:
+                logger.exception(
+                    "lazy daily question candidate failed stu_id=%s candidate=%s",
+                    stu_id,
+                    candidate,
+                )
+        return sorted(generated, key=lambda question: question.course_id)
+    except Exception:
+        # Keep the dashboard usable if the fallback generation is temporarily
+        # unavailable. The next page load can retry it.
+        logger.exception(
+            "lazy daily question generation failed stu_id=%s", stu_id
+        )
+        return existing
+
+
+def _daily_candidates_from_ai_response(
+    payload: object,
+    *,
+    stu_id: int,
+    target_date: date,
+) -> list[dict]:
+    """Normalize both the plural daily endpoint and the shared recommendation response."""
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+
+    candidates: list[dict] = []
+    for subject in payload.get("subjects", []):
+        if not isinstance(subject, dict):
+            continue
+        recommendation = subject.get("recommendation") or {}
+        recommendations = recommendation.get("recommendations") or []
+        if not recommendations:
+            continue
+        first = recommendations[0]
+        if not isinstance(first, dict):
+            continue
+        candidates.append(
+            {
+                "stu_id": stu_id,
+                "course_id": subject.get("course_id"),
+                "question_id": first.get("question_id"),
+                "target_date": target_date,
+                "kg_node_name": first.get("knowledge_point"),
+                "recommendation_status": recommendation.get("status", "model"),
+                "recommendation_reason": first.get("reason"),
+                "rrf_score": first.get("rrf_score"),
+            }
+        )
+    return candidates
+
+
+@router.post("/daily-question/internal", response_model=DailyQuestionResponse)
+async def upsert_daily_question(
+    data: DailyQuestionUpsert,
+    _service_token: None = Depends(verify_ai_service_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist a question selected by the AI scheduler."""
+    try:
+        return await DailyQuestionService().upsert(data, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/dashboard")

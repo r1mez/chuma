@@ -45,3 +45,26 @@ export function fetchMasteryHierarchy(courseId: number): Promise<MasteryHierarch
 export function fetchDashboardProgress(): Promise<Record<number, number>> {
   return request.get('/learning/dashboard-progress')
 }
+
+export interface DailyQuestion {
+  daily_question_id: number
+  target_date: string
+  completed: boolean
+  completed_at?: string | null
+  course_id: number
+  course_name: string
+  question_id: number
+  question_description: string
+  question_options?: unknown
+  question_type: string
+  question_difficulty: number
+  kg_node_name?: string | null
+  recommendation_status: string
+  recommendation_reason?: string | null
+  rrf_score?: number | null
+}
+
+/** Return one question per course selected by the daily TGNN/RRF scheduler. */
+export function fetchDailyQuestion(): Promise<DailyQuestion[]> {
+  return request.get('/learning/daily-question')
+}

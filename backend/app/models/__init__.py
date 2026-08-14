@@ -13,3 +13,4 @@ from app.models.exercise_record import ExerciseRecord  # noqa: F401
 from app.models.evaluation_analysis import EvaluationAnalysis  # noqa: F401
 from app.models.teacher_relation import TeacherCourse, TeacherClass  # noqa: F401
 from app.models.interaction import InteractionMessage, InteractionAnswer  # noqa: F401
+from app.models.daily_question import DailyQuestion  # noqa: F401

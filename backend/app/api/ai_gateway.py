@@ -328,6 +328,26 @@ async def learning_plan(request: Request):
         return resp.json()
 
 
+@router.get("/analysis/next-knowledge-points")
+async def next_knowledge_points(
+    current_user: dict = Depends(get_current_user_optional),
+):
+    """Lightweight dashboard view of the same TGNN/RRF recommendation used by planning."""
+    stu_id = current_user.get("id")
+    if not stu_id:
+        raise HTTPException(status_code=400, detail="missing student identity")
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.get(
+            f"{settings.AI_SERVICE_URL}/analysis/next_knowledge_points",
+            headers=_ai_headers(),
+            params={"stu_id": stu_id},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="next knowledge point service unavailable")
+    return response.json()
+
+
 @router.post("/analysis/question")
 async def question_analysis(request: Request):
     """AI 题目分析与解惑 — 转发到 ai/ 服务（双维度：题目答案深度剖析 + 知识图谱局部网络视角 + 个性化作答剖析）"""

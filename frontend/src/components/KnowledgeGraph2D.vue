@@ -29,6 +29,8 @@ const props = defineProps<{
   showLabels: boolean
   activeTypes?: Set<string>
   showMasteryWave?: boolean
+  highlightedNodeIds?: Set<string>
+  highlightedEdgeIds?: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +47,7 @@ let waveOverlayFrame: number | null = null
 const waveOverlayNodes = new Map<string, HTMLElement>()
 const edgeOverlayGroups = new Map<string, SVGGElement>()
 let edgeOverlayMode: boolean | null = null
+let resizeObserver: ResizeObserver | null = null
 const DEPENDENCY_RELATIONS = new Set(['依赖', '前提'])
 const RELATION_COLORS: Record<string, string> = {
   使用: '#A78BFA',
@@ -61,6 +64,10 @@ function getRelationColor(edge: { relationship_name: string }): string {
   return RELATION_COLORS[relationName] || '#94A3B8'
 }
 
+function edgeKey(edge: { source: string; target: string; relationship_name: string }): string {
+  return `${edge.source}->${edge.target}:${edge.relationship_name}`
+}
+
 function buildChartNode(node: GraphNode): ChartNodePayload {
   const mastery = Math.max(0, Math.min(1, node.mastery || 0))
   const symbolSize = Math.max(30, Math.min(70, 20 + (node.degree || 0) * 3))
@@ -70,6 +77,8 @@ function buildChartNode(node: GraphNode): ChartNodePayload {
   const percentLineHeight = Math.round(symbolSize)
 
   const waveMode = props.showMasteryWave && node.type !== 'Chapter'
+  const pathMode = props.highlightedNodeIds?.size
+  const isPathNode = props.highlightedNodeIds?.has(node.id) ?? false
   const nodeColor = node.type === 'Chapter' ? '#6366F1' : (TYPE_COLORS[node.type] || '#94A3B8')
   return {
     id: node.id,
@@ -77,12 +86,12 @@ function buildChartNode(node: GraphNode): ChartNodePayload {
     value: node.degree || 1,
     symbolSize,
     itemStyle: {
-      color: waveMode ? 'rgba(15, 23, 42, 0.01)' : nodeColor,
-      borderColor: waveMode ? 'transparent' : '#fff',
-      borderWidth: waveMode ? 0 : 2,
-      opacity: waveMode ? 0.01 : 1,
-      shadowBlur: waveMode ? 0 : 10,
-      shadowColor: 'rgba(99, 102, 241, 0.5)',
+      color: waveMode ? 'rgba(15, 23, 42, 0.01)' : (isPathNode ? '#F97316' : nodeColor),
+      borderColor: waveMode ? 'transparent' : (isPathNode ? '#FDE68A' : '#fff'),
+      borderWidth: waveMode ? 0 : (isPathNode ? 4 : 2),
+      opacity: pathMode && !isPathNode ? 0.28 : (waveMode ? 0.01 : 1),
+      shadowBlur: isPathNode ? 28 : (waveMode ? 0 : 10),
+      shadowColor: isPathNode ? 'rgba(249, 115, 22, 0.95)' : 'rgba(99, 102, 241, 0.5)',
     },
     label: {
       show: !waveMode,
@@ -104,7 +113,7 @@ function buildChartNode(node: GraphNode): ChartNodePayload {
           textShadowColor: 'rgba(15, 23, 42, 0.35)',
         },
         name: {
-          color: props.showMasteryWave ? '#fff' : '#334155',
+          color: '#334155',
           fontSize: 12,
           fontWeight: 700,
           align: 'center',
@@ -211,14 +220,19 @@ function updateChart() {
 function createWaveOverlayNode(node: GraphNode, symbolSize: number): HTMLElement {
   const mastery = Math.max(0, Math.min(1, node.mastery || 0))
   const waveTop = Math.round((1 - mastery) * 100)
+  const waveY = Math.max(6, Math.min(94, waveTop + 2))
   const color = TYPE_COLORS[node.type] || '#94A3B8'
+  const pathMode = Boolean(props.highlightedNodeIds?.size)
+  const isPathNode = props.highlightedNodeIds?.has(node.id) ?? false
+  const pathColor = isPathNode ? '#F97316' : color
   const clipId = `wave-${encodeURIComponent(node.id).replace(/%/g, '')}`
   const wrapper = document.createElement('div')
   wrapper.className = 'kg-wave-node'
   wrapper.dataset.nodeId = node.id
-  wrapper.dataset.signature = `${node.mastery ?? 0}:${node.degree ?? 0}`
+  wrapper.dataset.signature = `${node.mastery ?? 0}:${node.degree ?? 0}:${isPathNode}`
   wrapper.style.width = `${symbolSize}px`
   wrapper.style.height = `${symbolSize + 36}px`
+  wrapper.style.opacity = pathMode && !isPathNode ? '0.28' : '1'
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
   svg.setAttribute('viewBox', '0 0 100 100')
@@ -230,12 +244,22 @@ function createWaveOverlayNode(node: GraphNode, symbolSize: number): HTMLElement
     <circle cx="50" cy="50" r="46" fill="${color}" opacity="0.22" />
     <circle cx="50" cy="50" r="44" fill="#0f172a" opacity="0.72" />
     <g clip-path="url(#${clipId})">
-      <rect x="0" y="${waveTop}" width="100" height="${100 - waveTop}" fill="${color}" opacity="0.9" />
-      <path class="kg-wave-motion" d="M0 ${waveTop + 2} Q25 ${waveTop - 6} 50 ${waveTop + 2} T100 ${waveTop + 2} V100 H0 Z" fill="${color}" opacity="0.82" />
-      <path d="M0 ${waveTop + 8} Q25 ${waveTop} 50 ${waveTop + 8} T100 ${waveTop + 8}" fill="none" stroke="#fff" stroke-opacity="0.42" stroke-width="2" />
+      <rect x="-100" y="${waveY + 4}" width="300" height="${Math.max(0, 96 - waveY)}" fill="${color}" opacity="0.9" />
+      <path d="M-100 ${waveY} Q-75 ${waveY - 8} -50 ${waveY} T0 ${waveY} T50 ${waveY} T100 ${waveY} T150 ${waveY} T200 ${waveY} V100 H-100 Z" fill="${color}" opacity="0.86">
+        <animateTransform attributeName="transform" type="translate" values="0 2; 50 -3; 100 2" dur="2.4s" repeatCount="indefinite" />
+      </path>
+      <path d="M-100 ${waveY + 8} Q-75 ${waveY + 1} -50 ${waveY + 8} T0 ${waveY + 8} T50 ${waveY + 8} T100 ${waveY + 8} T150 ${waveY + 8} T200 ${waveY + 8} V100 H-100 Z" fill="${color}" opacity="0.42">
+        <animateTransform attributeName="transform" type="translate" values="0 -1; 50 3; 100 -1" dur="3.1s" repeatCount="indefinite" />
+      </path>
+      <path d="M-100 ${waveY + 2} Q-75 ${waveY - 6} -50 ${waveY + 2} T0 ${waveY + 2} T50 ${waveY + 2} T100 ${waveY + 2} T150 ${waveY + 2} T200 ${waveY + 2}" fill="none" stroke="#fff" stroke-opacity="0.76" stroke-width="2.2">
+        <animateTransform attributeName="transform" type="translate" values="0 2; 50 -3; 100 2" dur="2.4s" repeatCount="indefinite" />
+      </path>
+      <path d="M-100 ${waveY + 10} Q-75 ${waveY + 5} -50 ${waveY + 10} T0 ${waveY + 10} T50 ${waveY + 10} T100 ${waveY + 10} T150 ${waveY + 10} T200 ${waveY + 10}" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="1.4">
+        <animateTransform attributeName="transform" type="translate" values="0 -1; 50 3; 100 -1" dur="3.1s" repeatCount="indefinite" />
+      </path>
     </g>
     <circle cx="50" cy="50" r="44" fill="none" stroke="#fff" stroke-opacity="0.8" stroke-width="2" />
-    <circle class="kg-wave-pulse" cx="50" cy="50" r="48" fill="none" stroke="${color}" stroke-opacity="0.32" stroke-width="2" />
+    <circle class="kg-wave-pulse" cx="50" cy="50" r="48" fill="none" stroke="${pathColor}" stroke-opacity="${isPathNode ? '0.95' : '0.32'}" stroke-width="${isPathNode ? '5' : '2'}" />
     <text x="50" y="57" text-anchor="middle" class="kg-wave-percent">${Math.round(mastery * 100)}%</text>
   `
   wrapper.appendChild(svg)
@@ -295,7 +319,7 @@ function updateWaveOverlayPositions(positions: Map<string, [number, number]>) {
     if (!node || node.type === 'Chapter') continue
     activeIds.add(nodeId)
 
-    const signature = `${node.mastery ?? 0}:${node.degree ?? 0}`
+    const signature = `${node.mastery ?? 0}:${node.degree ?? 0}:${props.highlightedNodeIds?.has(node.id) ?? false}`
     let overlayNode = waveOverlayNodes.get(nodeId)
     if (!overlayNode || overlayNode.dataset.signature !== signature) {
       overlayNode?.remove()
@@ -304,6 +328,9 @@ function updateWaveOverlayPositions(positions: Map<string, [number, number]>) {
       waveOverlayNodes.set(nodeId, overlayNode)
       waveOverlayRef.value.appendChild(overlayNode)
     }
+    const pathMode = Boolean(props.highlightedNodeIds?.size)
+    const isPathNode = props.highlightedNodeIds?.has(node.id) ?? false
+    overlayNode.style.opacity = pathMode && !isPathNode ? '0.28' : '1'
     const name = overlayNode.querySelector('.kg-wave-name') as HTMLElement | null
     if (name) name.style.display = props.showLabels ? '' : 'none'
     // 定位的是水波纹圆本身，而不是包含下方名称的整个容器，保证边的中心线
@@ -325,24 +352,26 @@ function createEdgeOverlayGroup(edge: { source: string; target: string; relation
   const relationName = edge.relationship_name.trim()
   const isDependency = DEPENDENCY_RELATIONS.has(relationName)
   const isStructural = relationName === '包含'
+  const isPathEdge = props.highlightedEdgeIds?.has(edgeKey(edge)) ?? false
   const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   group.classList.add('kg-edge-group')
 
   const glow = document.createElementNS('http://www.w3.org/2000/svg', 'line')
   glow.classList.add('kg-edge-glow')
   glow.setAttribute('stroke', relationColor)
-  glow.setAttribute('stroke-width', isDependency || props.showMasteryWave ? '9' : '6')
+  glow.setAttribute('stroke-width', isPathEdge ? '15' : (isDependency || props.showMasteryWave ? '9' : '6'))
   glow.setAttribute('stroke-linecap', 'round')
-  glow.setAttribute('opacity', isDependency || props.showMasteryWave ? '0.24' : '0.12')
+  glow.setAttribute('opacity', isPathEdge ? '0.52' : (isDependency || props.showMasteryWave ? '0.24' : '0.12'))
 
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
   line.classList.add('kg-edge-core')
   line.setAttribute('stroke', relationColor)
-  line.setAttribute('stroke-width', isDependency || props.showMasteryWave ? '2.8' : '1.5')
+  line.setAttribute('stroke-width', isPathEdge ? '5' : (isDependency || props.showMasteryWave ? '2.8' : '1.5'))
+  line.setAttribute('stroke', isPathEdge ? '#F97316' : relationColor)
   line.setAttribute('stroke-linecap', 'round')
   const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')
   arrow.classList.add('kg-edge-arrow')
-  arrow.setAttribute('fill', relationColor)
+  arrow.setAttribute('fill', isPathEdge ? '#F97316' : relationColor)
   if (isStructural) arrow.setAttribute('display', 'none')
 
   group.append(glow, line, arrow)
@@ -408,6 +437,20 @@ function updateEdgeOverlayPositions(positions: Map<string, [number, number]>) {
     const glow = group.children[0] as SVGLineElement
     const line = group.children[1] as SVGLineElement
     const arrow = group.children[2] as SVGPolygonElement
+    const relationName = edge.relationship_name.trim()
+    const isDependency = DEPENDENCY_RELATIONS.has(relationName)
+    const isPathEdge = props.highlightedEdgeIds?.has(edgeKey(edge)) ?? false
+    const pathMode = Boolean(props.highlightedNodeIds?.size)
+    const isDimmed = pathMode && !isPathEdge
+    const relationColor = getRelationColor(edge)
+    glow.setAttribute('stroke', isPathEdge ? '#F97316' : relationColor)
+    glow.setAttribute('stroke-width', isPathEdge ? '15' : (isDependency || props.showMasteryWave ? '9' : '6'))
+    glow.setAttribute('opacity', isPathEdge ? '0.52' : (isDimmed ? '0.04' : (isDependency || props.showMasteryWave ? '0.24' : '0.12')))
+    line.setAttribute('stroke', isPathEdge ? '#F97316' : relationColor)
+    line.setAttribute('stroke-width', isPathEdge ? '5' : (isDependency || props.showMasteryWave ? '2.8' : '1.5'))
+    line.setAttribute('opacity', isDimmed ? '0.16' : '1')
+    arrow.setAttribute('fill', isPathEdge ? '#F97316' : relationColor)
+    arrow.setAttribute('opacity', isDimmed ? '0.1' : '0.96')
     for (const element of [glow, line]) {
       element.setAttribute('x1', String(startX))
       element.setAttribute('y1', String(startY))
@@ -443,8 +486,16 @@ function handleResize() {
   scheduleOverlayUpdate()
 }
 
+function resizeChartToContainer() {
+  const chart = chartInstance.value
+  const element = chartRef.value
+  if (!chart || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return
+  chart.resize({ width: element.clientWidth, height: element.clientHeight })
+  scheduleOverlayUpdate()
+}
+
 watch(
-  () => [props.data, props.showLabels, props.activeTypes, props.showMasteryWave],
+  () => [props.data, props.showLabels, props.activeTypes, props.showMasteryWave, props.highlightedNodeIds, props.highlightedEdgeIds],
   () => {
     updateChart()
     scheduleOverlayUpdate()
@@ -454,6 +505,14 @@ watch(
 
 onMounted(() => {
   initChart()
+  // KnowledgeExplore uses nested flex containers. The initial mount can happen
+  // before the chart wrapper has its final height, so keep ECharts in sync with
+  // the actual canvas size instead of leaving force nodes on a single row.
+  if (chartRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => resizeChartToContainer())
+    resizeObserver.observe(chartRef.value)
+  }
+  requestAnimationFrame(() => resizeChartToContainer())
   scheduleOverlayUpdate()
   window.addEventListener('resize', handleResize)
 })
@@ -464,6 +523,8 @@ onUnmounted(() => {
   if (chartInstance.value) {
     chartInstance.value.dispose()
   }
+  resizeObserver?.disconnect()
+  resizeObserver = null
   window.removeEventListener('resize', handleResize)
 })
 
@@ -561,28 +622,18 @@ defineExpose({
 :deep(.kg-wave-name) {
   max-width: 150px;
   margin-top: 2px;
-  color: #fff;
+  color: #334155;
   font-size: 12px;
   font-weight: 700;
   line-height: 15px;
   text-align: center;
   white-space: normal;
-  text-shadow: 0 0 2px rgba(255, 255, 255, 0.92);
-}
-:deep(.kg-wave-motion) {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: kg-wave-drift 2.8s linear infinite;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.95);
 }
 :deep(.kg-wave-pulse) {
   transform-box: fill-box;
   transform-origin: center;
   animation: kg-wave-pulse 2.8s ease-in-out infinite;
-}
-@keyframes kg-wave-drift {
-  0% { transform: translateX(-8px); }
-  50% { transform: translateX(8px); }
-  100% { transform: translateX(-8px); }
 }
 @keyframes kg-wave-pulse {
   0%, 100% { transform: scale(0.96); opacity: 0.42; }

@@ -19,13 +19,15 @@
             class="fullscreen-btn"
             title="全屏查看"
           />
-          <el-button
-            :icon="Close"
-            size="small"
-            circle
+          <button
+            class="panel-toggle-button"
+            type="button"
+            title="收起知识图谱"
+            aria-label="收起知识图谱侧栏"
             @click="$emit('close')"
-            class="close-btn"
-          />
+          >
+            <PanelRightClose :size="16" />
+          </button>
         </div>
       </div>
 
@@ -77,7 +79,15 @@
           <h4 class="section-title">{{ selectedDetail.name }}</h4>
           <el-tag size="small" effect="plain">{{ selectedDetail.type }}</el-tag>
           <p class="detail-desc">{{ selectedDetail.description }}</p>
-          <p class="detail-meta">度数: {{ selectedDetail.degree }}</p>
+          <button
+            v-if="selectedDetail.type !== 'Chapter'"
+            class="practice-button"
+            type="button"
+            @click="goToPractice"
+          >
+            <ClipboardCheck :size="15" />
+            <span>去做相关练习</span>
+          </button>
         </div>
       </div>
     </div>
@@ -88,9 +98,11 @@
     class="subgraph-panel-toggle"
     type="button"
     title="展开知识图谱"
+    aria-label="展开知识图谱侧栏"
     @click="$emit('open')"
   >
-    知识图谱 <span aria-hidden="true">‹</span>
+    <PanelRightOpen :size="16" />
+    <span>知识图谱</span>
   </button>
 
   <!-- 全屏模态框 -->
@@ -146,7 +158,6 @@
         <h4 class="fullscreen-section-title">{{ selectedDetail.name }}</h4>
         <el-tag size="small" effect="plain">{{ selectedDetail.type }}</el-tag>
         <p class="fullscreen-detail-desc">{{ selectedDetail.description }}</p>
-        <p class="fullscreen-detail-meta">度数: {{ selectedDetail.degree }}</p>
       </div>
     </div>
   </el-dialog>
@@ -154,7 +165,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Close, WarningFilled, FullScreen } from '@element-plus/icons-vue'
+import { ClipboardCheck, PanelRightClose, PanelRightOpen } from 'lucide-vue-next'
 import SubgraphChart from '@/components/SubgraphChart.vue'
 import type { SubgraphData, SubgraphNode } from '@/composables/useSubgraph'
 import type { KgHitNode } from '@/composables/useChat'
@@ -178,12 +191,22 @@ defineEmits<{
 
 const selectedDetail = ref<SubgraphNode | null>(null)
 const fullscreenDialogVisible = ref(false)
+const router = useRouter()
 
 const currentHit = computed(() => props.hitNodes[props.activeIndex])
 const typeColor = computed(() => TYPE_COLORS[currentHit.value?.nodeType || ''] || '#94A3B8')
 
 function onNodeClick(node: SubgraphNode) {
   selectedDetail.value = node
+}
+
+function goToPractice() {
+  const node = selectedDetail.value
+  if (!node || node.type === 'Chapter') return
+  void router.push({
+    path: '/student/practice/panel',
+    query: { kgNodeName: node.name },
+  })
 }
 
 // Auto-select hit node when subgraphs arrive
@@ -199,9 +222,8 @@ watch(() => props.subgraphs, (sg) => {
   width: 35%;
   min-width: 280px;
   max-width: 420px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  background: #fbfcfe;
+  border-left: 1px solid var(--workspace-border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -222,7 +244,7 @@ watch(() => props.subgraphs, (sg) => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--workspace-border);
 }
 
 .hit-node-info {
@@ -239,7 +261,7 @@ watch(() => props.subgraphs, (sg) => {
 .hit-node-name {
   font-size: 16px;
   font-weight: 600;
-  color: #FF8C00;
+  color: var(--workspace-warning);
 }
 
 .panel-body {
@@ -261,18 +283,42 @@ watch(() => props.subgraphs, (sg) => {
 
 .subgraph-panel-toggle {
   align-self: center;
-  padding: 10px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  width: 38px;
+  min-height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 7px;
+  border: 1px solid var(--workspace-border);
   border-right: 0;
   border-radius: 10px 0 0 10px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #475569;
+  background: #fff;
+  color: var(--workspace-primary);
   box-shadow: -4px 4px 14px rgba(15, 23, 42, 0.08);
   cursor: pointer;
   font-size: 12px;
   writing-mode: vertical-rl;
 }
-.subgraph-panel-toggle span { font-size: 20px; line-height: 1; }
+.subgraph-panel-toggle:hover { background: var(--workspace-primary-soft); border-color: var(--workspace-primary-border); }
+.subgraph-panel-toggle:focus-visible,
+.panel-toggle-button:focus-visible { outline: 3px solid rgba(33, 70, 155, .2); outline-offset: 2px; }
+.subgraph-panel-toggle span { line-height: 1.2; }
+
+.panel-toggle-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--workspace-border);
+  border-radius: 50%;
+  color: #64748b;
+  background: #fff;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.panel-toggle-button:hover { color: var(--workspace-primary); border-color: var(--workspace-primary-border); background: var(--workspace-primary-soft); }
 
 .error-state {
   display: flex;
@@ -287,9 +333,9 @@ watch(() => props.subgraphs, (sg) => {
 .chart-container {
   flex: 1;
   min-height: 300px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--workspace-border);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.02);
+  background: #f7f9fc;
 }
 
 /* Legend */
@@ -320,7 +366,7 @@ watch(() => props.subgraphs, (sg) => {
 .detail-section {
   margin-top: 8px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.03);
+  background: #f5f8fc;
   border-radius: 8px;
 }
 
@@ -338,10 +384,31 @@ watch(() => props.subgraphs, (sg) => {
   line-height: 1.5;
 }
 
-.detail-meta {
+.practice-button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--workspace-primary);
+  border-radius: 8px;
+  color: #fff;
+  background: var(--workspace-primary);
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  color: #9ca3af;
-  margin: 0;
+  transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.practice-button:hover {
+  border-color: var(--workspace-primary-hover);
+  background: var(--workspace-primary-hover);
+  box-shadow: 0 4px 10px rgba(33, 70, 155, .16);
+}
+.practice-button:focus-visible {
+  outline: 3px solid rgba(33, 70, 155, .2);
+  outline-offset: 2px;
 }
 
 /* 全屏模态框样式 */
@@ -422,9 +489,4 @@ watch(() => props.subgraphs, (sg) => {
   line-height: 1.6;
 }
 
-.fullscreen-detail-meta {
-  font-size: 12px;
-  color: #787878;
-  margin: 0;
-}
 </style>

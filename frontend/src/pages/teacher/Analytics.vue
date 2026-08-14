@@ -1208,8 +1208,28 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.teacher-page {
+  gap: 20px !important;
+  padding: 0 !important;
+}
+
 .teacher-card {
-  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--workspace-radius);
+}
+
+.teacher-card::after {
+  position: absolute;
+  top: -76px;
+  right: -76px;
+  width: 160px;
+  height: 160px;
+  content: '';
+  border: 1px solid rgba(33, 70, 155, .06);
+  border-radius: 50%;
+  box-shadow: 0 0 0 18px rgba(33, 70, 155, .018);
+  pointer-events: none;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -1232,7 +1252,8 @@ onBeforeUnmount(() => {
 .word-cloud-panel {
   height: 360px;
   overflow: hidden;
-  border-radius: 18px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
   background:
     radial-gradient(circle at top, rgba(14, 165, 233, 0.12), transparent 42%),
     radial-gradient(circle at bottom, rgba(249, 115, 22, 0.12), transparent 34%),

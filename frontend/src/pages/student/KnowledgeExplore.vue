@@ -20,7 +20,7 @@
           <span v-else-if="g.status === 'pending'" class="graph-status-tag pending">构建中</span>
         </el-option>
       </el-select>
-      <StarBorder as="div" color="#f56c6c" speed="3s">
+      <StarBorder as="div" color="var(--workspace-danger)" speed="3s">
         <el-button
           v-if="selectedGraphId"
           type="danger"
@@ -50,7 +50,7 @@
           :sub-title="store.error.message"
         >
           <template #extra>
-            <StarBorder as="div" color="#409eff" speed="4s">
+            <StarBorder as="div" color="var(--workspace-primary)" speed="4s">
               <el-button type="primary" @click="store.loadGraphData(store.currentGraphName || undefined)">重试</el-button>
             </StarBorder>
           </template>
@@ -61,7 +61,9 @@
       <div v-else-if="store.isEmpty" class="kg-state">
         <el-empty description="当前暂无可用的知识图谱，请联系教师">
           <template #image>
-            <div class="empty-graph-icon">🔍</div>
+            <div class="empty-graph-icon" aria-hidden="true">
+              <el-icon :size="28"><Search /></el-icon>
+            </div>
           </template>
         </el-empty>
       </div>
@@ -644,7 +646,7 @@ onMounted(async () => {
   min-width: 0;
   min-height: 500px;
   height: calc(100vh - 170px);
-  margin: 16px;
+  margin: 0;
 }
 .kg-header {
   display: flex;
@@ -654,12 +656,12 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 .graph-status-tag {
-  color: #f56c6c;
+  color: var(--workspace-danger);
   margin-left: 8px;
   font-size: 12px;
 }
 .graph-status-tag.pending {
-  color: #e6a23c;
+  color: var(--workspace-warning);
 }
 .kg-container {
   display: flex;
@@ -667,9 +669,10 @@ onMounted(async () => {
   min-height: 0;
   flex-direction: column;
   flex: 1 1 auto;
-  background: rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  background: #fff;
+  box-shadow: var(--workspace-shadow-card);
   overflow: hidden;
 }
 .kg-state {
@@ -691,9 +694,8 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 16px;
   padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: #fff;
+  border-bottom: 1px solid var(--workspace-border);
 }
 .kg-stats {
   display: flex;
@@ -724,9 +726,8 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px 20px;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: #fbfcfe;
+  border-bottom: 1px solid var(--workspace-border);
 }
 .legend-item {
   display: flex;
@@ -739,7 +740,7 @@ onMounted(async () => {
   color: #4b5563;
   transition: all 0.2s;
 }
-.legend-item:hover { background: rgba(0,0,0,0.05); }
+.legend-item:hover { background: #eef3fa; }
 .legend-item.inactive { opacity: 0.4; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 .relation-line { width: 20px; height: 2px; border-radius: 2px; }
@@ -751,19 +752,23 @@ onMounted(async () => {
   min-width: 0;
   min-height: 500px;
   overflow: hidden;
+  background-color: #fbfdff;
+  background-image:
+    linear-gradient(rgba(33, 70, 155, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(33, 70, 155, .035) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 .kg-breadcrumb {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 20px;
-  background: rgba(15, 15, 15, 0.85);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: #f4f7ff;
+  border-bottom: 1px solid #dce6f8;
   font-size: 13px;
 }
 .breadcrumb-item {
-  color: #94A3B8;
+  color: #667da9;
   cursor: pointer;
   transition: color 0.2s;
   max-width: 240px;
@@ -772,14 +777,14 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .breadcrumb-item:hover {
-  color: #F4F4F4;
+  color: var(--workspace-primary);
 }
 .breadcrumb-item.active {
-  color: #F4F4F4;
+  color: var(--workspace-primary);
   font-weight: 600;
 }
 .breadcrumb-sep {
-  color: #555;
+  color: #9aaaca;
   font-size: 11px;
 }
 

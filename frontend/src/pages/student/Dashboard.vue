@@ -10,7 +10,9 @@
             <el-button type="primary" size="small" :icon="Edit" @click="openEditDialog">编辑个人信息</el-button>
           </div>
           <div class="info-content">
-            <div class="avatar-placeholder">{{ genderAvatar }}</div>
+            <div class="avatar-placeholder" aria-hidden="true">
+              <UserRound :size="28" stroke-width="1.8" />
+            </div>
             <div class="info-text">
               <p><strong>姓名：</strong>{{ userName }}</p>
               <p><strong>Email：</strong>{{ userEmail }}</p>
@@ -181,7 +183,7 @@
             </div>
             <!-- 进度条 (基于进度动态定位) -->
             <div class="progress-bar" :style="{ left: `calc(${subject.progress}% - 12px)` }">
-              🚀
+              <Rocket :size="18" stroke-width="2.1" aria-hidden="true" />
             </div>
           </div>
 
@@ -274,6 +276,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit, Aim, Refresh } from '@element-plus/icons-vue'
+import { Rocket, UserRound } from 'lucide-vue-next'
 import BorderGlow from '@/components/BorderGlow.vue'
 import { fetchCourses, fetchDashboardNewQuestion, fetchDashboardRecordQuestion, type Course } from '@/api/practice'
 import { fetchCurrentUser, updateProfile } from '@/api/auth'
@@ -296,19 +299,12 @@ const userClass = ref<string | null>(null)
 const MOTTO_KEY = 'chuma_user_motto'
 const motto = ref(localStorage.getItem(MOTTO_KEY) || '')
 
-// 头像根据性别显示
-const genderAvatar = computed(() => {
-  if (userGender.value === '女') return '👩‍🎓'
-  if (userGender.value === '男') return '👨‍🎓'
-  return '🧑'
-})
-
 // 评级颜色映射：A-绿色、B-蓝色、C-黄色、D-红色、E-黑色
 const ratingColorMap: Record<string, string> = {
-  A: '#67c23a',
-  B: '#409eff',
-  C: '#e6a23c',
-  D: '#f56c6c',
+  A: '#0f9f8c',
+  B: '#21469b',
+  C: '#c87808',
+  D: '#d14343',
   E: '#303133',
 }
 const ratingColor = computed(() => {
@@ -658,13 +654,23 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 
 <style scoped>
 .daily-question-card {
-  margin-bottom: 16px;
-  border: 1px solid #b3d8ff;
-  background: linear-gradient(135deg, rgba(236, 245, 255, 0.95), rgba(255, 255, 255, 0.75));
+  position: relative;
+  overflow: hidden;
+  grid-column: 1 / -1;
+  border: 1px solid var(--workspace-primary-border);
+  background: linear-gradient(180deg, #f4f8ff 0%, #ffffff 100%);
+}
+
+.daily-question-card::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  content: '';
+  background: linear-gradient(90deg, var(--workspace-primary), var(--workspace-accent));
 }
 
 .daily-question-date {
-  color: #909399;
+  color: var(--workspace-subtle-text);
   font-size: 0.75rem;
 }
 
@@ -675,9 +681,15 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 
 .daily-question-item {
   padding: 10px 12px;
-  border: 1px solid rgba(64, 158, 255, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid #dce7f7;
+  border-radius: var(--workspace-radius-sm);
+  background: #fff;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.daily-question-item:hover {
+  border-color: #b9cbea;
+  box-shadow: 0 5px 14px rgba(33, 70, 155, .06);
 }
 
 .daily-question-item-header {
@@ -691,19 +703,19 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 .daily-question-reason,
 .daily-question-empty {
   margin: 0 0 8px;
-  color: #606266;
+  color: var(--workspace-muted);
   font-size: 0.8rem;
 }
 
 .daily-question-text {
   margin: 0 0 8px;
-  color: #303133;
+  color: var(--workspace-text);
   font-size: 0.9rem;
   line-height: 1.6;
 }
 
 .daily-question-reason {
-  color: #67c23a;
+  color: var(--workspace-accent);
 }
 
 .next-step-row {
@@ -713,8 +725,9 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   gap: 12px;
   margin: 12px 0;
   padding: 10px;
-  border-radius: 8px;
-  background: rgba(240, 249, 235, 0.75);
+  border: 1px solid #d6eee9;
+  border-radius: var(--workspace-radius-sm);
+  background: var(--workspace-accent-soft);
 }
 
 .next-step-copy {
@@ -725,55 +738,77 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 }
 
 .next-step-label {
-  color: #67c23a;
+  color: var(--workspace-accent);
   font-size: 0.75rem;
 }
 
 .next-step-copy strong {
   overflow: hidden;
-  color: #303133;
+  color: var(--workspace-heading);
   font-size: 0.85rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dashboard-page {
-  color: #000;
-  height: calc(100vh - 170px);
-  margin: 20px;
+  position: relative;
+  isolation: isolate;
+  color: var(--workspace-text);
+  min-height: calc(100vh - 170px);
+}
+
+.dashboard-page::before {
+  position: absolute;
+  top: -28px;
+  right: -48px;
+  width: 340px;
+  height: 190px;
+  content: '';
+  pointer-events: none;
+  opacity: .55;
+  background-image:
+    linear-gradient(rgba(33, 70, 155, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(33, 70, 155, .07) 1px, transparent 1px),
+    radial-gradient(circle at 70% 25%, rgba(15, 159, 140, .12), transparent 58%);
+  background-size: 24px 24px, 24px 24px, auto;
+  mask-image: radial-gradient(ellipse at 70% 25%, #000 0%, transparent 72%);
+  z-index: 0;
 }
 
 .dashboard-layout {
+  position: relative;
+  z-index: 1;
   display: flex;
-  gap: 24px;
-  padding: 24px;
+  gap: 20px;
+  padding: 0;
   height: 100%;
+  align-items: stretch;
 }
 
 /* 玻璃拟态卡片基础样式，沿用之前配好的 #e5e8e4 */
 .glass-card {
-  background: #e5e8e4;
-  border-radius: 12px;
+  background: #fff;
+  border-radius: var(--workspace-radius);
   padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--workspace-shadow-card);
+  border: 1px solid var(--workspace-border);
   display: flex;
   flex-direction: column;
 }
 
 .card-title {
   margin: 0 0 16px 0;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: #333;
+  color: var(--workspace-heading);
 }
 
 /* --- 左侧面板 --- */
 .left-panel {
-  flex: 0 0 320px;
+  flex: 0 0 336px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .personal-info .info-content {
@@ -783,11 +818,12 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 }
 
 .avatar-placeholder {
-  font-size: 3rem;
-  background: rgba(255, 255, 255, 0.5);
+  color: var(--workspace-primary);
+  background: var(--workspace-primary-soft);
+  border: 1px solid var(--workspace-primary-border);
   border-radius: 50%;
-  width: 80px;
-  height: 80px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -796,7 +832,10 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 .info-text p {
   margin: 8px 0;
   font-size: 0.95rem;
+  color: var(--workspace-muted);
 }
+
+.info-text strong { color: var(--workspace-heading); font-weight: 600; }
 
 .rating-row {
   display: flex;
@@ -815,6 +854,8 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  border-top: 3px solid var(--workspace-accent);
+  background: linear-gradient(180deg, #f7fcfb 0%, #fff 72%);
 }
 
 .analysis-scroll-area {
@@ -829,7 +870,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 }
 
 .analysis-scroll-area::-webkit-scrollbar-thumb {
-  background: #c0c5bd;
+  background: #c7d6d3;
   border-radius: 2px;
 }
 
@@ -842,17 +883,32 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
+  gap: 20px;
 }
 
 .subject-card {
+  position: relative;
+  overflow: hidden;
   justify-content: space-between;
+}
+
+.subject-card::after {
+  position: absolute;
+  top: -46px;
+  right: -44px;
+  width: 128px;
+  height: 128px;
+  content: '';
+  border: 1px solid rgba(33, 70, 155, .08);
+  border-radius: 50%;
+  box-shadow: 0 0 0 16px rgba(33, 70, 155, .025);
+  pointer-events: none;
 }
 
 .subject-title {
   margin: 0 0 16px 0;
-  font-size: 1.2rem;
-  color: #2c3e50;
+  font-size: 1rem;
+  color: var(--workspace-heading);
   font-weight: bold;
 }
 
@@ -869,9 +925,9 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 4px;
-  background: #a3a8a1;
-  border-radius: 2px;
+  height: 6px;
+  background: #e5ebf3;
+  border-radius: 999px;
 }
 
 /* 终点标识容器 */
@@ -890,7 +946,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   bottom: 0;
   width: 2px;
   height: 24px;
-  background-color: #f56c6c;
+  background-color: var(--workspace-danger);
 }
 
 /* 终点红旗 (利用 clip-path 裁切成三角形) */
@@ -900,21 +956,29 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   top: 0;
   width: 14px;
   height: 10px;
-  background-color: #f56c6c;
+  background-color: var(--workspace-danger);
   clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
 
 /* 进度条 */
 .progress-bar {
   position: absolute;
-  bottom: 0;
-  font-size: 24px;
+  bottom: -9px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--workspace-primary);
+  font-size: 0;
   line-height: 1;
   /* 平滑动画过渡 */
   transition: left 1s cubic-bezier(0.34, 1.56, 0.64, 1);
   z-index: 2;
   /* 增加立体阴影 */
-  filter: drop-shadow(2px 2px 2px rgba(0, 0, 0, 0.2));
+  box-shadow: 0 3px 9px rgba(33, 70, 155, .22);
 }
 
 /* --- 操作列表 --- */
@@ -929,14 +993,15 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.4);
   padding: 8px 12px;
-  border-radius: 8px;
+  border: 1px solid #edf1f6;
+  border-radius: var(--workspace-radius-sm);
+  background: #f8fafc;
 }
 
 .action-desc {
   font-size: 0.9rem;
-  color: #555;
+  color: #526078;
   flex: 1;
   min-width: 0;
   margin-right: 12px;
@@ -1023,7 +1088,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   height: 32px;
   border-radius: 50%;
   border: 3px solid #c0c5bd;
-  border-top-color: #409eff;
+  border-top-color: var(--workspace-primary);
   animation: spin 0.8s linear infinite;
   z-index: 2;
 }
@@ -1038,8 +1103,8 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 .spinner-ring-1 {
   width: 48px;
   height: 48px;
-  border-top-color: #67c23a;
-  border-right-color: #67c23a;
+  border-top-color: var(--workspace-accent);
+  border-right-color: var(--workspace-accent);
   animation-duration: 1.5s;
   animation-direction: reverse;
 }
@@ -1047,8 +1112,8 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 .spinner-ring-2 {
   width: 60px;
   height: 60px;
-  border-bottom-color: #e6a23c;
-  border-left-color: #e6a23c;
+  border-bottom-color: var(--workspace-warning);
+  border-left-color: var(--workspace-warning);
   animation-duration: 2s;
 }
 
@@ -1060,7 +1125,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 
 .loading-text {
   font-size: 0.95rem;
-  color: #333;
+  color: var(--workspace-heading);
   font-weight: 500;
   margin: 0;
 }
@@ -1113,8 +1178,8 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 
 .dim-available {
   background: #e1f3d8;
-  color: #67c23a;
-  border: 1px solid #b3e19d;
+  color: var(--workspace-accent);
+  border: 1px solid #b9e3dc;
 }
 
 .dim-missing {
@@ -1139,7 +1204,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   margin: 0 0 6px 0;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #409eff;
+  color: var(--workspace-primary);
 }
 
 .section-text {
@@ -1156,12 +1221,12 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 }
 
 .priority-chip {
-  background: #ecf5ff;
-  color: #409eff;
+  background: var(--workspace-primary-soft);
+  color: var(--workspace-primary);
   font-size: 0.8rem;
   padding: 3px 10px;
   border-radius: 6px;
-  border: 1px solid #d9ecff;
+  border: 1px solid var(--workspace-primary-border);
 }
 
 .reanalyze-btn {
@@ -1180,7 +1245,7 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
 
 .error-text {
   font-size: 0.85rem;
-  color: #f56c6c;
+  color: var(--workspace-danger);
   margin: 0;
   text-align: center;
 }
@@ -1200,12 +1265,12 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   margin: 0 0 8px 0;
   font-size: 1rem;
   font-weight: 600;
-  color: #e6a23c;
+  color: var(--workspace-warning);
 }
 
 .ai-suggest-title {
   font-size: 1rem;
-  color: #e6a23c;
+  color: var(--workspace-warning);
 }
 
 .teacher-placeholder {
@@ -1213,5 +1278,20 @@ const navigateToDailyQuestion = (question: DailyQuestion) => {
   font-size: 0.8rem;
   color: #999;
   font-style: italic;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-layout { flex-direction: column; }
+  .left-panel { flex: none; width: 100%; }
+  .ai-analysis-panel { min-height: 320px; }
+  .right-panel { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  .right-panel { grid-template-columns: 1fr; }
+  .daily-question-card { grid-column: auto; }
+  .dashboard-layout { gap: 16px; }
+  .glass-card { padding: 16px; }
+  .subject-card { min-height: 250px; }
 }
 </style>

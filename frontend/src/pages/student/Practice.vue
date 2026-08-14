@@ -1,29 +1,41 @@
 <template>
   <BorderGlow class="practice-page" background-color="transparent">
     <div class="practice-layout">
+      <div v-if="currentQuestion" class="practice-toolbar">
+        <div class="practice-toolbar-context">
+          <span class="section-eyebrow">练习进度</span>
+          <strong>{{ currentQuestionNumber }} / {{ totalQuestions }}</strong>
+          <el-tag v-if="practiceNodeName" size="small" type="info" effect="plain">
+            {{ practiceNodeName }}
+          </el-tag>
+        </div>
+        <div class="practice-progress" aria-hidden="true">
+          <span :style="{ width: `${questionProgress}%` }"></span>
+        </div>
+        <div class="question-actions">
+          <el-button size="small" plain @click="prevQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === 0 : currentIndex === 0">上一题</el-button>
+          <el-button size="small" type="primary" plain @click="nextQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === cachedIdList.length - 1 : currentIndex === questions.length - 1">下一题</el-button>
+          <el-button size="small" text @click="goBack">返回</el-button>
+        </div>
+      </div>
+
+      <div class="practice-workspace">
       <!-- 左侧面板：题目与答案 (同一个大框，内部独立滚动) -->
-      <div class="left-panel glass-card">
+      <main class="left-panel question-panel">
         <!-- 上半部分：题目与答题区 -->
         <div class="section-container" v-if="currentQuestion">
-          <div class="question-header">
-            <h3 class="title-red">题目 ({{ cachedIdList.length > 0 ? cachedIndex + 1 : currentIndex + 1 }} / {{ cachedIdList.length > 0 ? cachedIdList.length : questions.length }})：</h3>
-            <el-tag v-if="practiceNodeName" size="small" type="info" effect="plain">
-              知识点：{{ practiceNodeName }}
-            </el-tag>
-            <div class="question-actions">
-              <el-button size="small" type="danger" plain @click="prevQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === 0 : currentIndex === 0">上一题</el-button>
-              <el-button size="small" type="danger" plain @click="nextQuestion" :disabled="cachedIdList.length > 0 ? cachedIndex === cachedIdList.length - 1 : currentIndex === questions.length - 1">下一题</el-button>
-              <el-button size="small" type="info" plain @click="goBack">返回上一级</el-button>
-            </div>
+          <div class="question-intro">
+            <span class="section-eyebrow">当前题目</span>
+            <h2 class="question-title">请完成下面的题目</h2>
           </div>
           <div class="scroll-area relative-area">
             <div class="stem-content">{{ currentQuestion.question_description }}</div>
             
             <div class="answer-area">
               <div class="flex justify-between items-center mb-3">
-                <h4 class="title-red answer-title mb-0">答题区：</h4>
+                <h4 class="answer-title mb-0">答题区</h4>
                 <el-button 
-                  type="danger" 
+                  type="primary"
                   size="small" 
                   @click="submitAnswer" 
                   :disabled="isAnswerSubmitted || (!userAnswer && userAnswerArray.length === 0)"
@@ -52,7 +64,7 @@
               
               <!-- 判断题 -->
               <div v-else-if="currentQuestion.question_type === 'true_false'">
-                <el-radio-group v-model="userAnswer" :disabled="isAnswerSubmitted">
+                <el-radio-group v-model="userAnswer" class="custom-radio-group" :disabled="isAnswerSubmitted">
                   <el-radio value="true">正确</el-radio>
                   <el-radio value="false">错误</el-radio>
                 </el-radio-group>
@@ -123,12 +135,15 @@
           </div>
         </div>
 
-        <!-- 红色分割线 -->
-        <div class="divider" v-if="currentQuestion"></div>
-
-        <!-- 下半部分：答案与解释 -->
-        <div class="section-container" v-if="currentQuestion">
-          <h3 class="title-red">答案与解释</h3>
+        <!-- 提交后的答案与解释 -->
+        <div class="review-section" v-if="currentQuestion">
+          <div class="review-heading">
+            <div>
+              <span class="section-eyebrow">提交后查看</span>
+              <h3 class="review-title">答案与解析</h3>
+            </div>
+            <el-tag v-if="isAnswerSubmitted" size="small" type="success" effect="plain">已完成</el-tag>
+          </div>
           <div class="scroll-area">
             <div class="explanation-content" v-if="isAnswerSubmitted">
               <p><strong>正确答案：</strong> {{ currentQuestion.question_answer }}</p>
@@ -141,13 +156,58 @@
             <div class="spacer"></div>
           </div>
         </div>
-      </div>
+      </main>
 
-        <!-- 右侧面板 -->
-      <div class="right-panel">
-        <!-- 上半部分：AI 分析与解惑 -->
-        <div class="glass-card flex-card">
-          <h3 class="title-blue">ai分析与解惑</h3>
+        <!-- 辅助栏：将 AI 分析与同类题收纳到同一工作区 -->
+      <aside v-if="currentQuestion" class="practice-sidebar">
+        <section class="session-card">
+          <div class="session-card-heading">
+            <div>
+              <span class="section-eyebrow">本题信息</span>
+              <h2>学习状态</h2>
+            </div>
+            <span class="session-count">{{ currentQuestionNumber }}/{{ totalQuestions }}</span>
+          </div>
+          <div class="session-row">
+            <span>知识点</span>
+            <strong>{{ practiceNodeName || currentQuestion.kg_node_name || '综合练习' }}</strong>
+          </div>
+          <div class="session-row">
+            <span>作答状态</span>
+            <strong :class="isAnswerSubmitted ? 'is-success' : 'is-pending'">
+              {{ isAnswerSubmitted ? '已提交答案' : '等待作答' }}
+            </strong>
+          </div>
+        </section>
+
+        <section class="assistant-card">
+          <div class="assistant-heading">
+            <div>
+              <span class="section-eyebrow">学习辅助</span>
+              <h2>按需获取帮助</h2>
+            </div>
+            <el-icon class="assistant-heading-icon"><ChatDotRound /></el-icon>
+          </div>
+          <div class="assistant-tabs" role="tablist" aria-label="学习辅助">
+            <button
+              type="button"
+              class="assistant-tab"
+              :class="{ active: activeAssistantTab === 'analysis' }"
+              @click="activeAssistantTab = 'analysis'"
+            >
+              AI 分析
+            </button>
+            <button
+              type="button"
+              class="assistant-tab"
+              :class="{ active: activeAssistantTab === 'similar' }"
+              @click="activeAssistantTab = 'similar'"
+            >
+              同类练习
+            </button>
+          </div>
+
+          <div v-if="activeAssistantTab === 'analysis'" class="assistant-tab-content">
           <div class="scroll-area">
             <!-- 加载中 -->
             <div v-if="aiLoading" class="ai-loading">
@@ -275,11 +335,9 @@
             </div>
             <div class="spacer"></div>
           </div>
-        </div>
+          </div>
 
-        <!-- 下半部分：同类型题型列举 -->
-        <div class="glass-card flex-card">
-          <h3 class="title-green">同类型题型列举</h3>
+          <div v-else class="assistant-tab-content">
           <div class="scroll-area">
             <div v-if="showSimilarQuestions">
               <ul class="similar-list" v-if="similarQuestions.length > 0">
@@ -300,7 +358,9 @@
             </div>
             <div class="spacer"></div>
           </div>
-        </div>
+          </div>
+        </section>
+      </aside>
       </div>
     </div>
   </BorderGlow>
@@ -310,6 +370,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ChatDotRound, Warning } from '@element-plus/icons-vue'
 import BorderGlow from '@/components/BorderGlow.vue'
 import {
   fetchQuestions,
@@ -332,6 +393,7 @@ const loading = ref(true)
 const isAnswerSubmitted = ref(false)
 const showAiAnalysis = ref(false)
 const showSimilarQuestions = ref(false)
+const activeAssistantTab = ref<'analysis' | 'similar'>('analysis')
 
 // 学生已提交的答案字符串（用于 AI 个性化作答剖析）
 const submittedAnswer = ref('')
@@ -343,6 +405,13 @@ const cachedIndex = ref(0)
 const currentQuestion = computed(() => {
   return questions.value[currentIndex.value] || null
 })
+const totalQuestions = computed(() => cachedIdList.value.length || questions.value.length)
+const currentQuestionNumber = computed(() => (
+  cachedIdList.value.length > 0 ? cachedIndex.value + 1 : currentIndex.value + 1
+))
+const questionProgress = computed(() => (
+  totalQuestions.value > 0 ? (currentQuestionNumber.value / totalQuestions.value) * 100 : 0
+))
 const practiceNodeName = computed(() => {
   const value = route.query.kgNodeName
   return typeof value === 'string' ? value.trim() : ''
@@ -414,7 +483,7 @@ onMounted(async () => {
   const kgNodeName = practiceNodeName.value || undefined
   const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
 
-  if (!courseId && !questionId) {
+  if (!courseId && !questionId && !kgNodeName) {
     ElMessage.warning('未选择学科或题目')
     loading.value = false
     return
@@ -459,8 +528,8 @@ onMounted(async () => {
       } else {
         ElMessage.error('未找到该题目')
       }
-    } else if (courseId) {
-      // 通过 courseId 加载该学科下所有题目（正常进入练习）
+    } else if (courseId || kgNodeName) {
+      // 按学科或知识点加载题目；仅传知识点时从全部题目中筛选
       const data = await fetchQuestions(courseId, kgNodeName)
       questions.value = data || []
     }
@@ -594,6 +663,7 @@ const triggerAiAnalysis = async () => {
   if (!currentQuestion.value) return
   if (aiLoading.value) return
 
+  activeAssistantTab.value = 'analysis'
   aiLoading.value = true
   showAiAnalysis.value = true
   aiAnalysis.value = null
@@ -620,6 +690,7 @@ const triggerAiAnalysis = async () => {
 }
 
 const triggerSimilarQuestions = () => {
+  activeAssistantTab.value = 'similar'
   showSimilarQuestions.value = true
 }
 
@@ -630,6 +701,7 @@ const resetAnswer = () => {
   isAnswerSubmitted.value = false
   showAiAnalysis.value = false
   showSimilarQuestions.value = false
+  activeAssistantTab.value = 'analysis'
   aiAnalysis.value = null
   aiLoading.value = false
   submittedAnswer.value = ''
@@ -1108,5 +1180,446 @@ h3 {
   color: #c0392b;
   border-radius: 8px;
   font-size: 0.92rem;
+}
+/* --- 学习工作台重排：单主任务流 + 辅助栏 --- */
+.practice-page {
+  min-height: calc(100vh - 164px);
+  height: auto;
+  margin: 0;
+  color: var(--workspace-text);
+}
+
+.practice-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: calc(100vh - 164px);
+  height: auto;
+  padding: 0;
+}
+
+.practice-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 62px;
+  padding: 12px 16px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow-card);
+}
+
+.practice-toolbar-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-width: 190px;
+}
+
+.practice-toolbar-context strong {
+  color: var(--workspace-heading);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-eyebrow {
+  display: block;
+  color: var(--workspace-subtle-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.practice-progress {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--workspace-surface-muted);
+}
+
+.practice-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--workspace-primary), var(--workspace-accent));
+  transition: width .25s ease;
+}
+
+.question-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.question-actions :deep(.el-button) {
+  margin: 0;
+}
+
+.practice-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 330px);
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.question-panel,
+.session-card,
+.assistant-card {
+  border: 1px solid var(--workspace-border);
+  border-radius: 14px;
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow-card);
+}
+
+.question-panel {
+  min-width: 0;
+  min-height: 650px;
+  overflow: visible;
+}
+
+.question-panel .section-container {
+  display: block;
+  flex: none;
+  overflow: visible;
+  padding: 28px 30px 22px;
+}
+
+.question-intro {
+  margin-bottom: 22px;
+}
+
+.question-title {
+  margin: 5px 0 0;
+  color: var(--workspace-heading);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.question-panel .relative-area,
+.question-panel .scroll-area {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.question-panel .spacer,
+.review-section .spacer,
+.assistant-tab-content .spacer {
+  display: none;
+}
+
+.stem-content {
+  padding: 20px 22px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-heading);
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+.answer-area {
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid var(--workspace-border);
+}
+
+.answer-title {
+  margin: 0 0 12px;
+  color: var(--workspace-heading);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.custom-radio-group,
+.custom-checkbox-group {
+  width: 100%;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.custom-radio-group :deep(.el-radio),
+.custom-checkbox-group :deep(.el-checkbox) {
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--workspace-text);
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.custom-radio-group :deep(.el-radio:hover),
+.custom-checkbox-group :deep(.el-checkbox:hover) {
+  border-color: var(--workspace-primary-border);
+  background: var(--workspace-primary-soft);
+}
+
+.custom-radio-group :deep(.el-radio.is-checked),
+.custom-checkbox-group :deep(.el-checkbox.is-checked) {
+  border-color: var(--workspace-primary);
+  background: var(--workspace-primary-soft);
+  box-shadow: 0 0 0 2px rgba(33, 70, 155, .08);
+}
+
+.custom-radio-group :deep(.el-radio__label),
+.custom-checkbox-group :deep(.el-checkbox__label) {
+  flex: 1;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.question-panel :deep(.el-textarea__inner) {
+  border-color: var(--workspace-border);
+  background: var(--workspace-surface-muted);
+  box-shadow: none;
+}
+
+.socratic-help-panel {
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--workspace-primary-border);
+  border-radius: 12px;
+  background: var(--workspace-primary-soft);
+}
+
+.socratic-help-title { color: var(--workspace-primary); }
+
+.socratic-hint-item {
+  border: 1px solid rgba(33, 70, 155, .1);
+  background: rgba(255, 255, 255, .72);
+}
+
+.review-section {
+  margin: 0 30px 30px;
+  padding-top: 24px;
+  border-top: 1px solid var(--workspace-border);
+}
+
+.review-heading,
+.session-card-heading,
+.assistant-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-title,
+.session-card-heading h2,
+.assistant-heading h2 {
+  margin: 4px 0 0;
+  color: var(--workspace-heading);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.explanation-content {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--workspace-accent-soft);
+  border-radius: 10px;
+  background: #f4fbf9;
+  color: var(--workspace-text);
+  line-height: 1.75;
+}
+
+.unsubmitted-notice {
+  justify-content: flex-start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #f1dfbd;
+  border-radius: 10px;
+  background: #fff9ed;
+  color: #8a5a13;
+  font-size: 13px;
+}
+
+.practice-sidebar {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-card { padding: 18px 20px; }
+
+.session-count {
+  color: var(--workspace-primary);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--workspace-border);
+  color: var(--workspace-muted);
+  font-size: 13px;
+}
+
+.session-row strong {
+  max-width: 170px;
+  overflow: hidden;
+  color: var(--workspace-heading);
+  font-size: 13px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row strong.is-success { color: var(--workspace-accent); }
+.session-row strong.is-pending { color: var(--workspace-warning); }
+
+.assistant-card {
+  display: flex;
+  min-height: 420px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.assistant-heading { padding: 18px 20px 14px; }
+
+.assistant-heading-icon {
+  color: var(--workspace-primary);
+  font-size: 18px;
+}
+
+.assistant-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+.assistant-tab {
+  position: relative;
+  min-height: 40px;
+  padding: 0 6px;
+  border: 0;
+  color: var(--workspace-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  transition: color .18s ease;
+}
+
+.assistant-tab::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: '';
+}
+
+.assistant-tab:hover,
+.assistant-tab.active { color: var(--workspace-primary); }
+.assistant-tab.active { font-weight: 600; }
+.assistant-tab.active::after { background: var(--workspace-primary); }
+
+.assistant-tab-content {
+  min-height: 0;
+  flex: 1;
+}
+
+.assistant-tab-content > .scroll-area {
+  min-height: 180px;
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+
+.assistant-tab-content > .scroll-area > .flex { min-height: 180px; }
+
+.assistant-card .title-blue,
+.assistant-card .title-green { color: var(--workspace-heading); }
+
+.assistant-card .ai-section-title {
+  margin-top: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--workspace-border);
+  color: var(--workspace-primary);
+  font-size: 14px;
+}
+
+.assistant-card .personal-title {
+  color: var(--workspace-accent);
+  border-bottom-color: var(--workspace-accent-soft);
+}
+
+.assistant-card .ai-block {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.assistant-card .similar-list { gap: 8px; }
+
+.assistant-card .similar-item {
+  padding: 10px 12px;
+  border: 1px solid var(--workspace-border);
+  background: #fff;
+}
+
+.assistant-card .similar-item .dot { background: var(--workspace-primary); }
+
+.assistant-card .go-btn {
+  color: var(--workspace-primary);
+  border-color: var(--workspace-primary-border);
+}
+
+@media (max-width: 1040px) {
+  .practice-workspace { grid-template-columns: minmax(0, 1fr) 280px; }
+  .practice-toolbar-context { min-width: 160px; }
+  .question-actions :deep(.el-button) { padding-inline: 9px; }
+}
+
+@media (max-width: 820px) {
+  .practice-workspace { grid-template-columns: 1fr; }
+  .practice-sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  }
+  .assistant-card { min-height: 360px; }
+  .assistant-tab-content > .scroll-area { max-height: 420px; }
+}
+
+@media (max-width: 620px) {
+  .practice-toolbar { flex-wrap: wrap; gap: 10px 14px; }
+  .practice-toolbar-context { min-width: 0; flex: 1 1 auto; }
+  .practice-progress { order: 3; flex-basis: 100%; }
+  .question-actions { margin-left: auto; }
+  .question-panel .section-container { padding: 22px 18px 18px; }
+  .review-section { margin-inline: 18px; }
+  .practice-sidebar { display: flex; }
+  .stem-content { padding: 16px; font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-progress span,
+  .custom-radio-group :deep(.el-radio),
+  .custom-checkbox-group :deep(.el-checkbox),
+  .assistant-tab { transition: none; }
 }
 </style>

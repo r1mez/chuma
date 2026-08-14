@@ -38,6 +38,12 @@ export interface KgHitNode {
   graphName: string
 }
 
+interface PersistedKnowledgeState {
+  hitNodes: KgHitNode[]
+  activeIndex: number
+  visible: boolean
+}
+
 export interface UseChatOptions {
   agent?: AgentRequestOptions
   getAgent?: () => AgentRequestOptions
@@ -74,6 +80,48 @@ function saveConversationId(id: string): void {
   const storageKey = `chuma-agent-conversation:${globalThis.location?.pathname ?? 'default'}`
   try {
     globalThis.localStorage?.setItem(storageKey, id)
+  } catch {
+    // Local storage is optional; the current in-memory conversation remains usable.
+  }
+}
+
+function getKnowledgeStateStorageKey(conversationId: string): string {
+  return `chuma-agent-knowledge-state:${globalThis.location?.pathname ?? 'default'}:${conversationId}`
+}
+
+function isKgHitNode(value: unknown): value is KgHitNode {
+  if (!value || typeof value !== 'object') return false
+  const node = value as Partial<KgHitNode>
+  return Boolean(
+    node.nodeId
+    && node.nodeName
+    && node.nodeType
+    && node.graphName,
+  )
+}
+
+function readKnowledgeState(conversationId: string): PersistedKnowledgeState | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(getKnowledgeStateStorageKey(conversationId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<PersistedKnowledgeState>
+    const hitNodes = Array.isArray(parsed.hitNodes) ? parsed.hitNodes.filter(isKgHitNode) : []
+    const activeIndex = typeof parsed.activeIndex === 'number' && Number.isInteger(parsed.activeIndex)
+      ? Math.max(0, Math.min(parsed.activeIndex, Math.max(0, hitNodes.length - 1)))
+      : 0
+    return {
+      hitNodes,
+      activeIndex,
+      visible: parsed.visible !== false,
+    }
+  } catch {
+    return null
+  }
+}
+
+function removeKnowledgeState(conversationId: string): void {
+  try {
+    globalThis.localStorage?.removeItem(getKnowledgeStateStorageKey(conversationId))
   } catch {
     // Local storage is optional; the current in-memory conversation remains usable.
   }
@@ -134,6 +182,22 @@ export function useChat(options: UseChatOptions = {}) {
   const activeConversationId = ref(conversationId)
   const { subgraphs, subgraphLoading, subgraphErrors, extractSubgraphs, clearSubgraphs } = useSubgraph()
 
+  function persistKnowledgeState() {
+    const state: PersistedKnowledgeState = {
+      hitNodes: kgHitNodes.value,
+      activeIndex: activeKgHitIndex.value,
+      visible: subgraphPanelVisible.value,
+    }
+    try {
+      globalThis.localStorage?.setItem(
+        getKnowledgeStateStorageKey(conversationId),
+        JSON.stringify(state),
+      )
+    } catch {
+      // Local storage is optional; the current in-memory conversation remains usable.
+    }
+  }
+
   function findMessage(messageId: string) {
     return messages.value.find(message => message.id === messageId)
   }
@@ -157,6 +221,7 @@ export function useChat(options: UseChatOptions = {}) {
     const index = existingIndex >= 0 ? existingIndex : kgHitNodes.value.push(hitNode) - 1
     activeKgHitIndex.value = index
     subgraphPanelVisible.value = true
+    persistKnowledgeState()
     if (!subgraphs.value[index] && !subgraphLoading.value[index]) extractSubgraphs(hitNode, index)
     suggesting.value = true
   }
@@ -440,14 +505,19 @@ export function useChat(options: UseChatOptions = {}) {
 
   function closeSubgraphPanel() {
     subgraphPanelVisible.value = false
+    persistKnowledgeState()
   }
 
   function openSubgraphPanel() {
     subgraphPanelVisible.value = true
+    persistKnowledgeState()
   }
 
   function selectKgHitPage(index: number) {
-    if (index >= 0 && index < kgHitNodes.value.length) activeKgHitIndex.value = index
+    if (index >= 0 && index < kgHitNodes.value.length) {
+      activeKgHitIndex.value = index
+      persistKnowledgeState()
+    }
   }
 
   function selectSuggestedQuestion(question: SuggestedQuestion) {
@@ -464,17 +534,22 @@ export function useChat(options: UseChatOptions = {}) {
       content: item.content,
       reasoning: '',
     }))
-    kgHitNodes.value = []
-    activeKgHitIndex.value = 0
-    subgraphPanelVisible.value = false
+    const persistedKnowledgeState = readKnowledgeState(id)
+    kgHitNodes.value = persistedKnowledgeState?.hitNodes ?? []
+    activeKgHitIndex.value = persistedKnowledgeState?.activeIndex ?? 0
+    subgraphPanelVisible.value = persistedKnowledgeState?.visible ?? kgHitNodes.value.length > 0
     clearSubgraphs()
     conversationId = id
     activeConversationId.value = id
     saveConversationId(id)
+    for (const [index, hitNode] of kgHitNodes.value.entries()) {
+      void extractSubgraphs(hitNode, index)
+    }
   }
 
   function clearMessages() {
     cancelCurrentRun()
+    removeKnowledgeState(conversationId)
     messages.value = []
     kgHitNodes.value = []
     activeKgHitIndex.value = 0

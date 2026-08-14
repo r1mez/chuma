@@ -5,6 +5,7 @@
       v-model="input"
       :placeholder="placeholder"
       :disabled="loading"
+      aria-label="输入消息"
       rows="1"
       @keydown="handleKeydown"
       @input="adjustHeight"
@@ -44,20 +45,69 @@ function adjustHeight() {
   element.style.height = 'auto'
   element.style.height = `${Math.min(element.scrollHeight, props.prominent ? 116 : 96)}px`
 }
-function resetHeight() { if (textareaRef.value) textareaRef.value.style.height = props.prominent ? '88px' : '28px' }
+function resetHeight() { if (textareaRef.value) textareaRef.value.style.height = props.prominent ? '64px' : '30px' }
 watch(() => props.prominent, () => nextTick(resetHeight), { immediate: true })
 </script>
 
 <style scoped>
-.composer { width: 100%; padding: 10px; border: 1px solid #dce3ec; border-radius: 11px; background: #fff; box-shadow: 0 10px 30px rgba(16, 24, 40, .07); transition: border-color .15s, box-shadow .15s; }
-.composer:focus-within { border-color: #aebbd1; box-shadow: 0 10px 30px rgba(16, 24, 40, .08), 0 0 0 3px rgba(33, 70, 155, .05); }
-.composer textarea { width: 100%; height: 28px; min-height: 28px; display: block; resize: none; padding: 8px 9px; border: 0; outline: 0; color: #172033; background: #f7f8fa; border-radius: 8px; font: inherit; font-size: 14px; line-height: 1.6; }
-.composer.prominent textarea { height: 88px; min-height: 88px; padding: 13px 14px; }
-.composer textarea::placeholder { color: #98a4b7; }
-.composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 3px 0 7px; }
-.composer-tip { color: #a0a9b8; font-size: 11px; }
-.send-button { min-width: 72px; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 8px; color: #fff; background: #10182b; font-size: 13px; font-weight: 600; cursor: pointer; }
-.send-button:hover { background: #21469b; }
-.send-button:disabled { opacity: .4; cursor: not-allowed; }
-@media (max-width: 600px) { .composer-tip { display: none; } }
+.composer {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(33, 70, 155, .06);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.composer:focus-within {
+  border-color: #9fb2d2;
+  box-shadow: 0 5px 18px rgba(33, 70, 155, .08), 0 0 0 3px rgba(33, 70, 155, .07);
+}
+.composer textarea {
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  display: block;
+  resize: none;
+  padding: 8px 10px;
+  border: 0;
+  outline: 0;
+  box-sizing: border-box;
+  color: var(--workspace-text);
+  background: transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  transition: background-color .18s ease;
+}
+.composer textarea:focus { background: #fff; }
+.composer.prominent textarea { height: 64px; min-height: 64px; padding: 8px 10px; }
+.composer textarea::placeholder { color: #9aa8bc; }
+.composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 2px 0 4px; }
+.composer-tip { color: #8b9ab0; font-size: 11px; }
+.send-button {
+  min-width: 78px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--workspace-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.send-button:hover:not(:disabled) { background: var(--workspace-primary-hover); box-shadow: 0 5px 12px rgba(33, 70, 155, .18); transform: translateY(-1px); }
+.send-button:focus-visible { outline: 3px solid rgba(33, 70, 155, .2); outline-offset: 2px; }
+.send-button:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+@media (max-width: 600px) {
+  .composer-tip { display: none; }
+  .composer-footer { justify-content: flex-end; }
+}
 </style>

@@ -4,48 +4,54 @@
       <el-icon v-if="message.role === 'user'" :size="17"><User /></el-icon>
       <el-icon v-else :size="17"><Monitor /></el-icon>
     </div>
-    <div class="bubble" :class="{ 'agent-bubble': message.mode === 'agent' }">
-      <div
-        v-if="loading && message.role === 'assistant' && message.mode !== 'agent' && !message.content && !message.reasoning"
-        class="typing"
-      >
-        <span class="dot" /><span class="dot" /><span class="dot" />
+    <div class="message-content">
+      <div v-if="message.role === 'assistant'" class="message-meta">
+        <span class="assistant-name">AI 助学</span>
+        <span v-if="message.mode === 'agent'" class="message-mode">知识增强</span>
       </div>
-      <template v-else>
-        <AgentRunPanel
-          v-if="message.mode === 'agent' && message.agentRun"
-          :run="message.agentRun"
-        />
+      <div class="bubble" :class="{ 'agent-bubble': message.mode === 'agent' }">
+        <div
+          v-if="loading && message.role === 'assistant' && message.mode !== 'agent' && !message.content && !message.reasoning"
+          class="typing"
+        >
+          <span class="dot" /><span class="dot" /><span class="dot" />
+        </div>
+        <template v-else>
+          <AgentRunPanel
+            v-if="message.mode === 'agent' && message.agentRun"
+            :run="message.agentRun"
+          />
 
-        <div v-if="message.mode !== 'agent' && message.reasoning" class="reasoning-section">
-          <button class="reasoning-header" type="button" @click="toggleReasoning">
-            <el-icon :size="14">
-              <ArrowRight v-if="!showReasoning" />
-              <ArrowDown v-else />
-            </el-icon>
-            <span>分析过程</span>
-            <span v-if="isThinking" class="thinking-indicator">分析中...</span>
-          </button>
-          <div v-show="showReasoning" class="reasoning-content">
-            <pre>{{ message.reasoning }}</pre>
+          <div v-if="message.mode !== 'agent' && message.reasoning" class="reasoning-section">
+            <button class="reasoning-header" type="button" @click="toggleReasoning">
+              <el-icon :size="14">
+                <ArrowRight v-if="!showReasoning" />
+                <ArrowDown v-else />
+              </el-icon>
+              <span>分析过程</span>
+              <span v-if="isThinking" class="thinking-indicator">分析中...</span>
+            </button>
+            <div v-show="showReasoning" class="reasoning-content">
+              <pre>{{ message.reasoning }}</pre>
+            </div>
           </div>
-        </div>
 
-        <div v-if="message.content" class="markdown-body" v-html="renderedContent" />
+          <div v-if="message.content" class="markdown-body" v-html="renderedContent" />
 
-        <div v-if="suggesting && !message.suggestedQuestions?.length" class="suggesting-dots">
-          <span class="suggesting-text">正在生成后续学习建议</span>
-          <span class="dot dot-1">·</span>
-          <span class="dot dot-2">·</span>
-          <span class="dot dot-3">·</span>
-        </div>
+          <div v-if="suggesting && !message.suggestedQuestions?.length" class="suggesting-dots">
+            <span class="suggesting-text">正在生成后续学习建议</span>
+            <span class="dot dot-1">·</span>
+            <span class="dot dot-2">·</span>
+            <span class="dot dot-3">·</span>
+          </div>
 
-        <KnowledgeCard
-          v-if="message.suggestedQuestions?.length"
-          :questions="message.suggestedQuestions"
-          @select="$emit('selectQuestion', $event)"
-        />
-      </template>
+          <KnowledgeCard
+            v-if="message.suggestedQuestions?.length"
+            :questions="message.suggestedQuestions"
+            @select="$emit('selectQuestion', $event)"
+          />
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -117,37 +123,91 @@ const renderedContent = computed(() => renderMath(renderMarkdown(props.message.c
 </script>
 
 <style scoped>
-.chat-message { display: flex; gap: 12px; margin: 0 auto 24px; max-width: 880px; }
+.chat-message {
+  display: flex;
+  width: min(100%, 980px);
+  gap: 14px;
+  align-items: flex-start;
+  margin: 0 auto 22px;
+}
 .chat-message.user { flex-direction: row-reverse; }
+.message-content { min-width: 0; flex: 1; }
+.chat-message.user .message-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: min(72%, 620px);
+}
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  margin: 0 0 6px 2px;
+  color: #7b8798;
+  font-size: 11px;
+}
+.assistant-name {
+  color: var(--workspace-primary);
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.message-mode {
+  padding: 2px 7px;
+  border: 1px solid #d6eee9;
+  border-radius: 999px;
+  color: var(--workspace-accent);
+  background: var(--workspace-accent-soft);
+}
 .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  margin-top: 2px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.chat-message.user .avatar { background: #21469b; color: #fff; }
-.chat-message.assistant .avatar { border: 1px solid #dfe5ed; background: #fff; color: #526078; }
+.chat-message.user .avatar {
+  background: linear-gradient(135deg, var(--workspace-primary), #315ab2);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(33, 70, 155, .18);
+}
+.chat-message.assistant .avatar {
+  border: 1px solid var(--workspace-primary-border);
+  background: linear-gradient(180deg, #f1f5ff, #eaf8f5);
+  color: var(--workspace-primary);
+}
 .bubble {
-  max-width: 78%;
-  padding: 11px 15px;
-  border-radius: 9px;
+  width: 100%;
+  max-width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
   line-height: 1.7;
   font-size: 14px;
   word-break: break-word;
 }
-.bubble.agent-bubble { width: min(760px, 82%); max-width: 82%; }
-.chat-message.user .bubble { background: #10182b; color: #fff; border-top-right-radius: 3px; }
-.chat-message.assistant .bubble { padding: 3px 0; background: transparent; color: #303846; }
+.chat-message.assistant .bubble { color: #273348; }
+.chat-message.assistant .bubble.agent-bubble { width: 100%; }
+.chat-message.user .bubble {
+  width: fit-content;
+  background: linear-gradient(135deg, var(--workspace-primary), #315ab2);
+  color: #fff;
+  border-color: transparent;
+  border-top-right-radius: 5px;
+  box-shadow: 0 5px 14px rgba(33, 70, 155, .16);
+}
 .typing { display: flex; gap: 4px; padding: 4px 0; }
 .typing .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c4cc; animation: bounce 1.4s infinite ease-in-out; }
 .typing .dot:nth-child(1) { animation-delay: -0.32s; }
 .typing .dot:nth-child(2) { animation-delay: -0.16s; }
 @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
 
-.reasoning-section { margin-bottom: 12px; border: 1px solid #e2e7ef; border-radius: 8px; background: #f8f9fb; }
+.reasoning-section { margin-bottom: 14px; border: 1px solid #e2e7ef; border-radius: 11px; background: #f8faff; overflow: hidden; }
 .reasoning-header {
   width: 100%;
   display: flex;
@@ -158,10 +218,10 @@ const renderedContent = computed(() => renderMath(renderMarkdown(props.message.c
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  color: #909399;
+  color: #64748b;
   font-weight: 500;
 }
-.reasoning-header:hover { background: #f5f7fa; }
+.reasoning-header:hover { background: #eef3fa; }
 .thinking-indicator { font-size: 12px; color: #909399; animation: pulse 1.5s ease-in-out infinite; }
 .reasoning-content { padding: 0 12px 12px; }
 .reasoning-content pre {
@@ -178,22 +238,32 @@ const renderedContent = computed(() => renderMath(renderMarkdown(props.message.c
 }
 @keyframes pulse { 50% { opacity: 0.4; } }
 
-.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3), .markdown-body :deep(h4) { margin: 12px 0 8px; font-weight: 600; }
+.markdown-body { min-width: 0; }
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3), .markdown-body :deep(h4) { margin: 14px 0 9px; color: var(--workspace-heading); font-weight: 700; line-height: 1.35; }
 .markdown-body :deep(h1) { font-size: 1.4em; }
 .markdown-body :deep(h2) { font-size: 1.2em; }
 .markdown-body :deep(h3) { font-size: 1.1em; }
-.markdown-body :deep(p) { margin: 8px 0; }
+.markdown-body :deep(p) { margin: 9px 0; }
 .markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 20px; margin: 8px 0; }
 .markdown-body :deep(li) { margin: 4px 0; }
-.markdown-body :deep(code) { background: #e8e8e8; padding: 2px 6px; border-radius: 4px; font-family: Consolas, Monaco, monospace; font-size: 0.9em; }
-.markdown-body :deep(pre) { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+.markdown-body :deep(code) { background: #edf3ff; color: #21469b; padding: 2px 6px; border-radius: 5px; font-family: Consolas, Monaco, monospace; font-size: 0.9em; }
+.markdown-body :deep(pre) { background: #172033; color: #dbeafe; padding: 14px; border-radius: 10px; overflow-x: auto; margin: 12px 0; }
 .markdown-body :deep(pre code) { background: none; padding: 0; color: inherit; font-size: 0.85em; }
-.markdown-body :deep(blockquote) { border-left: 3px solid #21469b; padding-left: 12px; margin: 8px 0; color: #606266; }
-.markdown-body :deep(table) { border-collapse: collapse; margin: 8px 0; width: 100%; }
-.markdown-body :deep(th), .markdown-body :deep(td) { border: 1px solid #e4e7ed; padding: 8px 12px; text-align: left; }
-.markdown-body :deep(th) { background: #f5f7fa; font-weight: 600; }
-.markdown-body :deep(a) { color: #21469b; text-decoration: none; }
-@media (max-width: 700px) { .bubble, .bubble.agent-bubble { max-width: 88%; width: auto; } }
+.markdown-body :deep(blockquote) { border-left: 3px solid var(--workspace-primary); padding-left: 12px; margin: 8px 0; color: #606266; }
+.markdown-body :deep(table) { border-collapse: separate; border-spacing: 0; margin: 12px 0; width: 100%; overflow: hidden; border: 1px solid var(--workspace-border); border-radius: 10px; }
+.markdown-body :deep(th), .markdown-body :deep(td) { border-right: 1px solid #e4e7ed; border-bottom: 1px solid #e4e7ed; padding: 9px 12px; text-align: left; }
+.markdown-body :deep(th:last-child), .markdown-body :deep(td:last-child) { border-right: 0; }
+.markdown-body :deep(tr:last-child td) { border-bottom: 0; }
+.markdown-body :deep(th) { background: #f4f7fb; color: var(--workspace-heading); font-weight: 700; }
+.markdown-body :deep(a) { color: var(--workspace-primary); text-decoration: none; }
+@media (max-width: 700px) {
+  .chat-message { width: 100%; gap: 10px; margin-bottom: 18px; }
+  .chat-message.user .message-content { max-width: 84%; }
+  .bubble, .chat-message.assistant .bubble.agent-bubble { width: 100%; padding: 13px 14px; }
+  .chat-message.user .bubble { width: fit-content; }
+  .message-meta { margin-bottom: 4px; }
+  .markdown-body :deep(table) { display: block; overflow-x: auto; white-space: nowrap; }
+}
 .markdown-body :deep(a:hover) { text-decoration: underline; }
 .markdown-body :deep(.katex-display) { margin: 8px 0; overflow-x: auto; }
 

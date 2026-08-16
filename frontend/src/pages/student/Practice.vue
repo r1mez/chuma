@@ -340,19 +340,37 @@
           <div v-else class="assistant-tab-content">
           <div class="scroll-area">
             <div v-if="showSimilarQuestions">
-              <ul class="similar-list" v-if="similarQuestions.length > 0">
-                <li v-for="sim in similarQuestions" :key="sim.id" class="similar-item">
+              <div v-if="similarLoading" class="similar-state">
+                <div class="spinner-ring small"></div>
+                <span>正在根据本题推荐练习...</span>
+              </div>
+              <ul class="similar-list" v-else-if="similarQuestions.length > 0">
+                <li
+                  v-for="sim in similarQuestions"
+                  :key="sim.question_id"
+                  class="similar-item"
+                  tabindex="0"
+                  @click="openSimilarQuestion(sim)"
+                  @keydown.enter="openSimilarQuestion(sim)"
+                >
                   <span class="dot"></span>
-                  <span class="text">{{ sim.title }}</span>
-                  <el-button size="small" type="success" plain class="go-btn">去练习</el-button>
+                  <div class="similar-body">
+                    <span class="text">{{ sim.question_description }}</span>
+                    <span class="similar-meta">
+                      <span v-if="sim.kg_node_name">{{ sim.kg_node_name }}</span>
+                      <span>{{ questionTypeLabel(sim.question_type) }}</span>
+                      <span>难度 {{ sim.question_difficulty }}</span>
+                    </span>
+                  </div>
+                  <el-button size="small" type="success" plain class="go-btn" @click.stop="openSimilarQuestion(sim)">去练习</el-button>
                 </li>
               </ul>
-              <div v-else style="font-size: 0.9rem; color: #7f8c8d; margin-top: 8px;">
-                （同类题型推荐功能尚未实现，暂时留白）
+              <div v-else class="similar-state">
+                <span>暂无匹配的同类题，请先完成更多练习。</span>
               </div>
             </div>
             <div class="flex items-center justify-center h-full" v-else>
-              <el-button type="success" plain @click="triggerSimilarQuestions" :disabled="!isAnswerSubmitted">
+              <el-button type="success" plain @click="triggerSimilarQuestions" :disabled="!isAnswerSubmitted || similarLoading">
                 {{ isAnswerSubmitted ? '举一反三' : '请先提交答案' }}
               </el-button>
             </div>
@@ -375,6 +393,7 @@ import BorderGlow from '@/components/BorderGlow.vue'
 import {
   fetchQuestions,
   fetchQuestionById,
+  fetchSimilarQuestions,
   submitExerciseRecord,
   fetchSocraticHint,
   type Question,
@@ -423,7 +442,8 @@ const emptyQuestionMessage = computed(() => (
 // AI 分析与解惑（双维度：题目答案深度剖析 + 知识图谱局部网络视角）
 const aiAnalysis = ref<QuestionAnalysisResult | null>(null)
 const aiLoading = ref(false)
-const similarQuestions = ref<any[]>([])
+const similarQuestions = ref<Question[]>([])
+const similarLoading = ref(false)
 
 const elapsedSeconds = ref(0)
 const hintLevel = ref(1)
@@ -689,9 +709,47 @@ const triggerAiAnalysis = async () => {
   }
 }
 
-const triggerSimilarQuestions = () => {
+const questionTypeLabel = (questionType: string) => {
+  const labels: Record<string, string> = {
+    single_choice: '单选题',
+    choice: '单选题',
+    multiple_choice: '多选题',
+    true_false: '判断题',
+    T_or_F: '判断题',
+    fill_blanks: '填空题',
+    Fill_blanks: '填空题',
+    fill_Blanks: '填空题',
+    Q_A: '简答题',
+    q_a: '简答题',
+  }
+  return labels[questionType] || questionType
+}
+
+const triggerSimilarQuestions = async () => {
+  if (!currentQuestion.value || !isAnswerSubmitted.value || similarLoading.value) return
+
   activeAssistantTab.value = 'similar'
   showSimilarQuestions.value = true
+  similarQuestions.value = []
+  similarLoading.value = true
+  try {
+    similarQuestions.value = await fetchSimilarQuestions(currentQuestion.value.question_id)
+  } catch (error) {
+    console.error('获取同类题推荐失败:', error)
+    ElMessage.error('同类题推荐暂时不可用，请稍后重试')
+  } finally {
+    similarLoading.value = false
+  }
+}
+
+const openSimilarQuestion = (question: Question) => {
+  questions.value = [question]
+  currentIndex.value = 0
+  cachedIdList.value = []
+  cachedIndex.value = 0
+  resetAnswer()
+  activeAssistantTab.value = 'analysis'
+  ElMessage.success('已切换至推荐题目')
 }
 
 const resetAnswer = () => {
@@ -701,6 +759,8 @@ const resetAnswer = () => {
   isAnswerSubmitted.value = false
   showAiAnalysis.value = false
   showSimilarQuestions.value = false
+  similarQuestions.value = []
+  similarLoading.value = false
   activeAssistantTab.value = 'analysis'
   aiAnalysis.value = null
   aiLoading.value = false
@@ -996,6 +1056,20 @@ h3 {
   background: rgba(255, 255, 255, 0.4);
   padding: 8px 12px;
   border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.similar-item:hover,
+.similar-item:focus-visible {
+  background: rgba(255, 255, 255, 0.78);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.18);
+}
+
+.similar-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .similar-item .dot {
@@ -1008,12 +1082,40 @@ h3 {
 }
 
 .similar-item .text {
-  flex: 1;
+  display: block;
   font-size: 0.9rem;
   color: #333;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.similar-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.similar-state {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.spinner-ring.spinner-ring.small {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
 }
 
 .go-btn {

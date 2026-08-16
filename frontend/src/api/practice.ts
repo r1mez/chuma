@@ -91,6 +91,13 @@ export const fetchQuestionById = (questionId: number): Promise<Question> => {
   return request.get<Question>(`/practice/questions/${questionId}`)
 }
 
+/** 获取当前题目的同类练习推荐 */
+export const fetchSimilarQuestions = (questionId: number, limit = 5): Promise<Question[]> => {
+  return request.get<Question[]>(`/practice/questions/${questionId}/similar`, {
+    params: { limit }
+  })
+}
+
 /** 提交答案并存储做题记录 */
 export const submitExerciseRecord = (data: ExerciseRecordCreate): Promise<ExerciseRecord> => {
   return request.post<ExerciseRecord>('/practice/submit', data)

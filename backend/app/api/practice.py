@@ -39,6 +39,25 @@ async def list_questions(
     return await service.list_questions(db, course_id, kg_node_name, difficulty)
 
 
+@router.get("/questions/{question_id}/similar", response_model=list[QuestionResponse])
+async def get_similar_questions(
+    question_id: int,
+    limit: int = Query(5, ge=1, le=10),
+    current_user: dict = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PracticeService()
+    result = await service.get_similar_questions(
+        question_id=question_id,
+        stu_id=current_user.get("id"),
+        limit=limit,
+        db=db,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="题目不存在")
+    return result
+
+
 @router.get("/questions/{question_id}", response_model=QuestionResponse)
 async def get_question(question_id: int, db: AsyncSession = Depends(get_db)):
     service = PracticeService()

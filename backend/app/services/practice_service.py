@@ -68,6 +68,77 @@ class PracticeService:
             return None
         return QuestionResponse.model_validate(question)
 
+    async def get_similar_questions(
+        self,
+        question_id: int,
+        stu_id: Optional[int],
+        limit: int,
+        db: AsyncSession,
+    ) -> Optional[list[QuestionResponse]]:
+        """Return question-bank recommendations for a practice question.
+
+        Recommendations stay within the same course and are ranked by the
+        strongest learning signals available in the current schema:
+        knowledge-point match, question-type match, unseen-by-student, and
+        difficulty proximity. The current question is always excluded.
+        """
+        current_result = await db.execute(
+            select(Question).where(Question.question_id == question_id)
+        )
+        current_question = current_result.scalar_one_or_none()
+        if current_question is None:
+            return None
+
+        candidates_result = await db.execute(
+            select(Question).where(
+                Question.course_id == current_question.course_id,
+                Question.question_id != current_question.question_id,
+            )
+        )
+        candidates = list(candidates_result.scalars().all())
+
+        attempted_ids: set[int] = set()
+        if stu_id is not None:
+            attempted_result = await db.execute(
+                select(ExerciseRecord.question_id).where(
+                    ExerciseRecord.stu_id == stu_id,
+                    ExerciseRecord.course_id == current_question.course_id,
+                )
+            )
+            attempted_ids = {
+                int(candidate_id)
+                for candidate_id in attempted_result.scalars().all()
+                if candidate_id is not None
+            }
+
+        current_difficulty = current_question.question_difficulty
+
+        def recommendation_key(candidate: Question) -> tuple[int, int, int, int, int]:
+            same_knowledge_point = int(
+                bool(
+                    current_question.kg_node_name
+                    and candidate.kg_node_name == current_question.kg_node_name
+                )
+            )
+            same_question_type = int(
+                candidate.question_type == current_question.question_type
+            )
+            is_unseen = int(candidate.question_id not in attempted_ids)
+            difficulty_distance = abs(candidate.question_difficulty - current_difficulty)
+            return (
+                -same_knowledge_point,
+                -same_question_type,
+                -is_unseen,
+                difficulty_distance,
+                int(candidate.question_id),
+            )
+
+        candidates.sort(key=recommendation_key)
+        return [
+            QuestionResponse.model_validate(candidate)
+            for candidate in candidates[:limit]
+        ]
+
     async def submit_exercise(
         self, stu_id: int, data: ExerciseRecordCreate, db: AsyncSession
     ) -> ExerciseRecordResponse:

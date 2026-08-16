@@ -30,16 +30,17 @@
           </div>
           <div class="flex items-center justify-between">
             <span>班级 AI 评级</span>
-            <span class="font-semibold text-emerald-600">A</span>
+            <span class="font-semibold" :class="classRatingColor">{{ classRatingLabel }}</span>
           </div>
           <div class="flex items-center justify-between">
-            <span>最近一次平均分</span>
-            <span class="font-semibold text-slate-900">82.5</span>
+            <span>最近作答平均分</span>
+            <span class="font-semibold text-slate-900">{{ latestAverageScoreLabel }}</span>
           </div>
           <div class="flex items-center justify-between">
             <span>知识点平均掌握度</span>
-            <span class="font-semibold text-sky-600">78%</span>
+            <span class="font-semibold text-sky-600">{{ averageMasteryLabel }}</span>
           </div>
+          <p v-if="classSummaryError" class="mt-3 text-xs text-amber-600">{{ classSummaryError }}</p>
         </div>
       </el-card>
 
@@ -437,6 +438,7 @@ import { PieChart, Share, ZoomIn, ZoomOut, Refresh, Close, Loading, WarningFille
 import * as echarts from 'echarts'
 import {
   getClassStudents,
+  getClassSummary,
   getClassTeachingSuggestion,
   getDifficultChapters,
   getDifficultKnowledge,
@@ -444,6 +446,7 @@ import {
   getTeacherClasses,
   getTeacherCourses,
   type ClassStudent,
+  type ClassSummary,
   type ClassTeachingSuggestion,
   type DifficultChapter,
   type DifficultKnowledgePoint,
@@ -461,6 +464,10 @@ const selectedCourse = ref<number | null>(null)
 const classList = ref<TeacherClass[]>([])
 const courseList = ref<TeacherCourse[]>([])
 const studentList = ref<ClassStudent[]>([])
+const classSummary = ref<ClassSummary | null>(null)
+const classSummaryLoading = ref(false)
+const classSummaryError = ref('')
+let classSummaryRequestId = 0
 const wordCloudList = ref<DifficultKnowledgePoint[]>([])
 const difficultChapterList = ref<DifficultChapter[]>([])
 const studentDialogVisible = ref(false)
@@ -905,7 +912,44 @@ const currentClassName = computed(() => {
   return current?.class_name ?? '--'
 })
 
+const classRatingLabel = computed(() => (
+  classSummaryLoading.value
+    ? '加载中'
+    : classSummary.value?.class_rating || '--'
+))
+
+const classRatingColor = computed(() => {
+  switch (classSummary.value?.class_rating) {
+    case 'A': return 'text-emerald-600'
+    case 'B': return 'text-sky-600'
+    case 'C': return 'text-amber-500'
+    default: return 'text-slate-500'
+  }
+})
+
+const latestAverageScoreLabel = computed(() => {
+  if (classSummaryLoading.value) return '加载中'
+  const score = classSummary.value?.latest_average_score
+  return score === null || score === undefined ? '--' : score.toFixed(1)
+})
+
+const averageMasteryLabel = computed(() => {
+  if (classSummaryLoading.value) return '加载中'
+  const mastery = classSummary.value?.average_mastery
+  return mastery === null || mastery === undefined
+    ? '--'
+    : `${Math.round(mastery * 100)}%`
+})
+
 const currentClassStudentCount = computed(() => {
+  if (
+    classSummary.value
+    && classSummary.value.class_id === selectedClass.value
+    && classSummary.value.course_id === selectedCourse.value
+    && classSummary.value.student_count !== undefined
+  ) {
+    return classSummary.value.student_count
+  }
   const current = classList.value.find((item) => item.class_id === selectedClass.value)
   if (!current) return '--'
   return current.student_count ?? current.classmates_num ?? '--'
@@ -947,6 +991,37 @@ const loadStudents = async () => {
   }
 }
 
+const loadClassSummary = async () => {
+  const requestId = ++classSummaryRequestId
+  if (selectedClass.value === null || selectedCourse.value === null) {
+    classSummary.value = null
+    classSummaryError.value = ''
+    classSummaryLoading.value = false
+    return
+  }
+
+  classSummaryLoading.value = true
+  classSummary.value = null
+  classSummaryError.value = ''
+  try {
+    const data = await getClassSummary(selectedClass.value, selectedCourse.value)
+    if (requestId !== classSummaryRequestId) return
+    if (data.status === 'no_access') {
+      classSummaryError.value = '当前教师无权访问该班级或学科'
+      return
+    }
+    classSummary.value = data
+  } catch (error) {
+    if (requestId !== classSummaryRequestId) return
+    console.error('加载班级统计指标失败:', error)
+    classSummaryError.value = '班级统计指标暂时不可用'
+  } finally {
+    if (requestId === classSummaryRequestId) {
+      classSummaryLoading.value = false
+    }
+  }
+}
+
 const renderWordCloud = async () => {
   wordCloudReady.value = false
   await nextTick()
@@ -981,7 +1056,12 @@ const loadWordCloud = async () => {
 }
 
 const loadDashboardData = async () => {
-  await Promise.all([loadStudents(), loadWordCloud(), loadDifficultChapters()])
+  await Promise.all([
+    loadStudents(),
+    loadClassSummary(),
+    loadWordCloud(),
+    loadDifficultChapters(),
+  ])
 }
 
 const renderChapterChart = async () => {

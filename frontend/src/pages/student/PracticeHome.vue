@@ -33,7 +33,7 @@ const loading = ref(true)
 const practiceModules = ref([
   { id: 'placeholder-1', name: '学科1', isPlaceholder: true },
   { id: 'placeholder-2', name: '学科2', isPlaceholder: true },
-  { id: 'exam', name: '作业与考试', isPlaceholder: true },
+  { id: 'exam', name: '作业与考试', isPlaceholder: false },
   { id: 'placeholder-3', name: '学科3', isPlaceholder: true },
   { id: 'placeholder-4', name: '学科4', isPlaceholder: true },
   { id: 'special', name: '专项练习', isPlaceholder: true }
@@ -65,6 +65,10 @@ onMounted(async () => {
 })
 
 const navigateToPanel = (module: any) => {
+  if (module.id === 'exam') {
+    router.push('/student/assignments')
+    return
+  }
   if (module.isPlaceholder) {
     ElMessage.warning('功能开发中，敬请期待')
     return

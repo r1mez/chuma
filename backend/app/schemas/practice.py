@@ -34,6 +34,7 @@ class QuestionResponse(BaseModel):
 class ExerciseRecordCreate(BaseModel):
     question_id: int
     course_id: int
+    assignment_id: Optional[int] = None
     kg_node_name: Optional[str] = None
     question_type: str
     question_difficulty: int

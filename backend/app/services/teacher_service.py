@@ -3,7 +3,7 @@ import logging
 from typing import List
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -188,6 +188,114 @@ class TeacherService:
             }
             for stu_id, stu_name, stu_level, course_process in rows
         ]
+
+    async def get_class_summary(
+        self, tea_id: int, class_id: int, course_id: int, db: AsyncSession
+    ) -> dict:
+        """Return real KPI values for the teacher class dashboard.
+
+        There is currently no assignment-batch table, so the score KPI is
+        calculated from each student's latest submitted question in the
+        selected course. Objective answers are normalized to 0/100 and
+        subjective scores (stored on a 0-10 scale) are normalized to 0/100.
+        """
+        if not await self._teacher_has_access_to_class_and_course(
+            tea_id, class_id, course_id, db
+        ):
+            return {
+                "status": "no_access",
+                "class_id": class_id,
+                "course_id": course_id,
+            }
+
+        student_count_result = await db.execute(
+            select(func.count(Student.stu_id)).where(Student.class_id == class_id)
+        )
+        student_count = int(student_count_result.scalar_one() or 0)
+
+        mastery_result = await db.execute(
+            select(
+                func.avg(StudentCourseMastery.course_process),
+                func.count(StudentCourseMastery.stu_id),
+            )
+            .join(Student, Student.stu_id == StudentCourseMastery.stu_id)
+            .where(
+                Student.class_id == class_id,
+                StudentCourseMastery.course_id == course_id,
+                StudentCourseMastery.course_process.isnot(None),
+            )
+        )
+        average_mastery, mastery_sample_count = mastery_result.one()
+
+        # Use the latest record per student, rather than averaging repeated
+        # retries from the same student.
+        latest_record_ids = (
+            select(func.max(ExerciseRecord.do_id).label("latest_do_id"))
+            .join(Student, Student.stu_id == ExerciseRecord.stu_id)
+            .where(
+                Student.class_id == class_id,
+                ExerciseRecord.course_id == course_id,
+            )
+            .group_by(ExerciseRecord.stu_id)
+        )
+        normalized_score = case(
+            (ExerciseRecord.do_score.isnot(None), ExerciseRecord.do_score * 10.0),
+            (ExerciseRecord.do_isTrue.is_(True), 100.0),
+            (ExerciseRecord.do_isTrue.is_(False), 0.0),
+            else_=None,
+        )
+        score_result = await db.execute(
+            select(func.avg(normalized_score), func.count(ExerciseRecord.do_id)).where(
+                ExerciseRecord.do_id.in_(latest_record_ids)
+            )
+        )
+        latest_average_score, score_sample_count = score_result.one()
+
+        level_result = await db.execute(
+            select(Student.stu_level).where(
+                Student.class_id == class_id,
+                Student.stu_level.isnot(None),
+            )
+        )
+        level_points = {"A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
+        rated_levels = [
+            level_points[str(level).strip().upper()]
+            for level in level_result.scalars().all()
+            if str(level).strip().upper() in level_points
+        ]
+        rating_average = (
+            sum(rated_levels) / len(rated_levels) if rated_levels else None
+        )
+        class_rating = None
+        if rating_average is not None:
+            class_rating = (
+                "A" if rating_average >= 4.5
+                else "B" if rating_average >= 3.5
+                else "C" if rating_average >= 2.5
+                else "D" if rating_average >= 1.5
+                else "E"
+            )
+
+        return {
+            "status": "ok",
+            "class_id": class_id,
+            "course_id": course_id,
+            "student_count": student_count,
+            "class_rating": class_rating,
+            "latest_average_score": (
+                round(float(latest_average_score), 1)
+                if latest_average_score is not None
+                else None
+            ),
+            "average_mastery": (
+                round(float(average_mastery), 4)
+                if average_mastery is not None
+                else None
+            ),
+            "rated_student_count": len(rated_levels),
+            "score_sample_count": int(score_sample_count or 0),
+            "mastery_sample_count": int(mastery_sample_count or 0),
+        }
 
     async def get_difficult_knowledge_points(
         self, tea_id: int, class_id: int, course_id: int, db: AsyncSession

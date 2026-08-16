@@ -25,6 +25,7 @@ const router = createRouter({
         { path: 'dashboard', component: () => import('@/pages/student/Dashboard.vue') },
         { path: 'knowledge', component: () => import('@/pages/student/KnowledgeExplore.vue') },
         { path: 'practice', component: () => import('@/pages/student/PracticeHome.vue') },
+        { path: 'assignments', component: () => import('@/pages/student/Assignments.vue') },
         { path: 'practice/panel', component: () => import('@/pages/student/Practice.vue') },
         { path: 'exercise-records', component: () => import('@/pages/student/ExerciseRecords.vue') },
         { path: 'subject-records', component: () => import('@/pages/student/SubjectRecords.vue') },
@@ -50,6 +51,7 @@ const router = createRouter({
         { path: 'interactive', component: () => import('@/pages/teacher/InteractiveZone.vue') },
         { path: 'subject', component: () => import('@/pages/teacher/SubjectManage.vue') },
         { path: 'kg-manage', component: () => import('@/pages/teacher/KnowledgeGraphManage.vue') },
+        { path: 'assignments', component: () => import('@/pages/teacher/AssignmentManage.vue') },
       ],
     },
 

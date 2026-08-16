@@ -26,6 +26,19 @@ export interface ClassStudent {
   course_process: number | null
 }
 
+export interface ClassSummary {
+  status: 'ok' | 'no_access'
+  class_id: number
+  course_id: number
+  student_count?: number
+  class_rating?: string | null
+  latest_average_score?: number | null
+  average_mastery?: number | null
+  rated_student_count?: number
+  score_sample_count?: number
+  mastery_sample_count?: number
+}
+
 export interface DifficultKnowledgePoint {
   name: string
   count: number
@@ -74,6 +87,12 @@ export function getTeacherClasses() {
 
 export function getClassStudents(classId: number, courseId: number) {
   return request.get<ClassStudent[]>(`/teacher/classes/${classId}/students`, {
+    params: { course_id: courseId },
+  })
+}
+
+export function getClassSummary(classId: number, courseId: number) {
+  return request.get<ClassSummary>(`/teacher/classes/${classId}/summary`, {
     params: { course_id: courseId },
   })
 }

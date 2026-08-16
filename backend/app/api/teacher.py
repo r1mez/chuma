@@ -1,12 +1,14 @@
 """Teacher management routes."""
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.services.teacher_service import TeacherService
+from app.services.assignment_service import AssignmentService
+from app.schemas.assignment import AssignmentCreate
 
 router = APIRouter()
 
@@ -64,6 +66,21 @@ async def list_class_students(
 
     service = TeacherService()
     return await service.get_class_students(current_user["id"], class_id, course_id, db)
+
+
+@router.get("/classes/{class_id}/summary")
+async def get_class_summary(
+    class_id: int,
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return KPI data for the selected teacher class and course."""
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可访问班级学情")
+
+    service = TeacherService()
+    return await service.get_class_summary(current_user["id"], class_id, course_id, db)
 
 
 @router.get("/classes/{class_id}/difficult-knowledge")
@@ -169,12 +186,85 @@ async def get_student_profile(student_id: int):
 
 
 @router.post("/assignments")
-async def create_assignment():
+async def create_assignment(
+    data: AssignmentCreate,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Publish an assignment or exam."""
-    pass
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可以布置作业")
+    try:
+        return await AssignmentService().create(current_user["id"], data, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/assignments")
+async def list_assignments(
+    class_id: int | None = None,
+    course_id: int | None = None,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List assignments published by the current teacher."""
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可以访问作业")
+    return await AssignmentService().list_for_teacher(
+        tea_id=current_user["id"],
+        class_id=class_id,
+        course_id=course_id,
+        db=db,
+    )
+
+
+@router.get("/assignment-recommendations")
+async def list_assignment_recommendations(
+    class_id: int,
+    course_id: int,
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recommend question-bank items for a class using class mastery and DyGKT/RRF."""
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可以访问作业推荐")
+    try:
+        return await AssignmentService().get_recommendations(
+            tea_id=current_user["id"],
+            class_id=class_id,
+            course_id=course_id,
+            db=db,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.get("/assignments/{assignment_id}")
+async def get_assignment(
+    assignment_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可以访问作业详情")
+    try:
+        return await AssignmentService().get_teacher_detail(current_user["id"], assignment_id, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/assignments/{assignment_id}/results")
-async def get_assignment_results(assignment_id: int):
+async def get_assignment_results(
+    assignment_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get assignment grading results."""
-    pass
+    if current_user["user_type"] != "teacher":
+        raise HTTPException(status_code=403, detail="仅教师可以访问作业结果")
+    try:
+        return await AssignmentService().get_results(current_user["id"], assignment_id, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

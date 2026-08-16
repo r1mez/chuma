@@ -18,6 +18,7 @@ from app.schemas.practice import (
 from app.schemas.course import CourseResponse
 from app.services.practice_service import PracticeService
 from app.services.course_service import CourseService
+from app.services.assignment_service import AssignmentService
 
 router = APIRouter()
 
@@ -76,7 +77,27 @@ async def submit_answer(
     stu_id = current_user.get("id")
     service = PracticeService()
     try:
-        return await service.submit_exercise(stu_id, data, db)
+        if data.assignment_id is not None:
+            if current_user.get("user_type") != "student":
+                raise HTTPException(status_code=403, detail="仅学生可以提交作业")
+            await AssignmentService().validate_student_question(
+                stu_id=stu_id,
+                assignment_id=data.assignment_id,
+                question_id=data.question_id,
+                db=db,
+            )
+        result = await service.submit_exercise(stu_id, data, db)
+        if data.assignment_id is not None:
+            await AssignmentService().upsert_submission(
+                assignment_id=data.assignment_id,
+                stu_id=stu_id,
+                question_id=data.question_id,
+                exercise_record_id=result.do_id,
+                do_score=result.do_score,
+                do_is_true=result.do_isTrue,
+                db=db,
+            )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

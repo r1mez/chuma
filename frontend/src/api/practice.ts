@@ -26,6 +26,7 @@ export interface Question {
 export interface ExerciseRecordCreate {
   question_id: number;
   course_id: number;
+  assignment_id?: number;
   kg_node_name?: string;
   question_type: string;
   question_difficulty: number;

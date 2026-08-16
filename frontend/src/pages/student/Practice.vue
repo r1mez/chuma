@@ -401,6 +401,7 @@ import {
 } from '@/api/practice'
 import { fetchQuestionAnalysis, type QuestionAnalysisResult } from '@/api/questionAnalysis'
 import { useAuthStore } from '@/stores/auth'
+import { fetchStudentAssignment } from '@/api/assignments'
 
 const route = useRoute()
 const router = useRouter()
@@ -434,6 +435,12 @@ const questionProgress = computed(() => (
 const practiceNodeName = computed(() => {
   const value = route.query.kgNodeName
   return typeof value === 'string' ? value.trim() : ''
+})
+const assignmentId = computed(() => {
+  const value = route.query.assignmentId
+  if (typeof value !== 'string') return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
 })
 const emptyQuestionMessage = computed(() => (
   practiceNodeName.value ? `暂无“${practiceNodeName.value}”对应的题目` : '暂无题目'
@@ -503,14 +510,31 @@ onMounted(async () => {
   const kgNodeName = practiceNodeName.value || undefined
   const questionId = questionIdStr ? parseInt(questionIdStr, 10) : undefined
 
-  if (!courseId && !questionId && !kgNodeName) {
+  if (!courseId && !questionId && !kgNodeName && !assignmentId.value) {
     ElMessage.warning('未选择学科或题目')
     loading.value = false
     return
   }
 
   try {
-    if (idListStr) {
+    if (assignmentId.value) {
+      const assignment = await fetchStudentAssignment(assignmentId.value)
+      const assignmentQuestionIds = (assignment.questions || []).map(question => question.question_id)
+      if (assignmentQuestionIds.length === 0) {
+        ElMessage.warning('该作业暂无题目')
+        loading.value = false
+        return
+      }
+      cachedIdList.value = assignmentQuestionIds
+      cachedIndex.value = 0
+      const question = await fetchQuestionById(assignmentQuestionIds[0])
+      if (question) {
+        questions.value = [question]
+        currentIndex.value = 0
+      } else {
+        ElMessage.error('作业题目加载失败')
+      }
+    } else if (idListStr) {
       // 从仪表盘跳转：携带了全量 ID 列表和随机索引（全量 ID 数组缓存法）
       const idList = idListStr.split(',').map(Number).filter(id => !isNaN(id))
       const randomIndex = randomIndexStr ? parseInt(randomIndexStr, 10) : 0
@@ -636,6 +660,7 @@ const submitAnswer = async () => {
     await submitExerciseRecord({
       question_id: currentQuestion.value.question_id,
       course_id: currentQuestion.value.course_id,
+      assignment_id: assignmentId.value,
       kg_node_name: currentQuestion.value.kg_node_name || undefined,
       question_type: currentQuestion.value.question_type,
       question_difficulty: currentQuestion.value.question_difficulty,

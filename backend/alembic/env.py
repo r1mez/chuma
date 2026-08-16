@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.config import settings
 
 # 导入所有模型，确保 Base.metadata 包含所有表定义
-from app.models import kg_graph, user, knowledge, learning, question, teacher, course, exercise_record, assignment  # noqa: F401
+from app.models import kg_graph, user, knowledge, learning, question, teacher, course, exercise_record, assignment, lesson_plan  # noqa: F401
 
 from app.core.database import Base
 

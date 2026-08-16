@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI
 
-from app.api import analysis, chat, class_teaching, gnn, kg, learning_plan, next_knowledge, question_analysis, qa_score
+from app.api import analysis, chat, class_teaching, gnn, kg, learning_plan, lesson_plan, next_knowledge, question_analysis, qa_score
 from app.agent.router import router as agent_router
 from app.config import settings
 from app.dependencies import verify_service_token
@@ -74,6 +74,7 @@ app.include_router(next_knowledge.router, prefix="/analysis", tags=["下一知�
 
 # 班级教学建议路由（教师端，三维度评估）
 app.include_router(class_teaching.router, prefix="/analysis", tags=["班级教学建议"], dependencies=auth_dep)
+app.include_router(lesson_plan.router, prefix="/lesson-plans", tags=["教案生成"], dependencies=auth_dep)
 
 # AI 题目分析与解惑路由（双维度：题目答案深度剖析 + 知识图谱局部网络视角）
 app.include_router(question_analysis.router, prefix="/analysis", tags=["AI 题目分析"], dependencies=auth_dep)

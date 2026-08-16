@@ -4,6 +4,7 @@ from app.agent import tools as _builtin_tools  # noqa: F401 - load local tools
 from app.agent.class_teaching_agent import ClassTeachingAgent
 from app.agent.context import AgentContext
 from app.agent.learning_plan_agent import LearningPlanAgent
+from app.agent.lesson_plan_agent import LessonPlanAgent, execute_lesson_plan
 from app.agent.orchestrator import AgentOrchestrator
 from app.agent.qa_score_agent import QaScoreAgent
 from app.agent.question_analysis_agent import QuestionAnalysisAgent
@@ -47,6 +48,13 @@ def _build_class_teaching_suggestion(
     llm: LLMClient,
 ) -> ClassTeachingAgent:
     return ClassTeachingAgent(llm_client=llm)
+
+
+def _build_teacher_lesson_plan(
+    context: AgentContext,
+    llm: LLMClient,
+) -> LessonPlanAgent:
+    return LessonPlanAgent(llm_client=llm)
 
 
 def _build_student_analysis(context: AgentContext, llm: LLMClient) -> StuAnalysisAgent:
@@ -129,6 +137,14 @@ async def _execute_class_teaching_suggestion(
     )
 
 
+async def _execute_teacher_lesson_plan(
+    context: AgentContext,
+    llm: LLMClient,
+    payload: dict,
+):
+    return await execute_lesson_plan(context, llm, payload)
+
+
 def register_builtin_agents() -> None:
     definitions = {
         "student.tutor": AgentDefinition(
@@ -191,6 +207,15 @@ def register_builtin_agents() -> None:
             mode="workflow",
             factory=_build_class_teaching_suggestion,
             executor=_execute_class_teaching_suggestion,
+            allowed_roles=frozenset({"teacher", "admin", "service"}),
+        ),
+        "teacher.lesson_plan": AgentDefinition(
+            agent_id="teacher.lesson_plan",
+            display_name="Teacher Lesson Plan",
+            description="Generate source-aware lesson-plan slide specifications for teachers",
+            mode="workflow",
+            factory=_build_teacher_lesson_plan,
+            executor=_execute_teacher_lesson_plan,
             allowed_roles=frozenset({"teacher", "admin", "service"}),
         ),
     }

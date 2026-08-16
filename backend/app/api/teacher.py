@@ -9,6 +9,7 @@ from app.core.deps import get_current_user
 from app.services.teacher_service import TeacherService
 from app.services.assignment_service import AssignmentService
 from app.schemas.assignment import AssignmentCreate
+from app.schemas.lesson_plan import CourseSectionResponse
 
 router = APIRouter()
 
@@ -38,6 +39,18 @@ async def list_course_chapters(
 
     service = TeacherService()
     return await service.get_course_chapters(current_user["id"], course_id, db)
+
+
+@router.get("/courses/{course_id}/sections", response_model=list[CourseSectionResponse])
+async def list_course_sections(
+    course_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Get chapter/subsection options for the teacher's lesson-plan creator."""
+    if current_user["user_type"] != "teacher":
+        return []
+    return await TeacherService().get_course_sections(current_user["id"], course_id, db)
 
 
 @router.get("/classes")

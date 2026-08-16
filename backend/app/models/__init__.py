@@ -15,3 +15,4 @@ from app.models.teacher_relation import TeacherCourse, TeacherClass  # noqa: F40
 from app.models.interaction import InteractionMessage, InteractionAnswer  # noqa: F401
 from app.models.daily_question import DailyQuestion  # noqa: F401
 from app.models.assignment import Assignment, AssignmentQuestion, AssignmentSubmission  # noqa: F401
+from app.models.lesson_plan import LessonPlan  # noqa: F401

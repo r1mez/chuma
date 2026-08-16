@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, knowledge, learning, practice, teacher, assignment, ai_gateway, ocr_gateway, kg_gateway, interaction
+from app.api import auth, knowledge, learning, practice, teacher, assignment, ai_gateway, ocr_gateway, kg_gateway, interaction, lesson_plans
 from app.core.config import settings
 
 app = FastAPI(title="ChuMa Backend", version="0.1.0")
@@ -21,6 +21,7 @@ app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识图�
 app.include_router(learning.router, prefix="/api/learning", tags=["学习管理"])
 app.include_router(practice.router, prefix="/api/practice", tags=["题目练习"])
 app.include_router(teacher.router, prefix="/api/teacher", tags=["教师管理"])
+app.include_router(lesson_plans.router, prefix="/api/teacher/lesson-plans", tags=["教案生成"])
 app.include_router(assignment.router, prefix="/api/assignments", tags=["作业"])
 app.include_router(ai_gateway.router, prefix="/api/ai", tags=["AI 网关"])
 app.include_router(ocr_gateway.router, prefix="/api/ocr", tags=["OCR 网关"])

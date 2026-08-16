@@ -56,7 +56,7 @@ import { unreadCount } from '@/store/messages'
 import {
   GraduationCap, LayoutDashboard, Network, Dumbbell, History, MessageSquare,
   CalendarRange, Users, Bell, ScanText, Workflow, BookOpen, Bot,
-  LogOut, PanelLeftOpen, PanelLeftClose, Circle, ChartNoAxesCombined, School
+  LogOut, PanelLeftOpen, PanelLeftClose, Circle, ChartNoAxesCombined, School, Presentation
 } from 'lucide-vue-next'
 
 export interface WorkspaceItem { path: string; label: string; icon: string; description?: string; badge?: number }
@@ -67,7 +67,7 @@ const auth = useAuthStore()
 const collapsed = ref(false)
 const sidebarTransitioning = ref(false)
 const isChatRoute = computed(() => route.path.startsWith('/student/chat'))
-const icons: Record<string, any> = { LayoutDashboard, Network, Dumbbell, History, MessageSquare, CalendarRange, Users, Bell, ScanText, Workflow, BookOpen, Bot, ChartNoAxesCombined, School }
+const icons: Record<string, any> = { LayoutDashboard, Network, Dumbbell, History, MessageSquare, CalendarRange, Users, Bell, ScanText, Workflow, BookOpen, Bot, ChartNoAxesCombined, School, Presentation }
 const currentItem = computed(() => [...props.items].sort((a, b) => b.path.length - a.path.length).find(item => route.path.startsWith(item.path)))
 const userName = computed(() => auth.user?.name || '当前用户')
 const userInitial = computed(() => userName.value.slice(0, 1).toUpperCase())

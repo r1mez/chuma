@@ -51,6 +51,7 @@ const router = createRouter({
         { path: 'interactive', component: () => import('@/pages/teacher/InteractiveZone.vue') },
         { path: 'subject', component: () => import('@/pages/teacher/SubjectManage.vue') },
         { path: 'kg-manage', component: () => import('@/pages/teacher/KnowledgeGraphManage.vue') },
+        { path: 'lesson-plans', component: () => import('@/pages/teacher/LessonPlan.vue') },
         { path: 'assignments', component: () => import('@/pages/teacher/AssignmentManage.vue') },
       ],
     },

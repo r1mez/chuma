@@ -126,6 +126,100 @@ class TeacherService:
         chapters.sort(key=lambda item: item["name"] or "")
         return chapters
 
+    async def get_course_sections(
+        self, tea_id: int, course_id: int, db: AsyncSession
+    ) -> List[dict]:
+        """Return every selectable chapter/subsection in a teacher-owned KG.
+
+        A KG represents both chapters and subsections as ``Chapter`` nodes.  The
+        containment edge provides the hierarchy, so this method turns the flat
+        graph into stable labelled options for the lesson-plan creator.
+        """
+        course_result = await db.execute(
+            select(TeacherCourse.course_id).where(
+                TeacherCourse.tea_id == tea_id,
+                TeacherCourse.course_id == course_id,
+            )
+        )
+        if course_result.first() is None:
+            return []
+
+        kg_result = await db.execute(
+            select(Course.kg_id).where(Course.course_id == course_id)
+        )
+        kg_id = kg_result.scalar_one_or_none()
+        if kg_id is None:
+            return []
+        graph_result = await db.execute(
+            select(KgGraph.graph_name).where(KgGraph.id == kg_id)
+        )
+        graph_name = graph_result.scalar_one_or_none()
+        if not graph_name:
+            return []
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/kg/graph/data",
+                    params={"graph_name": graph_name},
+                    headers={"X-Service-Token": settings.AI_SERVICE_TOKEN},
+                )
+                response.raise_for_status()
+                data = response.json()
+        except httpx.HTTPError as exc:
+            logger.warning("KG section request failed for course %s: %s", course_id, exc)
+            return []
+
+        nodes = data.get("nodes", []) if isinstance(data, dict) else []
+        edges = data.get("edges", []) if isinstance(data, dict) else []
+        node_map = {
+            str(node.get("id")): node
+            for node in nodes
+            if node.get("id") is not None
+        }
+        section_ids = {
+            node_id
+            for node_id, node in node_map.items()
+            if str(node.get("type", "")).strip().lower() in {"chapter", "章节"}
+        }
+        if not section_ids:
+            return []
+
+        parent_by_child: dict[str, str] = {}
+        contains_names = {"包含", "contains", "contain", "includes", "include"}
+        for edge in edges:
+            relation = str(edge.get("relationship_name", "")).strip().lower()
+            source_id = str(edge.get("source", ""))
+            target_id = str(edge.get("target", ""))
+            if relation in contains_names and source_id in section_ids and target_id in section_ids:
+                parent_by_child.setdefault(target_id, source_id)
+
+        def section_path(section_id: str, seen: set[str] | None = None) -> list[str]:
+            seen = set() if seen is None else seen
+            if section_id in seen:
+                return []
+            seen.add(section_id)
+            node = node_map.get(section_id, {})
+            name = str(node.get("name") or section_id)
+            parent_id = parent_by_child.get(section_id)
+            return ([*section_path(parent_id, seen), name] if parent_id else [name])
+
+        sections = []
+        for section_id in section_ids:
+            node = node_map[section_id]
+            path = section_path(section_id)
+            sections.append(
+                {
+                    "id": section_id,
+                    "name": str(node.get("name") or section_id),
+                    "type": str(node.get("type") or "Chapter"),
+                    "path": " / ".join(path),
+                    "parent_id": parent_by_child.get(section_id),
+                    "description": str(node.get("description") or ""),
+                }
+            )
+        return sorted(sections, key=lambda item: (item["path"], item["id"]))
+
     async def get_teacher_classes(self, tea_id: int, db: AsyncSession) -> List[dict]:
         """Return the class list managed by the teacher."""
         stmt = (

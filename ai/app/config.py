@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     OCR_TASK_RETENTION_SECONDS: int = 86400
     OCR_MAX_CONCURRENT: int = 2
 
+    # Teacher lesson-plan PPTX generation
+    LESSON_PLAN_OUTPUT_DIR: str = "data/lesson_plans"
+    LESSON_PLAN_TASK_RETENTION_SECONDS: int = 604800
+
     # Apache AGE
     AGE_HOST: str = ""
     AGE_PORT: int = 5432
@@ -125,6 +129,12 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+
+def get_lesson_plan_output_dir() -> Path:
+    """Return the worker-owned directory used for generated PPTX files."""
+    path = Path(settings.LESSON_PLAN_OUTPUT_DIR)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def get_pgvector_dsn() -> str:

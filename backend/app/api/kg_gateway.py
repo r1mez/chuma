@@ -101,6 +101,8 @@ async def start_kg_build(
                 "file_path": file_path,
                 "graph_name": kg_record.graph_name,
                 "kg_graph_id": kg_record.id,
+                "course_id": course_id,
+                "source_name": file.filename or "upload",
             },
         )
         if response.status_code >= 400:

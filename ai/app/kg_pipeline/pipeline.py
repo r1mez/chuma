@@ -15,7 +15,7 @@ import os
 import tempfile
 import datetime
 from typing import Optional
-from app.config import settings
+from app.config import get_kg_source_dir, settings
 from app.kg_pipeline.models import DocumentChunk, KnowledgeGraph3D, PipelineResult
 from app.kg_pipeline.chunking import MarkdownChunker
 from app.kg_pipeline.chapter_builder import ChapterBuilder
@@ -24,6 +24,7 @@ from app.kg_pipeline.graph_builder import GraphBuilder
 from app.kg_pipeline.cross_chapter import CrossChapterExtractor
 from app.kg_pipeline.storage import AgeStorage, AgeConnectionError
 from app.engines.rag.ingestion import DocIngestion
+from app.engines.rag.source_store import SourceSnapshotStore
 from app.ocr.service import (
     get_infer_result,
     get_output_parse_dir,
@@ -107,7 +108,13 @@ class KGPipeline:
                 continue
             chunk_graphs.append(kg)
         return chunk_graphs, failed_chunks
-    async def run_from_markdown(self, markdown_text: str, kg_graph_id: int | None = None) -> PipelineResult:
+    async def run_from_markdown(
+        self,
+        markdown_text: str,
+        kg_graph_id: int | None = None,
+        course_id: int | None = None,
+        source_name: str = "",
+    ) -> PipelineResult:
         """从 Markdown 文本直接构建知识图谱（跳过 OCR）
 
         7 步流程：
@@ -134,6 +141,19 @@ class KGPipeline:
             PipelineResult 执行统计
 
         """
+        # Keep the parsed source before chunking it for KG/RAG. RAG chunks are
+        # intentionally overlapping and cannot serve as the canonical text.
+        if kg_graph_id and markdown_text.strip():
+            try:
+                SourceSnapshotStore(get_kg_source_dir()).save(
+                    kg_graph_id,
+                    markdown_text,
+                    course_id=course_id,
+                    source_name=source_name,
+                )
+            except Exception as exc:
+                logger.warning("[KG] Failed to persist source snapshot: %s", exc)
+
         # Step 1: Chunking
         logger.info("[KG] Phase 1: Chunking")
         chunks = self.chunker.chunk(markdown_text)
@@ -194,8 +214,8 @@ class KGPipeline:
                 chunks=chunks,
                 entities_per_chunk=entities_per_chunk,
                 kg_graph_id=kg_graph_id,
-                course_id=None,
-                source="kg_pipeline",
+                course_id=course_id,
+                source=source_name or "kg_pipeline",
             )
             logger.info(f"[KG] Ingested {sub_count} vector chunks to pgvector")
         except Exception as e:
@@ -215,7 +235,13 @@ class KGPipeline:
             ),
             failed_chunks=failed_chunks,
         )
-    async def run_from_file(self, file_path: str, kg_graph_id: int | None = None) -> PipelineResult:
+    async def run_from_file(
+        self,
+        file_path: str,
+        kg_graph_id: int | None = None,
+        course_id: int | None = None,
+        source_name: str = "",
+    ) -> PipelineResult:
         """从原始文档文件构建知识图谱（PDF → OCR → KG，或 Markdown → 直接处理）
 
         Args:
@@ -236,7 +262,12 @@ class KGPipeline:
                 with open(file_path, "r", encoding="utf-8") as f:
                     md_content = f.read()
                 logger.info(f"[KG] Loaded Markdown, length: {len(md_content)} chars")
-                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
+                return await self.run_from_markdown(
+                    md_content,
+                    kg_graph_id=kg_graph_id,
+                    course_id=course_id,
+                    source_name=source_name or os.path.basename(file_path),
+                )
             except Exception as e:
                 logger.error(f"[KG] Failed to read Markdown file: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))
@@ -249,7 +280,12 @@ class KGPipeline:
                 logger.error(f"[KG] OCR failed: {e}")
                 return PipelineResult(status="failed", error=str(e))
             try:
-                return await self.run_from_markdown(md_content, kg_graph_id=kg_graph_id)
+                return await self.run_from_markdown(
+                    md_content,
+                    kg_graph_id=kg_graph_id,
+                    course_id=course_id,
+                    source_name=source_name or os.path.basename(file_path),
+                )
             except Exception as e:
                 logger.error(f"[KG] Pipeline failed after OCR: {e}", exc_info=True)
                 return PipelineResult(status="failed", error=str(e))

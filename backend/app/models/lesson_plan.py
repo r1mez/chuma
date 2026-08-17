@@ -22,6 +22,7 @@ class LessonPlan(Base):
     previous_section_name = Column(String(256), nullable=True)
     include_review = Column(Boolean, nullable=False, server_default="true")
     slide_count = Column(Integer, nullable=False, server_default="8")
+    theme_pack = Column(String(20), nullable=False, server_default="theme03")
 
     title = Column(String(256), nullable=False)
     task_id = Column(String(64), nullable=False, unique=True)

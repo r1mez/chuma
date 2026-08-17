@@ -65,6 +65,22 @@ class Settings(BaseSettings):
     # Teacher lesson-plan PPTX generation
     LESSON_PLAN_OUTPUT_DIR: str = "data/lesson_plans"
     LESSON_PLAN_TASK_RETENTION_SECONDS: int = 604800
+    # Classroom-content quality gates are temporarily disabled so teachers can
+    # inspect the raw generated deck before we tighten evidence validation.
+    LESSON_PLAN_QUALITY_GATE_ENABLED: bool = False
+
+    # Parsed Markdown snapshots used as the primary source for lesson plans.
+    KG_SOURCE_DIR: str = "data/kg_sources"
+
+    # Dashi PPT runtime. The skill is deployed separately because it contains
+    # its own Node project, theme assets and Playwright export helpers.
+    DASHI_PPT_SKILL_ROOT: str = ""
+    DASHI_PPT_PROJECT_ROOT: str = ""
+    DASHI_PPT_NODE: str = "node"
+    DASHI_PPT_NPM: str = "npm"
+    DASHI_PPT_PREVIEW_HOST: str = "127.0.0.1"
+    DASHI_PPT_PREVIEW_PORT: int = 5200
+    DASHI_PPT_TIMEOUT_SECONDS: int = 300
 
     # Apache AGE
     AGE_HOST: str = ""
@@ -135,6 +151,31 @@ def get_lesson_plan_output_dir() -> Path:
     """Return the worker-owned directory used for generated PPTX files."""
     path = Path(settings.LESSON_PLAN_OUTPUT_DIR)
     return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def get_kg_source_dir() -> Path:
+    """Return the worker-owned directory for parsed source snapshots."""
+    path = Path(settings.KG_SOURCE_DIR)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def get_dashi_skill_root() -> Path:
+    """Return the configured ``skills/dashi-ppt`` directory."""
+    if settings.DASHI_PPT_SKILL_ROOT:
+        return Path(settings.DASHI_PPT_SKILL_ROOT).expanduser().resolve()
+    # Development convenience for this workspace; production should set an
+    # explicit path because the skill is deployed as a separate runtime.
+    sibling = PROJECT_ROOT.parent / "dashi-ppt-skill" / "skills" / "dashi-ppt"
+    if sibling.is_dir():
+        return sibling.resolve()
+    raise RuntimeError("DASHI_PPT_SKILL_ROOT is not configured")
+
+
+def get_dashi_project_root() -> Path:
+    """Return the Dashi Node project directory."""
+    if settings.DASHI_PPT_PROJECT_ROOT:
+        return Path(settings.DASHI_PPT_PROJECT_ROOT).expanduser().resolve()
+    return get_dashi_skill_root() / "project"
 
 
 def get_pgvector_dsn() -> str:

@@ -87,12 +87,17 @@ class LLMClient:
         profile: ModelProfile | None = None,
         tools: list[dict] | None = None,
         response_format: dict | None = None,
+        max_tokens: int | None = None,
+        thinking: dict | None = None,
     ) -> ChatResponse:
         """发送对话请求，返回 ChatResponse（含 tool_calls 或 content）
 
         Args:
             response_format: OpenAI 兼容的 response_format 参数，
                 例如 {'type': 'json_object'} 强制 JSON 输出。
+            max_tokens: 限制模型输出长度，避免结构化 JSON 被截断。
+            thinking: DeepSeek 思考模式配置，例如
+                {'type': 'disabled'} 让结构化结果直接进入 content。
         """
         p = self._get_profile(profile)
         for attempt in range(p.max_retries + 1):
@@ -108,6 +113,10 @@ class LLMClient:
                         payload["tool_choice"] = "auto"
                     if response_format:
                         payload["response_format"] = response_format
+                    if max_tokens is not None:
+                        payload["max_tokens"] = max_tokens
+                    if thinking is not None:
+                        payload["thinking"] = thinking
 
                     response = await client.post(
                         f"{p.base_url}/chat/completions",
@@ -118,6 +127,12 @@ class LLMClient:
                     response.raise_for_status()
                     choice = response.json()["choices"][0]
                     msg = choice.get("message", {})
+                    finish_reason = choice.get("finish_reason")
+
+                    if finish_reason == "length":
+                        raise RuntimeError(
+                            "LLM response was truncated at max_tokens; increase max_tokens or reduce the requested output"
+                        )
 
                     tool_calls = None
                     if msg.get("tool_calls"):
@@ -139,8 +154,8 @@ class LLMClient:
 
                     content = msg.get("content")
 
-                    # HTTP 200 但 content 为空（推理型模型只输出 reasoning_content 等）
-                    # 视为瞬时失败而非成功：重试，避免上游把空响应当作可解析内容。
+                    # JSON Output 的正式结果必须来自 content。reasoning_content
+                    # 是思维链，不能当作结构化结果解析。
                     if not content and tool_calls is None:
                         reason = (msg.get("reasoning_content") or "").strip()
                         logger.warning(

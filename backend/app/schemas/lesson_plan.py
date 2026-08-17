@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field, model_validator
 
 
 LessonPlanStatus = Literal["queued", "generating", "completed", "failed"]
+ThemePack = Literal[
+    "theme01", "theme02", "theme03", "theme04", "theme05", "theme06",
+    "theme07", "theme08", "theme09", "theme10", "theme11", "theme12",
+]
 
 
 class LessonPlanCreate(BaseModel):
@@ -15,6 +19,7 @@ class LessonPlanCreate(BaseModel):
     section_id: str = Field(..., min_length=1, max_length=256)
     include_review: bool = True
     slide_count: int = Field(default=9, ge=7, le=16)
+    theme_pack: ThemePack = "theme03"
 
     @model_validator(mode="after")
     def validate_review_budget(self):
@@ -45,6 +50,7 @@ class LessonPlanResponse(BaseModel):
     previous_section_name: str | None = None
     include_review: bool
     slide_count: int
+    theme_pack: ThemePack
     task_id: str
     status: LessonPlanStatus
     content: dict[str, Any] | None = None

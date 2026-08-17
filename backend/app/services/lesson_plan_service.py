@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import json
+import secrets
 from uuid import uuid4
 
 import httpx
+import redis.asyncio as aioredis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 _ACTIVE_STATUSES = {"queued", "generating"}
 _ALL_STATUSES = _ACTIVE_STATUSES | {"completed", "failed"}
+_PREVIEW_TICKET_TTL = 900
 
 
 class LessonPlanService:
@@ -44,6 +48,7 @@ class LessonPlanService:
             "previous_section_name": plan.previous_section_name,
             "include_review": bool(plan.include_review),
             "slide_count": plan.slide_count,
+            "theme_pack": plan.theme_pack or "theme03",
             "task_id": plan.task_id,
             "status": plan.status,
             "content": plan.content if isinstance(plan.content, dict) else None,
@@ -105,6 +110,7 @@ class LessonPlanService:
             previous_section_name=previous["name"] if previous else None,
             include_review=data.include_review,
             slide_count=data.slide_count,
+            theme_pack=data.theme_pack,
             title=f"{selected_section['name']} 教案",
             task_id=task_id,
             status="queued",
@@ -130,6 +136,7 @@ class LessonPlanService:
                 "previous_section": previous,
                 "include_review": data.include_review,
                 "slide_count": data.slide_count,
+                "theme_pack": data.theme_pack,
                 "class_summary": summary,
                 "difficult_knowledge": difficult_knowledge,
                 "difficult_chapters": difficult_chapters,
@@ -189,6 +196,9 @@ class LessonPlanService:
         if status == "completed":
             draft = result.get("draft")
             if isinstance(draft, dict):
+                quality_report = result.get("quality_report")
+                if isinstance(quality_report, dict):
+                    draft = {**draft, "quality_report": quality_report}
                 plan.content = draft
                 plan.title = str(draft.get("title") or plan.title)[:256]
             plan.file_name = result.get("file_name") or plan.file_name
@@ -245,3 +255,60 @@ class LessonPlanService:
                 return response.content, plan_data["file_name"] or "lesson-plan.pptx"
         except httpx.HTTPError as exc:
             raise ValueError("PPTX 文件暂时不可下载，请稍后重试") from exc
+
+    async def preview_html_for_teacher(
+        self, tea_id: int, lesson_plan_id: int, db: AsyncSession
+    ) -> bytes:
+        content, _ = await self.preview_asset_for_teacher(tea_id, lesson_plan_id, "index.html", db)
+        return content
+
+    async def preview_asset_for_teacher(
+        self, tea_id: int, lesson_plan_id: int, asset_path: str, db: AsyncSession
+    ) -> tuple[bytes, str]:
+        plan_data = await self.get_for_teacher(tea_id, lesson_plan_id, db)
+        if plan_data["status"] != "completed":
+            raise ValueError("教案尚未生成完成")
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(
+                    f"{settings.AI_SERVICE_URL}/lesson-plans/tasks/{plan_data['task_id']}/preview/{asset_path}",
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+                return response.content, response.headers.get("content-type", "application/octet-stream")
+        except httpx.HTTPError as exc:
+            raise ValueError("HTML 教案暂时不可预览，请稍后重试") from exc
+
+    async def create_preview_ticket(self, tea_id: int, lesson_plan_id: int, db: AsyncSession) -> str:
+        plan_data = await self.get_for_teacher(tea_id, lesson_plan_id, db)
+        if plan_data["status"] != "completed":
+            raise ValueError("教案尚未生成完成")
+        token = secrets.token_urlsafe(32)
+        redis = aioredis.from_url(settings.REDIS_URL)
+        try:
+            await redis.set(
+                f"lesson-plan:preview:{token}",
+                json.dumps({"teacher_id": tea_id, "lesson_plan_id": lesson_plan_id}),
+                ex=_PREVIEW_TICKET_TTL,
+            )
+        finally:
+            await redis.aclose()
+        return token
+
+    async def resolve_preview_ticket(self, token: str, lesson_plan_id: int) -> int | None:
+        if not token or len(token) > 256:
+            return None
+        redis = aioredis.from_url(settings.REDIS_URL)
+        try:
+            raw = await redis.get(f"lesson-plan:preview:{token}")
+        finally:
+            await redis.aclose()
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+        except json.JSONDecodeError:
+            return None
+        if int(data.get("lesson_plan_id", -1)) != int(lesson_plan_id):
+            return None
+        return int(data.get("teacher_id", 0)) or None

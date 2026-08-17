@@ -1,6 +1,7 @@
 import request from '@/utils/request'
 
 export type LessonPlanStatus = 'queued' | 'generating' | 'completed' | 'failed'
+export type ThemePack = `theme${'01' | '02' | '03' | '04' | '05' | '06' | '07' | '08' | '09' | '10' | '11' | '12'}`
 
 export interface CourseSection {
   id: string
@@ -11,20 +12,53 @@ export interface CourseSection {
   description: string
 }
 
+export interface LessonPlanBlock {
+  type: string
+  title?: string
+  text?: string
+  items?: string[]
+  steps?: string[]
+  question?: string
+  options?: string[]
+  teacher_answer?: string
+  left_title?: string
+  left_items?: string[]
+  right_title?: string
+  right_items?: string[]
+  language?: string
+  code?: string
+  columns?: string[]
+  rows?: string[][]
+  caption?: string
+}
+
 export interface LessonPlanCreatePayload {
   class_id: number
   course_id: number
   section_id: string
   include_review: boolean
   slide_count: number
+  theme_pack: ThemePack
 }
 
 export interface LessonPlanSlide {
   layout: string
   title: string
+  takeaway?: string
   bullets: string[]
+  blocks?: LessonPlanBlock[]
   presenter_notes: string
   source_refs: string[]
+  diagram_center?: string
+  diagram_nodes?: string[]
+  duration_minutes?: number
+  narrative_job?: string
+  learning_objective?: string
+  student_prompt?: string
+  expected_answer?: string
+  visual_type?: string
+  visual_description?: string
+  source_evidence?: string[]
 }
 
 export interface LessonPlanDraft {
@@ -32,6 +66,15 @@ export interface LessonPlanDraft {
   summary: string
   review_inserted: boolean
   slides: LessonPlanSlide[]
+  quality_report?: {
+    passed: boolean
+    reports: Array<{
+      phase: string
+      passed: boolean
+      issues: Array<{ code: string; message: string; slide_number?: number | null }>
+      metrics: Record<string, unknown>
+    }>
+  }
 }
 
 export interface LessonPlanItem {
@@ -47,6 +90,7 @@ export interface LessonPlanItem {
   previous_section_name: string | null
   include_review: boolean
   slide_count: number
+  theme_pack: ThemePack
   task_id: string
   status: LessonPlanStatus
   content: LessonPlanDraft | null
@@ -74,4 +118,8 @@ export function getLessonPlan(lessonPlanId: number) {
 
 export function downloadLessonPlan(lessonPlanId: number) {
   return request.get<Blob>(`/teacher/lesson-plans/${lessonPlanId}/download`, { responseType: 'blob', timeout: 90000 })
+}
+
+export function getLessonPlanPreviewTicket(lessonPlanId: number) {
+  return request.get<{ url: string }>(`/teacher/lesson-plans/${lessonPlanId}/preview-ticket`)
 }

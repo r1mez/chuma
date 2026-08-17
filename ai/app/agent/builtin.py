@@ -4,7 +4,7 @@ from app.agent import tools as _builtin_tools  # noqa: F401 - load local tools
 from app.agent.class_teaching_agent import ClassTeachingAgent
 from app.agent.context import AgentContext
 from app.agent.learning_plan_agent import LearningPlanAgent
-from app.agent.lesson_plan_agent import LessonPlanAgent, execute_lesson_plan
+from app.agent.dashi_lesson_plan_agent import DashiLessonPlanAgent, execute_lesson_plan
 from app.agent.orchestrator import AgentOrchestrator
 from app.agent.qa_score_agent import QaScoreAgent
 from app.agent.question_analysis_agent import QuestionAnalysisAgent
@@ -53,8 +53,8 @@ def _build_class_teaching_suggestion(
 def _build_teacher_lesson_plan(
     context: AgentContext,
     llm: LLMClient,
-) -> LessonPlanAgent:
-    return LessonPlanAgent(llm_client=llm)
+) -> DashiLessonPlanAgent:
+    return DashiLessonPlanAgent(llm_client=llm)
 
 
 def _build_student_analysis(context: AgentContext, llm: LLMClient) -> StuAnalysisAgent:

@@ -9,8 +9,8 @@ import redis.asyncio as aioredis
 
 from app.agent.context import AgentContext
 from app.agent.runtime import AgentRuntime
-from app.config import get_lesson_plan_output_dir, settings
-from app.pptx.lesson_plan_renderer import render_lesson_plan
+from app.config import settings
+from app.pptx.dashi_runner import DashiPptRunner
 from app.tasks.registry import task_handler
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def run_lesson_plan_generation(task_data: dict):
         await redis.set(_state_key(task_id), json.dumps({"status": "generating"}, ensure_ascii=False), ex=ttl)
         payload = dict(task_data)
         payload.pop("type", None)
-        draft = await AgentRuntime.default().execute(
+        agent_result = await AgentRuntime.default().execute(
             "teacher.lesson_plan",
             AgentContext(
                 user_id=int(payload["teacher_id"]),
@@ -45,18 +45,40 @@ async def run_lesson_plan_generation(task_data: dict):
             ),
             payload,
         )
-        output_path, filename = render_lesson_plan(
-            draft=draft,
-            output_dir=get_lesson_plan_output_dir(),
+        if not isinstance(agent_result, dict):
+            raise RuntimeError("lesson-plan Agent returned an invalid result")
+        draft = agent_result.get("draft")
+        dashi = agent_result.get("dashi") if isinstance(agent_result.get("dashi"), dict) else {}
+        if not isinstance(draft, dict) or not isinstance(dashi.get("briefs"), list):
+            raise RuntimeError("lesson-plan Agent did not return a Dashi content plan")
+        render_result = await DashiPptRunner().render(
             task_id=task_id,
-            course_name=str(payload["course_name"]),
-            class_name=str(payload["class_name"]),
+            title=str(dashi.get("title") or f"{payload['section'].get('name', '课堂')} 教案"),
+            goal=str(dashi.get("goal") or "生成课堂教案"),
+            theme_pack=str(dashi.get("theme_pack") or payload.get("theme_pack") or "theme03"),
+            slide_count=int(dashi.get("page_count") or payload.get("slide_count") or 10),
+            briefs=dashi["briefs"],
+            source_notes=_source_notes(agent_result),
+            preflight_quality_report=(
+                agent_result.get("quality_report")
+                if isinstance(agent_result.get("quality_report"), dict)
+                else None
+            ),
         )
         result = {
             "status": "completed",
             "draft": draft,
-            "file_name": filename,
-            "file_path": str(output_path),
+            "file_name": render_result.pptx_filename,
+            "file_path": str(render_result.pptx_path),
+            "html_file_name": render_result.html_path.name,
+            "html_file_path": str(render_result.html_path),
+            "html_dir": str(render_result.ppt_dir),
+            "goal_file_path": str(render_result.goal_path),
+            "quality_report_file_path": str(render_result.quality_report_path),
+            "quality_report": render_result.quality_report,
+            "preview_port": render_result.preview_port,
+            "preview_http_url": render_result.preview_http_url,
+            "source_manifest": agent_result.get("source_manifest", {}),
         }
         await redis.set(_state_key(task_id), json.dumps(result, ensure_ascii=False), ex=ttl)
         logger.info("Lesson-plan task %s completed", task_id)
@@ -69,3 +91,22 @@ async def run_lesson_plan_generation(task_data: dict):
         )
     finally:
         await redis.aclose()
+
+
+def _source_notes(agent_result: dict) -> str:
+    manifest = agent_result.get("source_manifest")
+    if not isinstance(manifest, dict):
+        return "Source provenance unavailable."
+    refs = manifest.get("source_refs") if isinstance(manifest.get("source_refs"), list) else []
+    lines = [
+        "Dashi lesson-plan source notes",
+        f"section_path: {manifest.get('section_path', '')}",
+        f"quality: {manifest.get('quality', 'unknown')}",
+        f"previous_quality: {manifest.get('previous_quality', 'unknown')}",
+        f"rag_used: {manifest.get('rag_used', False)}",
+        "references:",
+    ]
+    for ref in refs:
+        if isinstance(ref, dict):
+            lines.append(f"- {ref.get('source_name', '')} / {ref.get('heading_path', '')} ({ref.get('quality', '')})")
+    return "\n".join(lines) + "\n"
